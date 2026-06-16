@@ -5,6 +5,11 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 
+// Derive the production URL: prefer explicit NEXTAUTH_URL, then VERCEL_URL, then localhost
+const appUrl = process.env.NEXTAUTH_URL
+  || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+  || "http://localhost:3000";
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
   session: {
@@ -92,6 +97,7 @@ export const authOptions: NextAuthOptions = {
   },
   debug: process.env.NODE_ENV === "development",
   secret: process.env.NEXTAUTH_SECRET || "fallback-secret-for-build-purposes-only",
+  useSecureCookies: appUrl.startsWith("https://"),
 };
 
 export const getAuthSession = () => getServerSession(authOptions);
