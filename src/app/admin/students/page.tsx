@@ -1,21 +1,21 @@
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { AdminInstitutesContent } from "@/components/admin/institutes-content";
+import { StudentsContent } from "@/components/institute/students-content";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-export const metadata = { title: "Institutes Management – Super Admin Portal" };
+export const metadata = { title: "All Students — Super Admin" };
 
-export default async function AdminInstitutesPage() {
+export default async function AdminStudentsPage() {
   const session = await getAuthSession();
   if (!session) redirect("/auth/login");
   if (session.user.role !== "SUPER_ADMIN") redirect("/dashboard");
 
   return (
     <DashboardShell
-      title="Registered Institutes"
-      breadcrumbs={[{ label: "Super Admin" }, { label: "Institutes" }]}
+      title="All Students"
+      breadcrumbs={[{ label: "Super Admin" }, { label: "Students" }]}
     >
-      <AdminInstitutesContent />
+      <StudentsContent role="admin" addHref="/institute/students/new" />
     </DashboardShell>
   );
 }

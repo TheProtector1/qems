@@ -2,55 +2,41 @@
 
 import { useState } from "react";
 import {
-  BookOpen, CalendarCheck, DollarSign, MessageSquare,
-  Star, Award, TrendingUp, CheckCircle2, Bell,
-  ChevronRight, Heart,
+  BookOpen, CalendarCheck, DollarSign, Star, Award, TrendingUp, CheckCircle2, Heart, ChevronRight
 } from "lucide-react";
-import { cn, formatCurrency } from "@/lib/utils";
-import {
-  RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer,
-} from "recharts";
+import { cn, formatCurrency, getSurahName } from "@/lib/utils";
 
-const CHILD = {
-  name: "Ahmad Raza Khan",
-  studentId: "STU-2024-0001",
-  program: "Hifz",
-  class: "Hifz A",
-  teacher: "Qari Hamid",
-  currentJuz: 13,
-  qualityScore: 9.2,
-  attendancePct: 97,
-  status: "On Track",
-  target: "Jun 2026",
+// ── Types ────────────────────────────────────────────────────
+type HifzRecordItem = {
+  date: string;
+  type: "SABAQ" | "SABQI" | "MANZIL";
+  surahNumber: number;
+  ayahFrom: number;
+  ayahTo: number;
+  rating: number;
+  teacherNote?: string | null;
 };
 
-const radarData = [
-  { subject: "Accuracy", score: 88 },
-  { subject: "Fluency", score: 85 },
-  { subject: "Retention", score: 91 },
-  { subject: "Attendance", score: 97 },
-  { subject: "Consistency", score: 93 },
-];
+type ChildStudent = {
+  id: string;
+  studentId: string;
+  fullName: string;
+  programType: string;
+  className: string;
+  teacherName: string;
+  currentJuz: number;
+  qualityScore: number;
+  attendancePct: number;
+  status: string;
+  targetDate: string;
+  recentLessons: HifzRecordItem[];
+  achievements: { icon: string; name: string; date: string; color: string }[];
+  radarMetrics: { subject: string; score: number }[];
+};
 
-const BADGES = [
-  { icon: "🏆", name: "First Juz Complete", date: "Feb 2024", color: "from-yellow-400 to-amber-600" },
-  { icon: "⭐", name: "Top Student – March", date: "Mar 2024", color: "from-blue-400 to-indigo-600" },
-  { icon: "📚", name: "50 Days Attendance", date: "Apr 2024", color: "from-green-400 to-emerald-600" },
-  { icon: "🎯", name: "Tajweed Excellence", date: "May 2024", color: "from-purple-400 to-violet-600" },
-];
-
-const RECENT_LESSONS = [
-  { date: "Jun 15", type: "SABAQ", surah: "Al-Anbiya", ayahs: "21:45–67", rating: 5, note: "Excellent tajweed" },
-  { date: "Jun 14", type: "SABQI", surah: "Ta-Ha", ayahs: "20:50–82", rating: 4, note: "Minor error in verse 71" },
-  { date: "Jun 13", type: "MANZIL", surah: "Al-Kahf", ayahs: "18:1–50", rating: 5, note: "Very strong retention" },
-  { date: "Jun 12", type: "SABAQ", surah: "Maryam", ayahs: "19:83–98", rating: 4, note: "Good pace" },
-];
-
-const NOTIFICATIONS = [
-  { icon: "📖", msg: "Ahmad scored 5★ on today's Sabaq!", time: "Today 9:00 AM", type: "achievement" },
-  { icon: "📅", msg: "Monthly assessment on June 20", time: "2 days ago", type: "info" },
-  { icon: "💰", msg: "June fee due on June 25", time: "3 days ago", type: "warning" },
-];
+type ParentDashboardContentProps = {
+  childrenData: ChildStudent[];
+};
 
 const typeColors: Record<string, string> = {
   SABAQ: "pill-success",
@@ -58,45 +44,84 @@ const typeColors: Record<string, string> = {
   MANZIL: "pill-primary",
 };
 
-export function ParentDashboardContent() {
+const NOTIFICATIONS = [
+  { icon: "📖", msg: "Child scored 5★ on today's Sabaq!", time: "Today 9:00 AM", type: "achievement" },
+  { icon: "📅", msg: "Monthly assessment scheduled for June 20", time: "2 days ago", type: "info" },
+  { icon: "💰", msg: "June academic tuition due on June 25", time: "3 days ago", type: "warning" },
+];
+
+export function ParentDashboardContent({ childrenData }: ParentDashboardContentProps) {
+  const [selectedChildIndex, setSelectedChildIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<"overview" | "lessons" | "notifications">("overview");
+
+  if (childrenData.length === 0) {
+    return (
+      <div className="dash-card p-12 text-center max-w-lg mx-auto">
+        <span className="text-5xl block mb-4">👥</span>
+        <h3 className="font-display text-lg font-bold text-gray-900 mb-1">No Associated Profiles</h3>
+        <p className="text-sm text-gray-500 mb-6">
+          No student profiles are linked to this parent account. Please contact the administrator.
+        </p>
+      </div>
+    );
+  }
+
+  const child = childrenData[selectedChildIndex];
 
   return (
     <div className="space-y-6">
+      {/* Selector dropdown to choose between parent's kids (Privacy Preserved: ONLY child records under this parent can be seen) */}
+      {childrenData.length > 1 && (
+        <div className="flex items-center gap-3">
+          <label className="text-xs font-bold text-gray-500 uppercase">Child Profile:</label>
+          <select
+            value={selectedChildIndex}
+            onChange={(e) => setSelectedChildIndex(parseInt(e.target.value))}
+            className="form-input w-64 h-9 py-1 text-xs"
+            id="select-dashboard-child"
+          >
+            {childrenData.map((c, idx) => (
+              <option key={c.id} value={idx}>{c.fullName}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* ── Child card ── */}
       <div className="dash-card p-6 bg-gradient-to-r from-primary-50 via-emerald-50 to-teal-50 border-primary-100">
-        <div className="flex items-center gap-5">
-          <div className="h-20 w-20 rounded-3xl bg-gradient-primary shadow-glow-green flex items-center justify-center flex-shrink-0">
-            <span className="text-white text-3xl font-bold">A</span>
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <h2 className="font-display text-2xl font-bold text-gray-900">{CHILD.name}</h2>
-              <span className="pill pill-success">{CHILD.status}</span>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="flex items-center gap-4">
+            <div className="h-16 w-16 rounded-2xl bg-gradient-primary flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
+              {child.fullName.split(" ").map(n => n[0]).join("").slice(0, 2)}
             </div>
-            <p className="text-gray-500 text-sm mb-3">
-              {CHILD.program} Program • {CHILD.class} • {CHILD.teacher}
-            </p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-xs text-gray-400">Juz Progress</p>
-                <p className="font-bold text-primary-700">{CHILD.currentJuz} / 30</p>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display text-xl font-bold text-gray-900">{child.fullName}</h3>
+                <span className="pill pill-success text-[10px] py-0.5">{child.status}</span>
               </div>
-              <div>
-                <p className="text-xs text-gray-400">Quality Score</p>
-                <p className="font-bold text-amber-600">⭐ {CHILD.qualityScore}/10</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400">Attendance</p>
-                <p className="font-bold text-green-600">{CHILD.attendancePct}%</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400">Est. Completion</p>
-                <p className="font-bold text-gray-700">{CHILD.target}</p>
-              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {child.programType} Program • {child.className} • Instructor: {child.teacherName}
+              </p>
             </div>
           </div>
-          <Heart className="h-8 w-8 text-rose-400 fill-rose-200 flex-shrink-0 animate-pulse" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center md:text-left">
+            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-emerald-100">
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Juz Progress</p>
+              <p className="font-display text-lg font-bold text-primary-800">{child.currentJuz} / 30</p>
+            </div>
+            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-emerald-100">
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Quality Rating</p>
+              <p className="font-display text-lg font-bold text-amber-700">⭐ {child.qualityScore}/10</p>
+            </div>
+            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-emerald-100">
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Attendance</p>
+              <p className="font-display text-lg font-bold text-green-700">{child.attendancePct}%</p>
+            </div>
+            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-emerald-100">
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Est. Target</p>
+              <p className="font-display text-lg font-bold text-gray-700">{child.targetDate}</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -123,28 +148,37 @@ export function ParentDashboardContent() {
 
       {activeTab === "overview" && (
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Radar chart */}
+          {/* Progress Metrics */}
           <div className="dash-card p-6">
-            <h3 className="font-semibold text-gray-900 mb-1">Performance Profile</h3>
-            <p className="text-xs text-gray-400 mb-4">This month's quality metrics</p>
-            <ResponsiveContainer width="100%" height={260}>
-              <RadarChart data={radarData}>
-                <PolarGrid stroke="#e5e7eb" />
-                <PolarAngleAxis dataKey="subject" tick={{ fontSize: 12, fill: "#6B7280" }} />
-                <Radar name="Score" dataKey="score" stroke="#1B5E20" fill="#1B5E20" fillOpacity={0.15} strokeWidth={2} />
-              </RadarChart>
-            </ResponsiveContainer>
+            <h3 className="font-semibold text-gray-900 mb-1">Development Breakdown</h3>
+            <p className="text-xs text-gray-400 mb-4">Quality and consistency ratings</p>
+            <div className="space-y-4">
+              {child.radarMetrics.map((m, idx) => (
+                <div key={idx} className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-semibold text-gray-700">
+                    <span>{m.subject}</span>
+                    <span>{m.score}%</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-primary rounded-full transition-all"
+                      style={{ width: `${m.score}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Juz Map mini */}
+          {/* Memorization map mini */}
           <div className="dash-card p-6">
             <h3 className="font-semibold text-gray-900 mb-1">Memorization Progress</h3>
             <p className="text-xs text-gray-400 mb-4">30 Juz completion map</p>
             <div className="grid grid-cols-6 gap-1.5 mb-4">
               {Array.from({ length: 30 }, (_, i) => {
                 const juz = i + 1;
-                const done = juz < CHILD.currentJuz;
-                const partial = juz === CHILD.currentJuz;
+                const done = juz < child.currentJuz;
+                const partial = juz === child.currentJuz;
                 return (
                   <div
                     key={juz}
@@ -161,12 +195,12 @@ export function ParentDashboardContent() {
             <div className="bg-primary-50 rounded-xl p-4 border border-primary-100">
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-500">Overall Progress</span>
-                <span className="font-bold text-primary-700">{(((CHILD.currentJuz - 1) / 30) * 100).toFixed(1)}%</span>
+                <span className="font-bold text-primary-700">{(((child.currentJuz - 1) / 30) * 100).toFixed(1)}%</span>
               </div>
               <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-primary rounded-full transition-all"
-                  style={{ width: `${((CHILD.currentJuz - 1) / 30) * 100}%` }}
+                  style={{ width: `${((child.currentJuz - 1) / 30) * 100}%` }}
                 />
               </div>
             </div>
@@ -176,7 +210,7 @@ export function ParentDashboardContent() {
           <div className="dash-card p-6">
             <h3 className="font-semibold text-gray-900 mb-4">🏆 Achievements & Badges</h3>
             <div className="grid grid-cols-2 gap-3">
-              {BADGES.map((b, i) => (
+              {child.achievements.map((b, i) => (
                 <div
                   key={i}
                   className={cn(
@@ -194,7 +228,7 @@ export function ParentDashboardContent() {
 
           {/* Fee status */}
           <div className="dash-card p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">💰 Fee Status</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">💰 Tuition Fee Status</h3>
             <div className="space-y-3">
               {[
                 { month: "June 2025", amount: 3500, status: "DUE", dueDate: "Jun 25" },
@@ -205,7 +239,7 @@ export function ParentDashboardContent() {
                   <div>
                     <p className="font-medium text-gray-900 text-sm">{f.month}</p>
                     <p className="text-xs text-gray-400">
-                      {f.status === "DUE" ? `Due: ${f.dueDate}` : `Paid: ${(f as any).paidOn}`}
+                      {f.status === "DUE" ? `Due: ${f.dueDate}` : `Paid: ${f.paidOn}`}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -229,26 +263,30 @@ export function ParentDashboardContent() {
             <h3 className="font-semibold text-gray-900">Recent Lessons</h3>
           </div>
           <div className="divide-y divide-border">
-            {RECENT_LESSONS.map((l, i) => (
-              <div key={i} className="flex items-start gap-4 px-6 py-4">
-                <div className="text-right flex-shrink-0 w-12">
-                  <p className="text-xs font-medium text-gray-500">{l.date}</p>
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={cn("pill text-xs", typeColors[l.type])}>{l.type}</span>
-                    <span className="font-medium text-gray-900 text-sm">{l.surah}</span>
-                    <span className="text-xs text-gray-400">{l.ayahs}</span>
+            {child.recentLessons.length === 0 ? (
+              <p className="p-6 text-sm text-gray-400 text-center">No Quran lessons logged yet.</p>
+            ) : (
+              child.recentLessons.map((l, i) => (
+                <div key={i} className="flex items-start gap-4 px-6 py-4">
+                  <div className="text-right flex-shrink-0 w-16">
+                    <p className="text-xs font-semibold text-gray-500">{l.date}</p>
                   </div>
-                  <p className="text-xs text-gray-500">{l.note}</p>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={cn("pill text-[9px] py-0.5 px-2 font-bold", typeColors[l.type])}>{l.type}</span>
+                      <span className="font-bold text-gray-900 text-sm">{getSurahName(l.surahNumber)}</span>
+                      <span className="text-xs text-gray-400">Ayah {l.ayahFrom}–{l.ayahTo}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">{l.teacherNote || "No remarks provided."}</p>
+                  </div>
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star key={s} className={cn("h-4 w-4", s <= l.rating ? "text-amber-400 fill-amber-400" : "text-gray-200")} />
+                    ))}
+                  </div>
                 </div>
-                <div className="flex gap-0.5">
-                  {[1,2,3,4,5].map((s) => (
-                    <Star key={s} className={cn("h-4 w-4", s <= l.rating ? "text-amber-400 fill-amber-400" : "text-gray-200")} />
-                  ))}
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}
@@ -266,7 +304,7 @@ export function ParentDashboardContent() {
                   <p className="text-sm text-gray-800">{n.msg}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{n.time}</p>
                 </div>
-                <button className="p-1.5 rounded-lg text-gray-300 hover:text-gray-500">
+                <button className="p-1.5 rounded-lg text-gray-300 hover:text-gray-550">
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>

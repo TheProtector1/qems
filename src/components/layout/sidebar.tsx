@@ -65,13 +65,17 @@ const instituteNav: NavItem[] = [
 const superAdminNav: NavItem[] = [
   { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Institutes", href: "/admin/institutes", icon: Building2 },
+  { label: "Users", href: "/admin/users", icon: Users },
+  { label: "Students", href: "/admin/students", icon: GraduationCap },
   { label: "Subscriptions", href: "/admin/subscriptions", icon: CreditCard },
   { label: "Announcements", href: "/admin/announcements", icon: Bell },
   { label: "Support Tickets", href: "/admin/support", icon: Shield },
+  { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
 const teacherNav: NavItem[] = [
   { label: "Dashboard", href: "/teacher/dashboard", icon: LayoutDashboard },
+  { label: "My Students", href: "/teacher/students", icon: GraduationCap },
   { label: "My Classes", href: "/teacher/classes", icon: Building2 },
   { label: "Attendance Entry", href: "/teacher/attendance", icon: CalendarCheck },
   { label: "Hifz Records", href: "/teacher/quran/hifz", icon: Star },

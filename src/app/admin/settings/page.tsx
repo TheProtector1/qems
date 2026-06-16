@@ -1,21 +1,24 @@
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { AdminInstitutesContent } from "@/components/admin/institutes-content";
+import { AdminSystemSettings } from "@/components/admin/system-settings";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-export const metadata = { title: "Institutes Management – Super Admin Portal" };
+export const metadata = { title: "System Settings – Super Admin" };
 
-export default async function AdminInstitutesPage() {
+export default async function AdminSettingsPage() {
   const session = await getAuthSession();
   if (!session) redirect("/auth/login");
   if (session.user.role !== "SUPER_ADMIN") redirect("/dashboard");
 
   return (
     <DashboardShell
-      title="Registered Institutes"
-      breadcrumbs={[{ label: "Super Admin" }, { label: "Institutes" }]}
+      title="System Settings"
+      breadcrumbs={[
+        { label: "Super Admin", href: "/admin/dashboard" },
+        { label: "Settings" },
+      ]}
     >
-      <AdminInstitutesContent />
+      <AdminSystemSettings />
     </DashboardShell>
   );
 }
