@@ -120,3 +120,39 @@ export async function GET() {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+export async function PATCH(req: Request) {
+  try {
+    const session = await getAuthSession();
+    if (!session || session.user.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { id, isActive, isApproved } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "Missing institute ID" }, { status: 400 });
+    }
+
+    const updateData: any = {};
+    if (typeof isActive === "boolean") updateData.isActive = isActive;
+    if (typeof isApproved === "boolean") {
+      updateData.isApproved = isApproved;
+      if (isApproved) {
+        updateData.approvedAt = new Date();
+      }
+    }
+
+    const institute = await prisma.institute.update({
+      where: { id },
+      data: updateData,
+    });
+
+    return NextResponse.json({ success: true, institute });
+  } catch (error) {
+    console.error("Update institute error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
