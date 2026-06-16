@@ -33,6 +33,8 @@ async function main() {
   const salt = await bcrypt.genSalt(10);
   const adminPassword = await bcrypt.hash("admin123", salt);
   const demoPassword = await bcrypt.hash("demo123", salt);
+  const headPassword = await bcrypt.hash("head123", salt);
+  const arslanPassword = await bcrypt.hash("arslan123", salt);
 
   // 3. Seed Subscription Plans Config
   console.log("Seeding subscription plan configurations...");
@@ -91,7 +93,7 @@ async function main() {
   });
 
   // 5. Seed Institute
-  console.log("Seeding Institute...");
+  console.log("Seeding Institutes...");
   const institute = await prisma.institute.create({
     data: {
       name: "Dar ul Uloom Karachi",
@@ -99,6 +101,21 @@ async function main() {
       email: "darululoom@demo.com",
       phone: "+92 21 3456789",
       address: "Korangi Industrial Area, Sector 28",
+      city: "Karachi",
+      country: "PK",
+      isActive: true,
+      isApproved: true,
+      approvedAt: new Date(),
+    },
+  });
+
+  const institute2 = await prisma.institute.create({
+    data: {
+      name: "The Quran Garden",
+      slug: "qurangarden",
+      email: "info@qurangarden.com",
+      phone: "+92 300 9876543",
+      address: "Gulshan-e-Iqbal, Block 4",
       city: "Karachi",
       country: "PK",
       isActive: true,
@@ -117,6 +134,15 @@ async function main() {
     },
   });
 
+  await prisma.instituteSubscription.create({
+    data: {
+      instituteId: institute2.id,
+      plan: SubscriptionPlan.ENTERPRISE,
+      status: SubscriptionStatus.ACTIVE,
+      trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    },
+  });
+
   // 7. Seed Branch
   const branch = await prisma.branch.create({
     data: {
@@ -124,6 +150,15 @@ async function main() {
       code: "MC-01",
       city: "Karachi",
       instituteId: institute.id,
+    },
+  });
+
+  const branch2 = await prisma.branch.create({
+    data: {
+      name: "Main Branch",
+      code: "QG-01",
+      city: "Karachi",
+      instituteId: institute2.id,
     },
   });
 
@@ -139,6 +174,46 @@ async function main() {
       branchId: branch.id,
     },
   });
+
+  // ── The Quran Garden: Institution Head ──────────────────────
+  const quranGardenHead = await prisma.user.create({
+    data: {
+      name: "The Quran Garden Head",
+      email: "head@qurangarden.com",
+      password: headPassword,
+      role: Role.INSTITUTE_OWNER,
+      isActive: true,
+      instituteId: institute2.id,
+      branchId: branch2.id,
+    },
+  });
+
+  // ── The Quran Garden: Teacher — Qari Muhammad Arslan Sahab ──
+  const arslanUser = await prisma.user.create({
+    data: {
+      name: "Qari Muhammad Arslan",
+      email: "arslan@qurangarden.com",
+      password: arslanPassword,
+      role: Role.TEACHER,
+      isActive: true,
+      instituteId: institute2.id,
+      branchId: branch2.id,
+    },
+  });
+
+  const arslanTeacher = await prisma.teacher.create({
+    data: {
+      teacherCode: "QG-TCH-001",
+      qualification: "Hafiz-ul-Quran / Qari (Tajweed Expert)",
+      specialization: "Hifz ul Quran, Tajweed",
+      experience: 10,
+      joinDate: new Date("2024-01-01"),
+      userId: arslanUser.id,
+      instituteId: institute2.id,
+      branchId: branch2.id,
+    },
+  });
+
 
   const teacherUser = await prisma.user.create({
     data: {
