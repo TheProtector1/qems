@@ -109,6 +109,7 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
       include: {
         subscription: { select: { plan: true, status: true } },
+        users: { select: { name: true, role: true } },
         _count: { select: { students: true, teachers: true, users: true } },
       },
     });
