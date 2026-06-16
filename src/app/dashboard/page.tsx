@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getAuthSession } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 const roleRedirects: Record<string, string> = {
   SUPER_ADMIN: "/admin/dashboard",
   INSTITUTE_OWNER: "/institute/dashboard",
