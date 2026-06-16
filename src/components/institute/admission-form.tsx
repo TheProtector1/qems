@@ -84,7 +84,18 @@ export function AdmissionForm() {
   const [form, setForm] = useState<FormData>(INITIAL);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [generatedId] = useState(() => generateStudentId(Math.floor(Math.random() * 900) + 100));
+  const [generatedId, setGeneratedId] = useState("");
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/institute/teachers")
+      .then((res) => res.json())
+      .then((data) => {
+        setTeachers(data.teachers || []);
+      })
+      .catch((err) => console.error(err));
+  }, []);
 
   const set = (key: keyof FormData, value: string) => {
     setForm((prev) => {
@@ -92,7 +103,6 @@ export function AdmissionForm() {
       // Auto-update class/teacher/fee when program changes
       if (key === "program") {
         next.class = CLASS_OPTIONS[value]?.[0] || "";
-        next.teacher = TEACHER_OPTIONS[value]?.[0] || "";
         next.feeAmount = FEE_DEFAULTS[value] || "3500";
       }
       return next;
@@ -102,16 +112,47 @@ export function AdmissionForm() {
   const canProceed = () => {
     if (step === 1) return form.fullName.trim() && form.dateOfBirth && form.gender;
     if (step === 2) return form.fatherName.trim() && form.parentPhone.trim();
-    if (step === 3) return form.program && form.class && form.teacher && form.startDate;
+    if (step === 3) return form.program && form.class && form.startDate;
     return true;
   };
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    // Simulate a slight async save (replace with real API call)
-    await new Promise((r) => setTimeout(r, 1200));
-    setSubmitting(false);
-    setSubmitted(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/institute/students", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: form.fullName,
+          gender: form.gender,
+          dateOfBirth: form.dateOfBirth,
+          address: form.address,
+          city: "Islamabad",
+          fatherName: form.fatherName,
+          parentPhone: form.parentPhone,
+          parentEmail: form.parentEmail,
+          program: form.program,
+          teacherId: form.teacher || null,
+          feeAmount: form.feeAmount,
+          scholarshipPct: form.scholarshipPct,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to submit admission.");
+      }
+
+      const data = await res.json();
+      setGeneratedId(data.student?.studentId || "STU-NEW");
+      setSubmitted(true);
+    } catch (err: any) {
+      setError(err.message);
+      setStep(3); // Go back to step 3 where they can review or click submit again
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const netFee =
@@ -119,6 +160,7 @@ export function AdmissionForm() {
       parseInt(form.feeAmount || "0") *
         (1 - parseInt(form.scholarshipPct || "0") / 100)
     );
+
 
   if (submitted) {
     return (
@@ -205,6 +247,11 @@ export function AdmissionForm() {
 
       {/* ── Form Card ── */}
       <div className="dash-card p-8 bg-white">
+        {error && (
+          <div className="mb-5 p-3.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-semibold">
+            {error}
+          </div>
+        )}
         {/* Step 1: Student Information */}
         {step === 1 && (
           <div className="space-y-5">
@@ -429,19 +476,21 @@ export function AdmissionForm() {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Assigned Teacher <span className="text-red-500">*</span>
+                  Assigned Teacher
                 </label>
                 <select
                   value={form.teacher}
                   onChange={(e) => set("teacher", e.target.value)}
-                  className="form-input"
+                  className="form-input text-xs"
                   id="select-teacher"
                 >
-                  {(TEACHER_OPTIONS[form.program] || []).map((t) => (
-                    <option key={t} value={t}>{t}</option>
+                  <option value="">Select a Teacher</option>
+                  {teachers.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name || t.user?.name || "Teacher"}</option>
                   ))}
                 </select>
               </div>
+
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">
