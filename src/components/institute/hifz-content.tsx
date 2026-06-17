@@ -1,19 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BookOpen, Plus, Star, TrendingUp, CheckCircle2, Clock,
-  ChevronDown, Save, RotateCcw,
+  Star, CheckCircle2, Clock, Save, RotateCcw, Loader2, RefreshCw, BookOpen,
 } from "lucide-react";
-import { cn, getSurahName } from "@/lib/utils";
-
-// 30 Juz with completion state
-const JUZ_DATA = Array.from({ length: 30 }, (_, i) => ({
-  juz: i + 1,
-  completed: i < 12,
-  partial: i === 12,
-  pages: Math.floor(Math.random() * 5) + 18,
-}));
+import { cn, formatDate, getSurahName } from "@/lib/utils";
+import { StudentAvatar } from "@/components/common/student-avatar";
 
 const SABAQ_TYPES = [
   { value: "SABAQ", label: "Sabaq (New Lesson)", color: "text-green-600 bg-green-50 border-green-200" },
@@ -21,19 +13,32 @@ const SABAQ_TYPES = [
   { value: "MANZIL", label: "Manzil (Long-term Revision)", color: "text-purple-600 bg-purple-50 border-purple-200" },
 ];
 
-const SAMPLE_STUDENTS = [
-  { id: "1", name: "Ahmad Raza Khan", juz: 13, quality: 9.2 },
-  { id: "2", name: "Fatima Noor", juz: 8, quality: 8.7 },
-  { id: "4", name: "Zainab Hassan", juz: 22, quality: 9.5 },
-  { id: "7", name: "Hamza Khalid", juz: 17, quality: 8.9 },
-];
+type HifzStudent = {
+  id: string;
+  fullName: string;
+  studentId: string;
+  photo?: string | null;
+  gender: string;
+  currentJuz: number | null;
+  targetCompletionDate: string | null;
+};
 
-const RECENT_RECORDS = [
-  { student: "Ahmad Raza Khan", type: "SABAQ", surah: "Al-Anbiya", ayahs: "21:45-67", lines: 8, rating: 5, time: "Today 8:30 AM" },
-  { student: "Zainab Hassan", type: "MANZIL", surah: "Al-Baqarah", ayahs: "2:1-50", lines: 25, rating: 5, time: "Today 9:00 AM" },
-  { student: "Hamza Khalid", type: "SABQI", surah: "Al-Kahf", ayahs: "18:60-82", lines: 12, rating: 4, time: "Today 9:30 AM" },
-  { student: "Fatima Noor", type: "SABAQ", surah: "Al-A'raf", ayahs: "7:154-170", lines: 9, rating: 4, time: "Yesterday" },
-];
+type HifzRecordRow = {
+  id: string;
+  studentId: string;
+  studentName: string;
+  date: string;
+  type: string;
+  surahNumber: number;
+  surahName: string;
+  ayahFrom: number;
+  ayahTo: number;
+  lines: number | null;
+  rating: number;
+  errorCount: number;
+  teacherNote: string | null;
+  createdAt: string;
+};
 
 const typeColors: Record<string, string> = {
   SABAQ: "pill-success",
@@ -48,8 +53,16 @@ const typeLabels: Record<string, string> = {
 };
 
 export function HifzContent() {
-  const [selectedStudent, setSelectedStudent] = useState("1");
+  const [students, setStudents] = useState<HifzStudent[]>([]);
+  const [records, setRecords] = useState<HifzRecordRow[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState("");
   const [activeTab, setActiveTab] = useState<"tracker" | "entry" | "records">("tracker");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [avgRating, setAvgRating] = useState(0);
+
   const [form, setForm] = useState({
     type: "SABAQ",
     surah: "21",
@@ -58,102 +71,199 @@ export function HifzContent() {
     lines: "",
     rating: 5,
     errorCount: 0,
-    fluency: 8,
     note: "",
   });
-  const [saved, setSaved] = useState(false);
 
-  const student = SAMPLE_STUDENTS.find((s) => s.id === selectedStudent)!;
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({ limit: "50" });
+      if (selectedStudent) params.set("studentId", selectedStudent);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+      const res = await fetch(`/api/institute/hifz?${params}`);
+      if (!res.ok) throw new Error("Failed to load hifz data.");
+
+      const data = await res.json();
+      setStudents(data.students || []);
+      setRecords(data.records || []);
+      setAvgRating(data.quality?.avgRating ?? 0);
+
+      if (!selectedStudent && data.students?.length) {
+        setSelectedStudent(data.students[0].id);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load hifz data.");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedStudent]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const student = students.find((s) => s.id === selectedStudent);
+  const currentJuz = student?.currentJuz ?? 0;
+
+  const juzData = useMemo(() =>
+    Array.from({ length: 30 }, (_, i) => {
+      const juz = i + 1;
+      return {
+        juz,
+        completed: currentJuz > 0 && juz < currentJuz,
+        partial: currentJuz > 0 && juz === currentJuz,
+      };
+    }),
+  [currentJuz]);
+
+  const studentRecords = records.filter((r) => r.studentId === selectedStudent);
+
+  const handleSave = async () => {
+    if (!selectedStudent || !form.ayahFrom || !form.ayahTo) {
+      setError("Please fill in surah, ayah range, and select a student.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/institute/hifz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: selectedStudent,
+          type: form.type,
+          surahNumber: form.surah,
+          ayahFrom: form.ayahFrom,
+          ayahTo: form.ayahTo,
+          lines: form.lines,
+          rating: form.rating,
+          errorCount: form.errorCount,
+          teacherNote: form.note,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to save record.");
+      }
+
+      setSaved(true);
+      setForm({ ...form, ayahFrom: "", ayahTo: "", lines: "", note: "" });
+      setTimeout(() => setSaved(false), 2000);
+      loadData();
+      setActiveTab("records");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading && !students.length) {
+    return (
+      <div className="flex items-center justify-center py-20 text-gray-400">
+        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading hifz students...
+      </div>
+    );
+  }
+
+  if (!students.length) {
+    return (
+      <div className="dash-card p-12 text-center">
+        <BookOpen className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+        <h3 className="font-semibold text-gray-900 mb-1">No Hifz students enrolled</h3>
+        <p className="text-sm text-gray-500">Enroll students in the Hifz program to start tracking progress.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="section-heading">Hifz Tracking</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Track Sabaq, Sabqi & Manzil for each student
-          </p>
+          <p className="text-sm text-gray-500 mt-0.5">{students.length} Hifz student{students.length !== 1 ? "s" : ""} from your institute</p>
         </div>
-        <select
-          value={selectedStudent}
-          onChange={(e) => setSelectedStudent(e.target.value)}
-          className="form-input w-64"
-          id="select-student"
-        >
-          {SAMPLE_STUDENTS.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex gap-2">
+          <button className="btn-ghost text-sm py-2" onClick={loadData} disabled={loading}>
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          </button>
+          <select
+            value={selectedStudent}
+            onChange={(e) => setSelectedStudent(e.target.value)}
+            className="form-input w-64"
+            id="select-student"
+          >
+            {students.map((s) => (
+              <option key={s.id} value={s.id}>{s.fullName}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {/* ── Student Summary ── */}
-      <div className="dash-card p-6 bg-gradient-to-r from-primary-50 to-emerald-50 border-primary-100">
-        <div className="flex items-start gap-6">
-          <div className="h-16 w-16 rounded-2xl bg-gradient-primary flex items-center justify-center flex-shrink-0 shadow-glow-green">
-            <span className="text-white text-xl font-bold font-arabic">ق</span>
-          </div>
-          <div className="flex-1">
-            <h3 className="font-display text-xl font-bold text-gray-900">{student.name}</h3>
-            <p className="text-sm text-gray-500 mb-4">Hifz Program • Juz {student.juz} / 30</p>
-            <div className="flex items-center gap-6">
-              <div>
-                <p className="text-xs text-gray-400">Progress</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="w-40 h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-primary rounded-full transition-all duration-500"
-                      style={{ width: `${((student.juz - 1) / 30) * 100}%` }}
-                    />
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium">{error}</div>
+      )}
+
+      {student && (
+        <div className="dash-card p-6 bg-gradient-to-r from-primary-50 to-emerald-50 border-primary-100">
+          <div className="flex items-start gap-6">
+            <StudentAvatar name={student.fullName} gender={student.gender} photo={student.photo} size="lg" />
+            <div className="flex-1">
+              <h3 className="font-display text-xl font-bold text-gray-900">{student.fullName}</h3>
+              <p className="text-sm text-gray-500 mb-4">{student.studentId} · Juz {currentJuz || 0} / 30</p>
+              <div className="flex items-center gap-6 flex-wrap">
+                <div>
+                  <p className="text-xs text-gray-400">Progress</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="w-40 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-primary rounded-full transition-all duration-500"
+                        style={{ width: `${currentJuz ? ((currentJuz / 30) * 100) : 0}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-primary-700">
+                      {currentJuz ? Math.round((currentJuz / 30) * 100) : 0}%
+                    </span>
                   </div>
-                  <span className="text-sm font-semibold text-primary-700">
-                    {(((student.juz - 1) / 30) * 100).toFixed(0)}%
-                  </span>
                 </div>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400">Quality Score</p>
-                <div className="flex items-center gap-1 mt-1">
-                  <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
-                  <span className="font-bold text-gray-900">{student.quality} / 10</span>
+                <div>
+                  <p className="text-xs text-gray-400">Avg. Rating</p>
+                  <div className="flex items-center gap-1 mt-1">
+                    <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
+                    <span className="font-bold text-gray-900">{avgRating ? avgRating.toFixed(1) : "—"} / 5</span>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400">Juz Completed</p>
-                <p className="font-bold text-primary-700 mt-1">{student.juz - 1} / 30</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400">Est. Completion</p>
-                <p className="font-bold text-amber-600 mt-1">Jun 2026</p>
+                <div>
+                  <p className="text-xs text-gray-400">Records</p>
+                  <p className="font-bold text-primary-700 mt-1">{studentRecords.length}</p>
+                </div>
+                {student.targetCompletionDate && (
+                  <div>
+                    <p className="text-xs text-gray-400">Target Completion</p>
+                    <p className="font-bold text-amber-600 mt-1">{formatDate(student.targetCompletionDate)}</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* ── Tabs ── */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {[
-          { key: "tracker", label: "📊 Juz Progress Map" },
-          { key: "entry", label: "✏️ Record Lesson" },
-          { key: "records", label: "📋 Recent Records" },
+          { key: "tracker", label: "Juz Progress Map" },
+          { key: "entry", label: "Record Lesson" },
+          { key: "records", label: "Recent Records" },
         ].map((t) => (
           <button
             key={t.key}
-            onClick={() => setActiveTab(t.key as any)}
-            id={`tab-${t.key}`}
+            onClick={() => setActiveTab(t.key as typeof activeTab)}
             className={cn(
               "px-4 py-2 rounded-lg text-sm font-medium transition-all",
-              activeTab === t.key
-                ? "bg-white text-primary-800 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
+              activeTab === t.key ? "bg-white text-primary-800 shadow-sm" : "text-gray-500 hover:text-gray-700"
             )}
           >
             {t.label}
@@ -161,97 +271,51 @@ export function HifzContent() {
         ))}
       </div>
 
-      {/* ── Juz Progress Map ── */}
-      {activeTab === "tracker" && (
+      {activeTab === "tracker" && student && (
         <div className="dash-card p-6">
           <h3 className="font-semibold text-gray-900 mb-1">30-Juz Progress Map</h3>
-          <p className="text-sm text-gray-400 mb-6">Click on any Juz to view details</p>
-
+          <p className="text-sm text-gray-400 mb-6">Based on current Juz progress from student profile</p>
           <div className="grid grid-cols-6 sm:grid-cols-10 gap-2 mb-6">
-            {JUZ_DATA.map((j) => (
+            {juzData.map((j) => (
               <div
                 key={j.juz}
                 title={`Juz ${j.juz}`}
                 className={cn(
-                  "relative aspect-square flex flex-col items-center justify-center rounded-xl cursor-pointer transition-all duration-200 hover:scale-105 group",
-                  j.completed
-                    ? "bg-gradient-primary text-white shadow-md"
-                    : j.partial
-                    ? "bg-gradient-gold text-white shadow-md"
-                    : "bg-gray-100 text-gray-400 hover:bg-primary-50 hover:text-primary-700"
+                  "relative aspect-square flex flex-col items-center justify-center rounded-xl transition-all duration-200",
+                  j.completed ? "bg-gradient-primary text-white shadow-md" :
+                  j.partial ? "bg-gradient-gold text-white shadow-md" :
+                  "bg-gray-100 text-gray-400"
                 )}
               >
                 <span className="text-sm font-bold">{j.juz}</span>
-                {j.completed && (
-                  <CheckCircle2 className="h-3 w-3 absolute top-1 right-1 opacity-80" />
-                )}
-                {j.partial && (
-                  <Clock className="h-3 w-3 absolute top-1 right-1 opacity-80" />
-                )}
-                <div className="absolute inset-0 rounded-xl ring-2 ring-primary-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                {j.completed && <CheckCircle2 className="h-3 w-3 absolute top-1 right-1 opacity-80" />}
+                {j.partial && <Clock className="h-3 w-3 absolute top-1 right-1 opacity-80" />}
               </div>
             ))}
           </div>
-
           <div className="flex items-center gap-6 text-xs text-gray-500">
-            <span className="flex items-center gap-2">
-              <span className="h-4 w-4 rounded-md bg-gradient-primary inline-block" />
-              Completed ({student.juz - 1} Juz)
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="h-4 w-4 rounded-md bg-gradient-gold inline-block" />
-              In Progress
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="h-4 w-4 rounded-md bg-gray-100 inline-block border" />
-              Not Started
-            </span>
-          </div>
-
-          {/* Weekly Scores */}
-          <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: "Accuracy", score: 8.8, color: "text-blue-600 bg-blue-50" },
-              { label: "Fluency", score: 8.5, color: "text-green-600 bg-green-50" },
-              { label: "Retention", score: 9.1, color: "text-purple-600 bg-purple-50" },
-              { label: "Consistency", score: 9.3, color: "text-amber-600 bg-amber-50" },
-            ].map((s) => (
-              <div key={s.label} className={cn("rounded-xl p-4", s.color.split(" ")[1])}>
-                <p className="text-xs text-gray-500 mb-1">{s.label}</p>
-                <p className={cn("font-display text-2xl font-bold", s.color.split(" ")[0])}>
-                  {s.score}
-                </p>
-                <div className="mt-2 h-1.5 bg-white/60 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-current opacity-60 rounded-full"
-                    style={{ width: `${(s.score / 10) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-gradient-primary inline-block" />Completed</span>
+            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-gradient-gold inline-block" />Current Juz</span>
+            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-gray-100 inline-block border" />Not started</span>
           </div>
         </div>
       )}
 
-      {/* ── Record Lesson ── */}
       {activeTab === "entry" && (
         <div className="dash-card p-6">
-          <h3 className="font-semibold text-gray-900 mb-6">Record Today's Lesson</h3>
+          <h3 className="font-semibold text-gray-900 mb-6">Record Today&apos;s Lesson</h3>
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Type */}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Type</label>
               <div className="grid grid-cols-3 gap-3">
                 {SABAQ_TYPES.map((t) => (
                   <button
                     key={t.value}
+                    type="button"
                     onClick={() => setForm({ ...form, type: t.value })}
-                    id={`btn-type-${t.value.toLowerCase()}`}
                     className={cn(
                       "rounded-xl border-2 p-3 text-sm font-medium transition-all text-left",
-                      form.type === t.value
-                        ? t.color + " border-current"
-                        : "border-gray-200 text-gray-500 hover:border-gray-300"
+                      form.type === t.value ? t.color + " border-current" : "border-gray-200 text-gray-500 hover:border-gray-300"
                     )}
                   >
                     {t.label}
@@ -259,191 +323,101 @@ export function HifzContent() {
                 ))}
               </div>
             </div>
-
-            {/* Surah */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Surah</label>
-              <select
-                value={form.surah}
-                onChange={(e) => setForm({ ...form, surah: e.target.value })}
-                className="form-input"
-                id="select-surah"
-              >
+              <select value={form.surah} onChange={(e) => setForm({ ...form, surah: e.target.value })} className="form-input">
                 {Array.from({ length: 114 }, (_, i) => i + 1).map((n) => (
                   <option key={n} value={n}>{n}. {getSurahName(n)}</option>
                 ))}
               </select>
             </div>
-
-            {/* Lines */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Lines Covered</label>
-              <input
-                type="number"
-                min={1}
-                max={50}
-                value={form.lines}
-                onChange={(e) => setForm({ ...form, lines: e.target.value })}
-                placeholder="e.g. 8"
-                className="form-input"
-                id="input-lines"
-              />
+              <input type="number" min={1} value={form.lines} onChange={(e) => setForm({ ...form, lines: e.target.value })} placeholder="e.g. 8" className="form-input" />
             </div>
-
-            {/* Ayah range */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Ayah From</label>
-              <input
-                type="number"
-                min={1}
-                value={form.ayahFrom}
-                onChange={(e) => setForm({ ...form, ayahFrom: e.target.value })}
-                placeholder="e.g. 45"
-                className="form-input"
-                id="input-ayah-from"
-              />
+              <input type="number" min={1} value={form.ayahFrom} onChange={(e) => setForm({ ...form, ayahFrom: e.target.value })} className="form-input" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Ayah To</label>
-              <input
-                type="number"
-                min={1}
-                value={form.ayahTo}
-                onChange={(e) => setForm({ ...form, ayahTo: e.target.value })}
-                placeholder="e.g. 67"
-                className="form-input"
-                id="input-ayah-to"
-              />
+              <input type="number" min={1} value={form.ayahTo} onChange={(e) => setForm({ ...form, ayahTo: e.target.value })} className="form-input" />
             </div>
-
-            {/* Rating */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Teacher Rating
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Teacher Rating</label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4, 5].map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setForm({ ...form, rating: r })}
-                    id={`btn-rating-${r}`}
-                    className="transition-transform hover:scale-110"
-                  >
-                    <Star
-                      className={cn(
-                        "h-8 w-8 transition-colors",
-                        r <= form.rating
-                          ? "text-amber-400 fill-amber-400"
-                          : "text-gray-200 fill-gray-200"
-                      )}
-                    />
+                  <button key={r} type="button" onClick={() => setForm({ ...form, rating: r })} className="transition-transform hover:scale-110">
+                    <Star className={cn("h-8 w-8", r <= form.rating ? "text-amber-400 fill-amber-400" : "text-gray-200 fill-gray-200")} />
                   </button>
                 ))}
               </div>
             </div>
-
-            {/* Error count */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Error Count
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={form.errorCount}
-                onChange={(e) => setForm({ ...form, errorCount: +e.target.value })}
-                className="form-input"
-                id="input-error-count"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Error Count</label>
+              <input type="number" min={0} value={form.errorCount} onChange={(e) => setForm({ ...form, errorCount: +e.target.value })} className="form-input" />
             </div>
-
-            {/* Teacher notes */}
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Teacher Notes (optional)
-              </label>
-              <textarea
-                value={form.note}
-                onChange={(e) => setForm({ ...form, note: e.target.value })}
-                placeholder="Any observations or recommendations..."
-                rows={3}
-                className="form-input resize-none"
-                id="input-teacher-note"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Teacher Notes</label>
+              <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} rows={3} className="form-input resize-none" />
             </div>
-
-            {/* Actions */}
             <div className="md:col-span-2 flex gap-3">
-              <button
-                onClick={handleSave}
-                id="btn-save-hifz"
-                className="btn-primary flex-1 justify-center"
-              >
-                {saved ? (
-                  <>
-                    <CheckCircle2 className="h-4 w-4" />
-                    Saved!
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4" />
-                    Save Record
-                  </>
-                )}
+              <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 justify-center">
+                {saved ? <><CheckCircle2 className="h-4 w-4" /> Saved!</> :
+                 saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> :
+                 <><Save className="h-4 w-4" /> Save Record</>}
               </button>
-              <button
-                onClick={() => setForm({ ...form, ayahFrom: "", ayahTo: "", lines: "", note: "" })}
-                className="btn-ghost"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset
+              <button onClick={() => setForm({ ...form, ayahFrom: "", ayahTo: "", lines: "", note: "" })} className="btn-ghost">
+                <RotateCcw className="h-4 w-4" /> Reset
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Recent Records ── */}
       {activeTab === "records" && (
         <div className="dash-card overflow-hidden">
           <div className="p-6 border-b border-border">
-            <h3 className="font-semibold text-gray-900">Recent Hifz Records</h3>
+            <h3 className="font-semibold text-gray-900">Hifz Records</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{records.length} record{records.length !== 1 ? "s" : ""} in database</p>
           </div>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Type</th>
-                <th>Surah / Ayahs</th>
-                <th>Lines</th>
-                <th>Rating</th>
-                <th>Recorded</th>
-              </tr>
-            </thead>
-            <tbody>
-              {RECENT_RECORDS.map((r, i) => (
-                <tr key={i}>
-                  <td className="font-medium text-gray-900">{r.student}</td>
-                  <td>
-                    <span className={cn("pill", typeColors[r.type])}>{typeLabels[r.type]}</span>
-                  </td>
-                  <td>
-                    <p className="text-gray-700">{r.surah}</p>
-                    <p className="text-xs text-gray-400">{r.ayahs}</p>
-                  </td>
-                  <td>{r.lines} lines</td>
-                  <td>
-                    <div className="flex gap-0.5">
-                      {[1,2,3,4,5].map((s) => (
-                        <Star key={s} className={cn("h-3.5 w-3.5", s <= r.rating ? "text-amber-400 fill-amber-400" : "text-gray-200")} />
-                      ))}
-                    </div>
-                  </td>
-                  <td className="text-gray-400 text-xs">{r.time}</td>
+          {records.length === 0 ? (
+            <p className="text-center text-gray-400 py-12 text-sm">No hifz records yet. Record a lesson to get started.</p>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Type</th>
+                  <th>Surah / Ayahs</th>
+                  <th>Lines</th>
+                  <th>Rating</th>
+                  <th>Date</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {records.map((r) => (
+                  <tr key={r.id}>
+                    <td className="font-medium text-gray-900">{r.studentName}</td>
+                    <td><span className={cn("pill", typeColors[r.type])}>{typeLabels[r.type]}</span></td>
+                    <td>
+                      <p className="text-gray-700">{r.surahName}</p>
+                      <p className="text-xs text-gray-400">{r.surahNumber}:{r.ayahFrom}–{r.ayahTo}</p>
+                    </td>
+                    <td>{r.lines ?? "—"}</td>
+                    <td>
+                      <div className="flex gap-0.5">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <Star key={s} className={cn("h-3.5 w-3.5", s <= r.rating ? "text-amber-400 fill-amber-400" : "text-gray-200")} />
+                        ))}
+                      </div>
+                    </td>
+                    <td className="text-gray-400 text-xs">{formatDate(r.date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

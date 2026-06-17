@@ -1,49 +1,152 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarCheck, Save, CheckCircle2, X, Clock,
-  AlertTriangle, Users, TrendingUp, Download,
+  AlertTriangle, Download, ChevronLeft, ChevronRight,
+  Loader2, RefreshCw, Users,
 } from "lucide-react";
-import { cn, formatDate, getInitials, downloadCsv } from "@/lib/utils";
+import { cn, formatDate, downloadCsv } from "@/lib/utils";
+import { StudentAvatar } from "@/components/common/student-avatar";
 
-type AttStatus = "PRESENT" | "ABSENT" | "LATE" | "LEAVE" | null;
+type AttStatus = "PRESENT" | "ABSENT" | "LATE" | "LEAVE";
 
-const STUDENTS = [
-  { id: "1", name: "Ahmad Raza Khan", studentId: "STU-2024-0001" },
-  { id: "2", name: "Fatima Noor Hussain", studentId: "STU-2024-0002" },
-  { id: "3", name: "Usman Ali Siddiqui", studentId: "STU-2024-0003" },
-  { id: "4", name: "Zainab Hassan Malik", studentId: "STU-2024-0004" },
-  { id: "5", name: "Ibrahim Sheikh Rahman", studentId: "STU-2024-0005" },
-  { id: "6", name: "Maryam Tariq Butt", studentId: "STU-2024-0006" },
-  { id: "7", name: "Hamza Khalid Ansari", studentId: "STU-2024-0007" },
-  { id: "8", name: "Sara Ijaz Chaudhry", studentId: "STU-2024-0008" },
-  { id: "9", name: "Bilal Yousuf Qureshi", studentId: "STU-2024-0009" },
-  { id: "10", name: "Nadia Rehman Shah", studentId: "STU-2024-0010" },
-];
-
-const STATUS_CONFIG = {
-  PRESENT: { label: "P", fullLabel: "Present", icon: CheckCircle2, color: "bg-green-500 text-white ring-green-300", pill: "pill-success" },
-  ABSENT: { label: "A", fullLabel: "Absent", icon: X, color: "bg-red-500 text-white ring-red-300", pill: "pill-danger" },
-  LATE: { label: "L", fullLabel: "Late", icon: Clock, color: "bg-amber-500 text-white ring-amber-300", pill: "pill-warning" },
-  LEAVE: { label: "LV", fullLabel: "Leave", icon: AlertTriangle, color: "bg-blue-500 text-white ring-blue-300", pill: "pill-info" },
+type StudentRow = {
+  id: string;
+  fullName: string;
+  studentId: string;
+  photo?: string | null;
+  gender: string;
+  programType: string;
 };
 
-const CLASSES = ["Hifz A", "Hifz B", "Hifz C", "Nazra 1", "Tajweed Advanced"];
+const STATUS_CONFIG = {
+  PRESENT: { label: "P", fullLabel: "Present", icon: CheckCircle2, color: "bg-green-500 text-white ring-green-300", pill: "pill-success", cal: "bg-green-100 text-green-700 border-green-200" },
+  ABSENT: { label: "A", fullLabel: "Absent", icon: X, color: "bg-red-500 text-white ring-red-300", pill: "pill-danger", cal: "bg-red-100 text-red-700 border-red-200" },
+  LATE: { label: "L", fullLabel: "Late", icon: Clock, color: "bg-amber-500 text-white ring-amber-300", pill: "pill-warning", cal: "bg-amber-100 text-amber-700 border-amber-200" },
+  LEAVE: { label: "LV", fullLabel: "Leave", icon: AlertTriangle, color: "bg-blue-500 text-white ring-blue-300", pill: "pill-info", cal: "bg-blue-100 text-blue-700 border-blue-200" },
+};
 
-const PAST_DATES = ["2025-06-14", "2025-06-13", "2025-06-12", "2025-06-11", "2025-06-10"];
+const PROGRAM_FILTERS = [
+  { value: "ALL", label: "All Programs" },
+  { value: "HIFZ", label: "Hifz" },
+  { value: "NAZRA", label: "Nazra" },
+  { value: "TAJWEED", label: "Tajweed" },
+];
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function programLabel(type: string) {
+  if (type === "NAZRA") return "Nazra";
+  if (type === "TAJWEED") return "Tajweed";
+  return "Hifz";
+}
+
+function buildCalendarDays(year: number, month: number) {
+  const first = new Date(year, month - 1, 1);
+  const last = new Date(year, month, 0);
+  const days: Array<{ date: string; day: number; inMonth: boolean }> = [];
+
+  for (let i = 0; i < first.getDay(); i++) {
+    days.push({ date: "", day: 0, inMonth: false });
+  }
+
+  for (let d = 1; d <= last.getDate(); d++) {
+    const dt = new Date(year, month - 1, d);
+    days.push({
+      date: dt.toISOString().slice(0, 10),
+      day: d,
+      inMonth: true,
+    });
+  }
+
+  return days;
+}
 
 export function AttendanceContent() {
-  const [selectedClass, setSelectedClass] = useState("Hifz A");
-  const [attendance, setAttendance] = useState<Record<string, AttStatus>>({});
-  const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<"mark" | "history">("mark");
-
   const today = new Date().toISOString().split("T")[0];
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [programFilter, setProgramFilter] = useState("ALL");
+  const [attendance, setAttendance] = useState<Record<string, AttStatus | null>>({});
+  const [students, setStudents] = useState<StudentRow[]>([]);
+  const [historyDates, setHistoryDates] = useState<string[]>([]);
+  const [history, setHistory] = useState<Record<string, Record<string, AttStatus>>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"mark" | "history" | "calendar">("mark");
+
+  const [calendarStudentId, setCalendarStudentId] = useState("");
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth() + 1);
+  const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
+  const [calendarRecords, setCalendarRecords] = useState<Record<string, AttStatus>>({});
+  const [calendarLoading, setCalendarLoading] = useState(false);
+
+  const loadAttendance = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({ date: selectedDate });
+      if (programFilter !== "ALL") params.set("program", programFilter);
+
+      const res = await fetch(`/api/institute/attendance?${params}`);
+      if (!res.ok) throw new Error("Failed to load attendance data.");
+
+      const data = await res.json();
+      setStudents(data.students || []);
+      setHistoryDates(data.historyDates || []);
+      setHistory(data.history || {});
+
+      const initial: Record<string, AttStatus | null> = {};
+      for (const s of data.students || []) {
+        initial[s.id] = data.attendance?.[s.id] || null;
+      }
+      setAttendance(initial);
+
+      setCalendarStudentId((prev) => prev || data.students?.[0]?.id || "");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load attendance.");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDate, programFilter]);
+
+  const loadCalendar = useCallback(async () => {
+    if (!calendarStudentId) return;
+    setCalendarLoading(true);
+    try {
+      const params = new URLSearchParams({
+        studentId: calendarStudentId,
+        month: String(calendarMonth),
+        year: String(calendarYear),
+      });
+      const res = await fetch(`/api/institute/attendance?${params}`);
+      if (!res.ok) throw new Error("Failed to load calendar.");
+      const data = await res.json();
+      const map: Record<string, AttStatus> = {};
+      for (const r of data.records || []) {
+        map[r.date] = r.status;
+      }
+      setCalendarRecords(map);
+    } catch {
+      setCalendarRecords({});
+    } finally {
+      setCalendarLoading(false);
+    }
+  }, [calendarStudentId, calendarMonth, calendarYear]);
+
+  useEffect(() => {
+    loadAttendance();
+  }, [loadAttendance]);
+
+  useEffect(() => {
+    if (activeTab === "calendar") loadCalendar();
+  }, [activeTab, loadCalendar]);
 
   const markAll = (status: AttStatus) => {
-    const all: Record<string, AttStatus> = {};
-    STUDENTS.forEach((s) => (all[s.id] = status));
+    const all: Record<string, AttStatus | null> = {};
+    students.forEach((s) => (all[s.id] = status));
     setAttendance(all);
   };
 
@@ -54,55 +157,94 @@ export function AttendanceContent() {
     }));
   };
 
-  const summary = {
+  const summary = useMemo(() => ({
     present: Object.values(attendance).filter((v) => v === "PRESENT").length,
     absent: Object.values(attendance).filter((v) => v === "ABSENT").length,
     late: Object.values(attendance).filter((v) => v === "LATE").length,
     leave: Object.values(attendance).filter((v) => v === "LEAVE").length,
-    total: STUDENTS.length,
+    total: students.length,
     marked: Object.values(attendance).filter(Boolean).length,
-  };
+  }), [attendance, students.length]);
 
-  const history = STUDENTS.map((s) => ({
-    ...s,
-    dates: PAST_DATES.map(() =>
-      (["PRESENT", "PRESENT", "PRESENT", "ABSENT", "LATE"] as AttStatus[])[Math.floor(Math.random() * 5)]
-    ),
-  }));
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const records = Object.entries(attendance)
+        .filter(([, status]) => status)
+        .map(([studentId, status]) => ({ studentId, status: status as AttStatus }));
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+      const res = await fetch("/api/institute/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: selectedDate, records }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to save attendance.");
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+      loadAttendance();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleExport = () => {
-    const headers = ["Student ID", "Name", ...PAST_DATES];
-    const rows = history.map((s) => [s.studentId, s.name, ...s.dates.map((d) => d || "")]);
-    downloadCsv(`attendance-${selectedClass}-${today}.csv`, headers, rows);
+    const headers = ["Student ID", "Name", ...historyDates];
+    const rows = students.map((s) => [
+      s.studentId,
+      s.fullName,
+      ...historyDates.map((d) => history[s.id]?.[d] || ""),
+    ]);
+    downloadCsv(`attendance-${selectedDate}.csv`, headers, rows);
+  };
+
+  const calendarDays = buildCalendarDays(calendarYear, calendarMonth);
+  const calendarStudent = students.find((s) => s.id === calendarStudentId);
+
+  const shiftCalendarMonth = (delta: number) => {
+    let m = calendarMonth + delta;
+    let y = calendarYear;
+    if (m < 1) { m = 12; y -= 1; }
+    if (m > 12) { m = 1; y += 1; }
+    setCalendarMonth(m);
+    setCalendarYear(y);
   };
 
   return (
     <div className="space-y-6">
-      {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="section-heading">Attendance</h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            {formatDate(today)} • {selectedClass}
+            {students.length} enrolled student{students.length !== 1 ? "s" : ""} • live database records
           </p>
         </div>
         <div className="flex gap-3">
-          <button className="btn-ghost text-sm py-2" onClick={handleExport}>
+          <button className="btn-ghost text-sm py-2" onClick={loadAttendance} disabled={loading}>
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            Refresh
+          </button>
+          <button className="btn-ghost text-sm py-2" onClick={handleExport} disabled={!students.length}>
             <Download className="h-4 w-4" />
             Export
           </button>
           <button
             onClick={handleSave}
+            disabled={saving || !students.length}
             id="btn-save-attendance"
             className="btn-primary text-sm py-2"
           >
             {saved ? (
               <><CheckCircle2 className="h-4 w-4" /> Saved!</>
+            ) : saving ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
             ) : (
               <><Save className="h-4 w-4" /> Save Attendance</>
             )}
@@ -110,7 +252,12 @@ export function AttendanceContent() {
         </div>
       </div>
 
-      {/* ── Summary Cards ── */}
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: "Present", count: summary.present, color: "bg-green-50 text-green-700", icon: CheckCircle2 },
@@ -120,7 +267,7 @@ export function AttendanceContent() {
         ].map((c) => {
           const Icon = c.icon;
           return (
-            <div key={c.label} className={cn("rounded-2xl p-4 flex items-center gap-3", c.color.split(" ")[0] + " border border-current/10")}>
+            <div key={c.label} className={cn("rounded-2xl p-4 flex items-center gap-3 border border-current/10", c.color.split(" ")[0])}>
               <Icon className={cn("h-8 w-8 opacity-70", c.color.split(" ")[1])} />
               <div>
                 <p className={cn("font-display text-3xl font-bold", c.color.split(" ")[1])}>{c.count}</p>
@@ -131,15 +278,15 @@ export function AttendanceContent() {
         })}
       </div>
 
-      {/* ── Tabs ── */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit flex-wrap">
         {[
-          { key: "mark", label: "✏️ Mark Attendance" },
-          { key: "history", label: "📅 Attendance History" },
+          { key: "mark", label: "Mark Attendance" },
+          { key: "history", label: "History Table" },
+          { key: "calendar", label: "Student Calendar" },
         ].map((t) => (
           <button
             key={t.key}
-            onClick={() => setActiveTab(t.key as any)}
+            onClick={() => setActiveTab(t.key as typeof activeTab)}
             id={`tab-${t.key}`}
             className={cn(
               "px-4 py-2 rounded-lg text-sm font-medium transition-all",
@@ -151,27 +298,47 @@ export function AttendanceContent() {
         ))}
       </div>
 
-      {activeTab === "mark" && (
+      {loading && (
+        <div className="flex items-center justify-center py-16 text-gray-400">
+          <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading students...
+        </div>
+      )}
+
+      {!loading && students.length === 0 && (
+        <div className="dash-card p-12 text-center">
+          <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+          <h3 className="font-semibold text-gray-900 mb-1">No students found</h3>
+          <p className="text-sm text-gray-500">Add students from the Students page to mark attendance.</p>
+        </div>
+      )}
+
+      {!loading && students.length > 0 && activeTab === "mark" && (
         <div className="dash-card overflow-hidden">
-          {/* Controls */}
           <div className="p-5 border-b border-border flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="form-input w-44"
+            />
             <select
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
+              value={programFilter}
+              onChange={(e) => setProgramFilter(e.target.value)}
               className="form-input w-48"
-              id="select-class"
+              id="select-program"
             >
-              {CLASSES.map((c) => <option key={c}>{c}</option>)}
+              {PROGRAM_FILTERS.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
             </select>
-            <div className="flex gap-2 ml-auto">
+            <div className="flex gap-2 ml-auto flex-wrap">
               <span className="text-xs text-gray-500 self-center">Mark all:</span>
               {(["PRESENT", "ABSENT", "LATE", "LEAVE"] as AttStatus[]).map((s) => {
-                const cfg = STATUS_CONFIG[s!];
+                const cfg = STATUS_CONFIG[s];
                 return (
                   <button
                     key={s}
                     onClick={() => markAll(s)}
-                    id={`btn-mark-all-${s?.toLowerCase()}`}
                     className={cn(
                       "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
                       s === "PRESENT" && "border-green-200 text-green-700 bg-green-50 hover:bg-green-100",
@@ -187,39 +354,36 @@ export function AttendanceContent() {
             </div>
           </div>
 
-          {/* Progress bar */}
           <div className="px-5 pt-4">
             <div className="flex justify-between text-xs text-gray-500 mb-1">
-              <span>{summary.marked}/{summary.total} marked</span>
-              <span>{Math.round((summary.marked / summary.total) * 100)}%</span>
+              <span>{summary.marked}/{summary.total} marked for {formatDate(selectedDate)}</span>
+              <span>{summary.total ? Math.round((summary.marked / summary.total) * 100) : 0}%</span>
             </div>
             <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-primary rounded-full transition-all duration-300"
-                style={{ width: `${(summary.marked / summary.total) * 100}%` }}
+                style={{ width: `${summary.total ? (summary.marked / summary.total) * 100 : 0}%` }}
               />
             </div>
           </div>
 
-          {/* Student rows */}
           <div className="divide-y divide-border mt-4">
-            {STUDENTS.map((student, i) => {
+            {students.map((student, i) => {
               const current = attendance[student.id];
               return (
-                <div
-                  key={student.id}
-                  className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50 transition-colors"
-                >
+                <div key={student.id} className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50 transition-colors">
                   <span className="text-xs text-gray-400 w-6">{i + 1}</span>
-                  <div className="h-9 w-9 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-xs font-bold">{getInitials(student.name)}</span>
-                  </div>
+                  <StudentAvatar
+                    name={student.fullName}
+                    gender={student.gender}
+                    photo={student.photo}
+                    size="sm"
+                    rounded="full"
+                  />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{student.name}</p>
-                    <p className="text-xs text-gray-400 font-mono">{student.studentId}</p>
+                    <p className="text-sm font-medium text-gray-900">{student.fullName}</p>
+                    <p className="text-xs text-gray-400 font-mono">{student.studentId} · {programLabel(student.programType)}</p>
                   </div>
-
-                  {/* Status buttons */}
                   <div className="flex gap-2">
                     {(["PRESENT", "ABSENT", "LATE", "LEAVE"] as const).map((status) => {
                       const cfg = STATUS_CONFIG[status];
@@ -228,13 +392,10 @@ export function AttendanceContent() {
                         <button
                           key={status}
                           onClick={() => toggle(student.id, status)}
-                          id={`btn-${student.id}-${status.toLowerCase()}`}
                           title={cfg.fullLabel}
                           className={cn(
                             "w-10 h-10 rounded-xl font-bold text-xs transition-all duration-150 ring-2 ring-transparent",
-                            isActive
-                              ? cfg.color + " ring-offset-1 scale-105"
-                              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                            isActive ? cfg.color + " ring-offset-1 scale-105" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
                           )}
                         >
                           {cfg.label}
@@ -242,7 +403,6 @@ export function AttendanceContent() {
                       );
                     })}
                   </div>
-
                   {current && (
                     <span className={cn("pill text-xs", STATUS_CONFIG[current].pill)}>
                       {STATUS_CONFIG[current].fullLabel}
@@ -255,59 +415,55 @@ export function AttendanceContent() {
         </div>
       )}
 
-      {/* ── History Tab ── */}
-      {activeTab === "history" && (
+      {!loading && students.length > 0 && activeTab === "history" && (
         <div className="dash-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead>
                 <tr>
                   <th>Student</th>
-                  {PAST_DATES.map((d) => (
+                  {historyDates.map((d) => (
                     <th key={d} className="text-center whitespace-nowrap">
-                      {new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short" })}
+                      {new Date(d + "T00:00:00").toLocaleDateString("en-PK", { day: "numeric", month: "short" })}
                     </th>
                   ))}
                   <th className="text-center">Rate</th>
                 </tr>
               </thead>
               <tbody>
-                {history.map((s) => {
-                  const presentCount = s.dates.filter((d) => d === "PRESENT").length;
+                {students.map((s) => {
+                  const dates = historyDates.map((d) => history[s.id]?.[d] || null);
+                  const marked = dates.filter(Boolean);
+                  const presentCount = dates.filter((d) => d === "PRESENT").length;
+                  const rate = marked.length ? Math.round((presentCount / marked.length) * 100) : 0;
                   return (
                     <tr key={s.id}>
                       <td>
                         <div className="flex items-center gap-2">
-                          <div className="h-8 w-8 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
-                            <span className="text-white text-xs font-bold">{getInitials(s.name)}</span>
-                          </div>
-                          <span className="font-medium text-gray-900 whitespace-nowrap text-sm">{s.name}</span>
+                          <StudentAvatar name={s.fullName} gender={s.gender} photo={s.photo} size="sm" rounded="full" />
+                          <span className="font-medium text-gray-900 whitespace-nowrap text-sm">{s.fullName}</span>
                         </div>
                       </td>
-                      {s.dates.map((status, di) => {
-                        const cfg = STATUS_CONFIG[status!];
-                        return (
-                          <td key={di} className="text-center">
-                            <span
-                              className={cn(
-                                "inline-flex items-center justify-center h-7 w-7 rounded-lg text-xs font-bold",
-                                status === "PRESENT" && "bg-green-100 text-green-700",
-                                status === "ABSENT" && "bg-red-100 text-red-700",
-                                status === "LATE" && "bg-amber-100 text-amber-700",
-                                status === "LEAVE" && "bg-blue-100 text-blue-700"
-                              )}
-                            >
-                              {cfg?.label}
+                      {dates.map((status, di) => (
+                        <td key={di} className="text-center">
+                          {status ? (
+                            <span className={cn(
+                              "inline-flex items-center justify-center h-7 w-7 rounded-lg text-xs font-bold",
+                              STATUS_CONFIG[status].cal
+                            )}>
+                              {STATUS_CONFIG[status].label}
                             </span>
-                          </td>
-                        );
-                      })}
+                          ) : (
+                            <span className="text-gray-300 text-xs">—</span>
+                          )}
+                        </td>
+                      ))}
                       <td className="text-center">
                         <span className={cn(
                           "font-bold text-sm",
-                          presentCount >= 4 ? "text-green-600" : presentCount >= 3 ? "text-amber-600" : "text-red-500"
+                          rate >= 90 ? "text-green-600" : rate >= 75 ? "text-amber-600" : marked.length ? "text-red-500" : "text-gray-400"
                         )}>
-                          {Math.round((presentCount / PAST_DATES.length) * 100)}%
+                          {marked.length ? `${rate}%` : "—"}
                         </span>
                       </td>
                     </tr>
@@ -316,6 +472,98 @@ export function AttendanceContent() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {!loading && students.length > 0 && activeTab === "calendar" && (
+        <div className="dash-card overflow-hidden">
+          <div className="p-5 border-b border-border flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+            <div className="flex-1 w-full sm:w-auto">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Select Student</label>
+              <select
+                value={calendarStudentId}
+                onChange={(e) => setCalendarStudentId(e.target.value)}
+                className="form-input w-full sm:w-72"
+              >
+                {students.map((s) => (
+                  <option key={s.id} value={s.id}>{s.fullName} ({s.studentId})</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => shiftCalendarMonth(-1)} className="p-2 rounded-lg border hover:bg-gray-50">
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="font-semibold text-gray-900 min-w-[140px] text-center">
+                {new Date(calendarYear, calendarMonth - 1).toLocaleDateString("en-PK", { month: "long", year: "numeric" })}
+              </span>
+              <button type="button" onClick={() => shiftCalendarMonth(1)} className="p-2 rounded-lg border hover:bg-gray-50">
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {calendarStudent && (
+            <div className="px-5 py-3 bg-primary-50/50 border-b border-primary-100 flex items-center gap-3">
+              <StudentAvatar name={calendarStudent.fullName} gender={calendarStudent.gender} photo={calendarStudent.photo} size="sm" rounded="full" />
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{calendarStudent.fullName}</p>
+                <p className="text-xs text-gray-500">{programLabel(calendarStudent.programType)} · Monthly attendance calendar</p>
+              </div>
+            </div>
+          )}
+
+          {calendarLoading ? (
+            <div className="flex items-center justify-center py-16 text-gray-400">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading calendar...
+            </div>
+          ) : (
+            <div className="p-5">
+              <div className="grid grid-cols-7 gap-1 mb-2">
+                {WEEKDAYS.map((d) => (
+                  <div key={d} className="text-center text-[10px] font-bold text-gray-400 uppercase py-1">{d}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {calendarDays.map((cell, idx) => {
+                  if (!cell.inMonth) {
+                    return <div key={`empty-${idx}`} className="aspect-square" />;
+                  }
+                  const status = calendarRecords[cell.date];
+                  const isToday = cell.date === today;
+                  return (
+                    <div
+                      key={cell.date}
+                      title={status ? STATUS_CONFIG[status].fullLabel : "No record"}
+                      className={cn(
+                        "aspect-square rounded-xl flex flex-col items-center justify-center text-xs border transition-all",
+                        status ? STATUS_CONFIG[status].cal : "bg-gray-50 text-gray-500 border-gray-100",
+                        isToday && "ring-2 ring-primary-500 ring-offset-1"
+                      )}
+                    >
+                      <span className="font-bold">{cell.day}</span>
+                      {status && (
+                        <span className="text-[9px] font-semibold mt-0.5">{STATUS_CONFIG[status].label}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-4 mt-6 text-xs text-gray-500">
+                {(["PRESENT", "ABSENT", "LATE", "LEAVE"] as AttStatus[]).map((s) => (
+                  <span key={s} className="flex items-center gap-1.5">
+                    <span className={cn("h-3 w-3 rounded border", STATUS_CONFIG[s].cal)} />
+                    {STATUS_CONFIG[s].fullLabel}
+                  </span>
+                ))}
+                <span className="flex items-center gap-1.5">
+                  <span className="h-3 w-3 rounded bg-gray-50 border border-gray-200" />
+                  No record
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

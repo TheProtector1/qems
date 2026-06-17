@@ -12,6 +12,7 @@ import { cn, formatDate, getSurahName } from "@/lib/utils";
 import { StudentProfileActions } from "@/components/institute/student-profile-actions";
 import { StudentAvatar } from "@/components/common/student-avatar";
 import { StudentAuditPanel } from "@/components/institute/student-audit-panel";
+import { StudentAttendanceCalendar } from "@/components/institute/student-attendance-calendar";
 
 export const metadata = { title: "Student Profile — QEMS" };
 
@@ -62,6 +63,22 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
   });
 
   if (!student) redirect("/institute/students");
+
+  const since = new Date();
+  since.setDate(since.getDate() - 30);
+  const attendanceRows = await prisma.attendance.findMany({
+    where: { studentId: student.id, date: { gte: since } },
+    select: { status: true },
+  });
+  const attendanceTotal = attendanceRows.length;
+  const attendancePresent = attendanceRows.filter((r) => r.status === "PRESENT" || r.status === "LATE").length;
+  const attendancePct = attendanceTotal ? Math.round((attendancePresent / attendanceTotal) * 100) : null;
+
+  const hifzAvg = await prisma.hifzRecord.aggregate({
+    where: { studentId: student.id },
+    _avg: { rating: true },
+  });
+  const qualityScore = hifzAvg._avg.rating ? Number((hifzAvg._avg.rating * 2).toFixed(1)) : null;
 
   const program = programLabel(student.programType);
   const teacherName = student.teacher?.user?.name || "Unassigned";
@@ -156,8 +173,8 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: "Current Juz", value: student.currentJuz ? `${student.currentJuz}/30` : "N/A", icon: BookOpen, color: "text-green-600 bg-green-50", sub: student.currentJuz ? `${completionPct}% complete` : "Nazra/Tajweed" },
-            { label: "Quality Score", value: "8.5", icon: Star, color: "text-amber-600 bg-amber-50", sub: "Out of 10.0" },
-            { label: "Attendance", value: "95%", icon: CalendarCheck, color: "text-green-600 bg-green-50", sub: "This semester" },
+            { label: "Quality Score", value: qualityScore != null ? String(qualityScore) : "—", icon: Star, color: "text-amber-600 bg-amber-50", sub: qualityScore != null ? "Out of 10.0" : "No hifz records" },
+            { label: "Attendance", value: attendancePct != null ? `${attendancePct}%` : "—", icon: CalendarCheck, color: "text-green-600 bg-green-50", sub: attendanceTotal ? "Last 30 days" : "No records yet" },
             { label: "Completion", value: student.currentJuz ? `${completionPct}%` : "—", icon: TrendingUp, color: "text-violet-600 bg-violet-50", sub: "Hifz progress" },
           ].map((stat) => {
             const Icon = stat.icon;
@@ -314,6 +331,8 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
             limit={20}
           />
         )}
+
+        <StudentAttendanceCalendar studentId={student.id} />
       </div>
     </DashboardShell>
   );

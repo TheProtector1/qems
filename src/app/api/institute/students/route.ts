@@ -48,7 +48,46 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json({ students });
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    const attendanceRows = await prisma.attendance.findMany({
+      where: { student: { instituteId }, date: { gte: since } },
+      select: { studentId: true, status: true },
+    });
+
+    const attendancePct: Record<string, number> = {};
+    const attendanceGrouped: Record<string, { present: number; total: number }> = {};
+    for (const row of attendanceRows) {
+      if (!attendanceGrouped[row.studentId]) {
+        attendanceGrouped[row.studentId] = { present: 0, total: 0 };
+      }
+      attendanceGrouped[row.studentId].total += 1;
+      if (row.status === "PRESENT" || row.status === "LATE") {
+        attendanceGrouped[row.studentId].present += 1;
+      }
+    }
+    for (const [sid, stats] of Object.entries(attendanceGrouped)) {
+      attendancePct[sid] = stats.total ? Math.round((stats.present / stats.total) * 100) : 0;
+    }
+
+    const hifzRatings = await prisma.hifzRecord.groupBy({
+      by: ["studentId"],
+      where: { student: { instituteId } },
+      _avg: { rating: true },
+    });
+    const qualityScore: Record<string, number> = {};
+    for (const row of hifzRatings) {
+      if (row._avg.rating) qualityScore[row.studentId] = Number((row._avg.rating * 2).toFixed(1));
+    }
+
+    const enriched = students.map((s) => ({
+      ...s,
+      attendancePct: attendancePct[s.id] ?? null,
+      qualityScore: qualityScore[s.id] ?? null,
+    }));
+
+    return NextResponse.json({ students: enriched });
   } catch (error) {
     console.error("Get students error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

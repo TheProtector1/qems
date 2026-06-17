@@ -25,8 +25,8 @@ type Student = {
   teacher: string;
   teacherId: string;
   currentJuz: number | null;
-  qualityScore: number;
-  attendancePct: number;
+  qualityScore: number | null;
+  attendancePct: number | null;
   status: "Excellent" | "On Track" | "Needs Attention" | "At Risk";
   admissionDate: string;
   parentName: string;
@@ -343,16 +343,18 @@ function StudentCard({ student, onEdit, onDelete }: { student: Student; onEdit: 
         <div className="grid grid-cols-3 gap-2 mb-4">
           <div className="text-center p-2 rounded-xl bg-gray-50 border border-gray-100">
             <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400 mx-auto mb-0.5" />
-            <p className="text-sm font-bold text-gray-900">{student.qualityScore.toFixed(1)}</p>
+            <p className="text-sm font-bold text-gray-900">{student.qualityScore != null ? student.qualityScore.toFixed(1) : "—"}</p>
             <p className="text-[9px] text-gray-400">Quality</p>
           </div>
           <div className="text-center p-2 rounded-xl bg-gray-50 border border-gray-100">
             <CalendarCheck className={cn("h-3.5 w-3.5 mx-auto mb-0.5",
+              student.attendancePct == null ? "text-gray-300" :
               student.attendancePct >= 90 ? "text-green-500" : student.attendancePct >= 75 ? "text-amber-500" : "text-red-500"
             )} />
             <p className={cn("text-sm font-bold",
+              student.attendancePct == null ? "text-gray-400" :
               student.attendancePct >= 90 ? "text-green-600" : student.attendancePct >= 75 ? "text-amber-600" : "text-red-500"
-            )}>{student.attendancePct}%</p>
+            )}>{student.attendancePct != null ? `${student.attendancePct}%` : "—"}</p>
             <p className="text-[9px] text-gray-400">Attendance</p>
           </div>
           <div className="text-center p-2 rounded-xl bg-gray-50 border border-gray-100">
@@ -454,8 +456,8 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
           teacher: s.teacher?.user?.name || "Unassigned",
           teacherId: s.teacherId || "",
           currentJuz: s.currentJuz,
-          qualityScore: s.qualityScore ?? 8.5,
-          attendancePct: s.attendancePct ?? 95,
+          qualityScore: s.qualityScore ?? null,
+          attendancePct: s.attendancePct ?? null,
           status: s.isActive ? "On Track" : "Needs Attention",
           admissionDate: s.admissionDate
             ? new Date(s.admissionDate).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" })
@@ -785,13 +787,14 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
                             <td>
                               <div className="flex items-center gap-1">
                                 <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
-                                <span className="font-semibold text-gray-900 text-sm">{s.qualityScore}</span>
+                                <span className="font-semibold text-gray-900 text-sm">{s.qualityScore ?? "—"}</span>
                               </div>
                             </td>
                             <td>
                               <span className={cn("text-sm font-semibold",
+                                s.attendancePct == null ? "text-gray-400" :
                                 s.attendancePct >= 90 ? "text-green-600" : s.attendancePct >= 75 ? "text-amber-600" : "text-red-500"
-                              )}>{s.attendancePct}%</span>
+                              )}>{s.attendancePct != null ? `${s.attendancePct}%` : "—"}</span>
                             </td>
                             <td>
                               <span className={cn("pill", statusMeta[s.status]?.pill || "pill-info")}>{s.status}</span>
