@@ -28,13 +28,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       const updated = await tx.admissionApplication.update({
         where: { id },
         data: {
-<<<<<<< HEAD
           status: stage as AdmissionStatus,
           interviewNotes: notes !== undefined ? notes : application.interviewNotes,
-=======
-          stage: stage as AdmissionStatus,
-          notes: notes !== undefined ? notes : application.notes,
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
         },
       });
 
@@ -97,21 +92,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
             dateOfBirth: application.dateOfBirth,
             admissionDate: new Date(),
             address: application.address,
-<<<<<<< HEAD
             programType: application.programType,
-=======
-            city: application.city,
-            programType: application.program,
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
             admissionStatus: stage as any,
             instituteId: session.user.instituteId,
             parentId: parent.id,
             userId: studentUser.id,
-<<<<<<< HEAD
             currentJuz: application.programType === "HIFZ" ? 1 : null,
-=======
-            currentJuz: application.program === "HIFZ" ? 1 : null,
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
           },
         });
 

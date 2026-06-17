@@ -2,11 +2,7 @@
 
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { BarChart3, TrendingUp, DollarSign, Download, ArrowUpRight, ArrowDownRight } from "lucide-react";
-<<<<<<< HEAD
 import { formatCurrency, downloadCsv } from "@/lib/utils";
-=======
-import { formatCurrency } from "@/lib/utils";
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, AreaChart, Area
 } from "recharts";
@@ -21,7 +17,6 @@ const MONTHLY_REPORTS = [
 ];
 
 export default function FinanceReportsPage() {
-<<<<<<< HEAD
   const handleExport = () => {
     downloadCsv(
       "financial-ledger.csv",
@@ -30,8 +25,6 @@ export default function FinanceReportsPage() {
     );
   };
 
-=======
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
   return (
     <DashboardShell
       title="Financial Reports"
@@ -47,11 +40,7 @@ export default function FinanceReportsPage() {
             <h2 className="section-heading">Financial Overview & Statements</h2>
             <p className="text-sm text-gray-500 mt-0.5">Track revenue streams, expenses, salaries, and net profit margins</p>
           </div>
-<<<<<<< HEAD
           <button className="btn-ghost text-sm py-2" onClick={handleExport}>
-=======
-          <button className="btn-ghost text-sm py-2">
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
             <Download className="h-4 w-4" /> Export Ledger
           </button>
         </div>

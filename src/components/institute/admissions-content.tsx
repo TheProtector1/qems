@@ -188,17 +188,10 @@ export function AdmissionsContent() {
         parentPhone: a.parentPhone,
         parentEmail: a.parentEmail || "",
         address: a.address || "",
-<<<<<<< HEAD
         city: "", // City is not in the schema anymore
         program: a.programType === "HIFZ" ? "Hifz" : a.programType === "NAZRA" ? "Nazra" : "Tajweed",
         stage: a.status,
         notes: a.interviewNotes || "",
-=======
-        city: a.city || "",
-        program: a.program === "HIFZ" ? "Hifz" : a.program === "NAZRA" ? "Nazra" : "Tajweed",
-        stage: a.stage,
-        notes: a.notes || "",
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
         createdAt: a.createdAt
           ? new Date(a.createdAt).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" })
           : "—",

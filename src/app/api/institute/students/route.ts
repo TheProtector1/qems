@@ -3,10 +3,7 @@ import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { Gender, ProgramType } from "@prisma/client";
-<<<<<<< HEAD
 import { generateInvoiceNo } from "@/lib/utils";
-=======
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
 
 export const dynamic = "force-dynamic";
 
@@ -17,15 +14,10 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-<<<<<<< HEAD
     const instituteId = session.user.instituteId;
 
     const students = await prisma.student.findMany({
       where: { instituteId },
-=======
-    const students = await prisma.student.findMany({
-      where: { instituteId: session.user.instituteId },
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
       include: {
         parent: {
           include: {
@@ -69,11 +61,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-<<<<<<< HEAD
     const instituteId = session.user.instituteId;
 
-=======
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
     const body = await req.json();
     const {
       fullName,
@@ -95,16 +84,11 @@ export async function POST(req: Request) {
     }
 
     const count = await prisma.student.count({
-<<<<<<< HEAD
       where: { instituteId },
-=======
-      where: { instituteId: session.user.instituteId },
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
     });
     const studentId = `STU-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
 
     // Map string programs to ProgramType enum
-<<<<<<< HEAD
     let programType: ProgramType = ProgramType.HIFZ;
     if (program.toUpperCase() === "NAZRA") programType = ProgramType.NAZRA;
     if (program.toUpperCase() === "TAJWEED") programType = ProgramType.TAJWEED;
@@ -118,12 +102,6 @@ export async function POST(req: Request) {
       if (teacher) resolvedTeacherId = teacher.id;
     }
 
-=======
-    let programType = ProgramType.HIFZ;
-    if (program.toUpperCase() === "NAZRA") programType = ProgramType.NAZRA;
-    if (program.toUpperCase() === "TAJWEED") programType = ProgramType.TAJWEED;
-
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
     const result = await prisma.$transaction(async (tx) => {
       // 1. Check or create parent account
       const pEmail = parentEmail ? parentEmail.toLowerCase() : `parent.${studentId}@qems.io`;
@@ -138,11 +116,7 @@ export async function POST(req: Request) {
             password: defaultPassword,
             role: "PARENT",
             isActive: true,
-<<<<<<< HEAD
             instituteId,
-=======
-            instituteId: session.user.instituteId,
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
           },
         });
       }
@@ -167,11 +141,7 @@ export async function POST(req: Request) {
           password: defaultStudentPassword,
           role: "STUDENT",
           isActive: true,
-<<<<<<< HEAD
           instituteId,
-=======
-          instituteId: session.user.instituteId,
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
         },
       });
 
@@ -186,17 +156,10 @@ export async function POST(req: Request) {
           address: address || null,
           city: city || null,
           programType,
-<<<<<<< HEAD
           instituteId,
           parentId: parent.id,
           userId: studentUser.id,
           teacherId: resolvedTeacherId ?? undefined,
-=======
-          instituteId: session.user.instituteId,
-          parentId: parent.id,
-          userId: studentUser.id,
-          teacherId: teacherId || null,
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
           currentJuz: programType === ProgramType.HIFZ ? 1 : null,
         },
       });
@@ -204,7 +167,6 @@ export async function POST(req: Request) {
       // 4. Create initial fee payment row if feeAmount is present
       if (feeAmount) {
         const fee = parseFloat(feeAmount);
-<<<<<<< HEAD
         const discountPct = scholarshipPct ? parseFloat(scholarshipPct) : 0;
         const discountAmount = fee * (discountPct / 100);
         const finalAmount = fee - discountAmount;
@@ -219,18 +181,6 @@ export async function POST(req: Request) {
             status: "PENDING",
             dueDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 10),
             month: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
-=======
-        const discount = scholarshipPct ? parseFloat(scholarshipPct) : 0;
-        const finalAmount = fee * (1 - discount / 100);
-
-        await tx.feePayment.create({
-          data: {
-            studentId: student.id,
-            amount: finalAmount,
-            status: "PENDING",
-            dueDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 10), // 10th of next month
-            instituteId: session.user.instituteId,
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
           },
         });
       }

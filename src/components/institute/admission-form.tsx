@@ -1,6 +1,5 @@
 "use client";
 
-<<<<<<< HEAD
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -8,16 +7,6 @@ import {
   ChevronLeft, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-=======
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  User, Users, BookOpen, CheckCircle2, ChevronRight,
-  ChevronLeft, GraduationCap, Calendar, Phone, Mail,
-  MapPin, Loader2,
-} from "lucide-react";
-import { cn, generateStudentId } from "@/lib/utils";
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
 
 // ── Types ────────────────────────────────────────────────────
 type FormData = {
@@ -56,11 +45,7 @@ const INITIAL: FormData = {
   parentCnic: "",
   program: "Hifz",
   class: "Hifz A",
-<<<<<<< HEAD
   teacher: "",
-=======
-  teacher: "Qari Hamid",
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
   feeAmount: "3500",
   scholarshipPct: "0",
   startDate: new Date().toISOString().split("T")[0],
@@ -80,30 +65,17 @@ const CLASS_OPTIONS: Record<string, string[]> = {
   Tajweed: ["Tajweed Beginners", "Tajweed Intermediate", "Tajweed Advanced"],
 };
 
-<<<<<<< HEAD
-=======
-const TEACHER_OPTIONS: Record<string, string[]> = {
-  Hifz: ["Qari Hamid", "Qari Imran", "Ustaza Rukhsar"],
-  Nazra: ["Qari Bilal", "Qari Yousuf", "Ustaza Ayesha"],
-  Tajweed: ["Qari Hamid", "Qari Abdur Rahman"],
-};
-
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
 const FEE_DEFAULTS: Record<string, string> = {
   Hifz: "3500",
   Nazra: "2500",
   Tajweed: "2000",
 };
 
-<<<<<<< HEAD
 type AdmissionFormProps = {
   mode?: "enroll" | "application";
 };
 
 export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
-=======
-export function AdmissionForm() {
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<FormData>(INITIAL);
@@ -129,10 +101,7 @@ export function AdmissionForm() {
       if (key === "program") {
         next.class = CLASS_OPTIONS[value]?.[0] || "";
         next.feeAmount = FEE_DEFAULTS[value] || "3500";
-<<<<<<< HEAD
         next.teacher = "";
-=======
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
       }
       return next;
     });
@@ -145,20 +114,16 @@ export function AdmissionForm() {
     return true;
   };
 
-<<<<<<< HEAD
   const selectedTeacherName = teachers.find((t) => t.id === form.teacher)?.name
     || teachers.find((t) => t.id === form.teacher)?.user?.name
     || "Unassigned";
 
   const validTeacherId = teachers.some((t) => t.id === form.teacher) ? form.teacher : null;
 
-=======
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
   const handleSubmit = async () => {
     setSubmitting(true);
     setError(null);
     try {
-<<<<<<< HEAD
       const isApplication = mode === "application";
       const res = await fetch(
         isApplication ? "/api/institute/admissions" : "/api/institute/students",
@@ -196,26 +161,6 @@ export function AdmissionForm() {
           ),
         }
       );
-=======
-      const res = await fetch("/api/institute/students", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fullName: form.fullName,
-          gender: form.gender,
-          dateOfBirth: form.dateOfBirth,
-          address: form.address,
-          city: "Islamabad",
-          fatherName: form.fatherName,
-          parentPhone: form.parentPhone,
-          parentEmail: form.parentEmail,
-          program: form.program,
-          teacherId: form.teacher || null,
-          feeAmount: form.feeAmount,
-          scholarshipPct: form.scholarshipPct,
-        }),
-      });
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
 
       if (!res.ok) {
         const data = await res.json();
@@ -223,15 +168,11 @@ export function AdmissionForm() {
       }
 
       const data = await res.json();
-<<<<<<< HEAD
       setGeneratedId(
         isApplication
           ? data.application?.applicationNo || "APP-NEW"
           : data.student?.studentId || "STU-NEW"
       );
-=======
-      setGeneratedId(data.student?.studentId || "STU-NEW");
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
       setSubmitted(true);
     } catch (err: any) {
       setError(err.message);
@@ -255,7 +196,6 @@ export function AdmissionForm() {
           <CheckCircle2 className="h-10 w-10 text-green-600" />
         </div>
         <h2 className="font-display text-2xl font-bold text-gray-900 mb-2">
-<<<<<<< HEAD
           {mode === "application" ? "Application Submitted!" : "Admission Submitted!"}
         </h2>
         <p className="text-gray-500 mb-2">
@@ -272,23 +212,6 @@ export function AdmissionForm() {
             className="btn-ghost text-sm py-2.5"
           >
             {mode === "application" ? "View Applications" : "View All Students"}
-=======
-          Admission Submitted!
-        </h2>
-        <p className="text-gray-500 mb-2">
-          <strong>{form.fullName}</strong> has been successfully admitted to the{" "}
-          <strong>{form.program}</strong> program.
-        </p>
-        <p className="text-sm font-mono text-primary-700 bg-primary-50 rounded-xl px-4 py-2 inline-block mb-8 border border-primary-100">
-          Student ID: {generatedId}
-        </p>
-        <div className="flex gap-3 justify-center">
-          <button
-            onClick={() => router.push("/institute/students")}
-            className="btn-ghost text-sm py-2.5"
-          >
-            View All Students
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
           </button>
           <button
             onClick={() => {
@@ -692,15 +615,10 @@ export function AdmissionForm() {
                     <span className="font-semibold text-gray-900">{form.nationality}</span>
                   </div>
                   <div className="flex justify-between">
-<<<<<<< HEAD
                     <span className="text-gray-500">{mode === "application" ? "Reference" : "Student ID"}</span>
                     <span className="font-mono text-primary-700 font-bold text-xs">
                       {mode === "application" ? "Assigned on approval" : "Assigned on submit"}
                     </span>
-=======
-                    <span className="text-gray-500">Student ID</span>
-                    <span className="font-mono text-primary-700 font-bold text-xs">{generatedId}</span>
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
                   </div>
                 </div>
               </div>
@@ -746,11 +664,7 @@ export function AdmissionForm() {
                   </div>
                   <div>
                     <p className="text-primary-500 text-xs">Assigned Teacher</p>
-<<<<<<< HEAD
                     <p className="font-bold text-primary-900">{selectedTeacherName}</p>
-=======
-                    <p className="font-bold text-primary-900">{form.teacher}</p>
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
                   </div>
                   <div>
                     <p className="text-primary-500 text-xs">Start Date</p>
@@ -825,11 +739,7 @@ export function AdmissionForm() {
             ) : (
               <>
                 <CheckCircle2 className="h-4 w-4" />
-<<<<<<< HEAD
                 {mode === "application" ? "Submit Application" : "Confirm Admission"}
-=======
-                Confirm Admission
->>>>>>> 69c1b278484f624f04044e45de8438706888ccac
               </>
             )}
           </button>
