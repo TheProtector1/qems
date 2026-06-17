@@ -98,6 +98,11 @@ enum SubscriptionPlan {
   ENTERPRISE
 }
 
+enum AuditAudience {
+  INSTITUTE_OWNER
+  SUPER_ADMIN
+}
+
 enum SubscriptionStatus {
   ACTIVE
   TRIALING
@@ -205,6 +210,7 @@ model Institute {
   badges            Badge[]
   assessments       Assessment[]
   notifications     Notification[]
+  auditLogs         AuditLog[]
 
   @@index([slug])
   @@index([isApproved])
@@ -279,6 +285,7 @@ model User {
   sentMessages    Message[] @relation("SentMessages")
   receivedMessages Message[] @relation("ReceivedMessages")
   notifications   Notification[]
+  auditLogs       AuditLog[]
 
   @@index([email])
   @@index([role])
@@ -934,6 +941,31 @@ model ComplaintAuditLog {
   createdAt   DateTime  @default(now())
 
   @@index([complaintId])
+}
+
+// ─────────────────────────────────────────────
+// AUDIT TRAIL
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id              String        @id @default(cuid())
+  entityType      String
+  entityId        String
+  entityLabel     String?
+  action          String
+  details         String?       @db.Text
+  performedById   String
+  performedBy     User          @relation(fields: [performedById], references: [id], onDelete: Cascade)
+  performerRole   Role
+  instituteId     String?
+  institute       Institute?    @relation(fields: [instituteId], references: [id], onDelete: SetNull)
+  audience        AuditAudience
+  createdAt       DateTime      @default(now())
+
+  @@index([entityType, entityId])
+  @@index([instituteId])
+  @@index([audience])
+  @@index([createdAt])
 }
 
 // ─────────────────────────────────────────────

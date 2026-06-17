@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { AdmissionStatus, Role } from "@prisma/client";
+import { AdmissionStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { createAuditLog } from "@/lib/audit";
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -24,7 +25,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // Update application stage
       const updated = await tx.admissionApplication.update({
         where: { id },
         data: {
@@ -33,7 +33,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         },
       });
 
-      // If approved or enrolled and not yet registered as a student, create the student!
+      let createdStudent: { id: string; fullName: string; studentId: string } | null = null;
+
       if ((stage === "ENROLLED" || stage === "APPROVED") && !application.studentId) {
         // Generate studentId
         const count = await tx.student.count({
@@ -106,12 +107,34 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
           where: { id },
           data: { studentId: student.id },
         });
+
+        createdStudent = {
+          id: student.id,
+          fullName: student.fullName,
+          studentId: student.studentId,
+        };
       }
 
-      return updated;
+      return { updated, createdStudent };
     });
 
-    return NextResponse.json({ success: true, application: result });
+    if (result.createdStudent) {
+      await createAuditLog({
+        entityType: "STUDENT",
+        entityId: result.createdStudent.id,
+        entityLabel: result.createdStudent.fullName,
+        action: "CREATE",
+        details: {
+          summary: `Student ${result.createdStudent.studentId} enrolled from admission application`,
+          studentId: result.createdStudent.studentId,
+        },
+        performedById: session.user.id,
+        performerRole: session.user.role,
+        instituteId: session.user.instituteId,
+      });
+    }
+
+    return NextResponse.json({ success: true, application: result.updated });
   } catch (error: any) {
     console.error("Update application error:", error);
     return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 });

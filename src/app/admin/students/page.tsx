@@ -1,5 +1,6 @@
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { StudentsContent } from "@/components/institute/students-content";
+import { AdminAuditPanel } from "@/components/admin/admin-audit-panel";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
@@ -15,7 +16,10 @@ export default async function AdminStudentsPage() {
       title="All Students"
       breadcrumbs={[{ label: "Super Admin" }, { label: "Students" }]}
     >
-      <StudentsContent role="admin" addHref="/institute/students/new" />
+      <div className="space-y-6">
+        <StudentsContent role="admin" addHref="/institute/students/new" />
+        <AdminAuditPanel limit={25} />
+      </div>
     </DashboardShell>
   );
 }

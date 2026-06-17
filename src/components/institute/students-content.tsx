@@ -9,7 +9,10 @@ import {
   TrendingUp, AlertTriangle, CheckCircle, User, Loader2, RefreshCw, XCircle
 } from "lucide-react";
 import Link from "next/link";
-import { cn, getInitials } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { StudentAvatar } from "@/components/common/student-avatar";
+import { StudentPhotoUpload } from "@/components/common/student-photo-upload";
+import { StudentAuditPanel } from "@/components/institute/student-audit-panel";
 
 type Student = {
   id: string;
@@ -52,15 +55,6 @@ const programColors: Record<string, string> = {
   Tajweed: "bg-violet-100 text-violet-700",
 };
 
-const avatarColors = [
-  "from-emerald-400 to-green-600",
-  "from-blue-400 to-indigo-600",
-  "from-violet-400 to-purple-600",
-  "from-rose-400 to-pink-600",
-  "from-amber-400 to-orange-500",
-  "from-teal-400 to-cyan-600",
-];
-
 // ─── Edit Student Modal ────────────────────────────────────────
 function EditStudentModal({
   student,
@@ -83,6 +77,7 @@ function EditStudentModal({
   const [currentJuz, setCurrentJuz] = useState(student.currentJuz?.toString() || "");
   const [fatherName, setFatherName] = useState(student.parentName);
   const [parentEmail, setParentEmail] = useState(student.parentEmail || "");
+  const [photo, setPhoto] = useState(student.photo || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,6 +100,7 @@ function EditStudentModal({
           currentJuz: program === "Hifz" ? currentJuz : null,
           fatherName,
           parentEmail,
+          photo: photo || null,
         }),
       });
 
@@ -144,6 +140,13 @@ function EditStudentModal({
               {error}
             </div>
           )}
+
+          <StudentPhotoUpload
+            name={fullName || student.name}
+            gender={gender}
+            value={photo || null}
+            onChange={(nextPhoto) => setPhoto(nextPhoto || "")}
+          />
 
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
@@ -287,10 +290,6 @@ function EditStudentModal({
 function StudentCard({ student, onEdit, onDelete }: { student: Student; onEdit: () => void; onDelete: () => void }) {
   const statusInfo = statusMeta[student.status] || statusMeta["On Track"];
   const StatusIcon = statusInfo.icon;
-  const colorIdx = student.name.charCodeAt(0) % avatarColors.length;
-  const avatarGrad = student.gender === "FEMALE"
-    ? "from-pink-400 to-rose-600"
-    : avatarColors[colorIdx];
 
   return (
     <div className="dash-card bg-white group hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 overflow-hidden flex flex-col">
@@ -306,12 +305,12 @@ function StudentCard({ student, onEdit, onDelete }: { student: Student; onEdit: 
       <div className="p-5 flex flex-col flex-1">
         {/* Avatar + Name */}
         <div className="flex items-start gap-4 mb-4">
-          <div className={cn(
-            "h-14 w-14 rounded-2xl flex items-center justify-center text-lg font-bold text-white flex-shrink-0 shadow-sm bg-gradient-to-br",
-            avatarGrad
-          )}>
-            {getInitials(student.name)}
-          </div>
+          <StudentAvatar
+            name={student.name}
+            gender={student.gender}
+            photo={student.photo}
+            size="md"
+          />
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-gray-900 text-sm leading-tight truncate">{student.name}</h3>
             <p className="text-[11px] font-mono text-primary-700 mt-0.5">{student.studentId}</p>
@@ -467,6 +466,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
           dateOfBirth: s.dateOfBirth,
           city: s.city || "Islamabad",
           address: s.address || "",
+          photo: s.photo || "",
         };
       });
 
@@ -749,18 +749,17 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
                         </tr>
                       )}
                       {paginated.map((s) => {
-                        const colorIdx = s.name.charCodeAt(0) % avatarColors.length;
-                        const avatarGrad = s.gender === "FEMALE" ? "from-pink-400 to-rose-600" : avatarColors[colorIdx];
                         return (
                           <tr key={s.id}>
                             <td>
                               <div className="flex items-center gap-3">
-                                <div className={cn(
-                                  "h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold text-white bg-gradient-to-br",
-                                  avatarGrad
-                                )}>
-                                  {getInitials(s.name)}
-                                </div>
+                                <StudentAvatar
+                                  name={s.name}
+                                  gender={s.gender}
+                                  photo={s.photo}
+                                  size="sm"
+                                  rounded="full"
+                                />
                                 <div>
                                   <p className="font-medium text-gray-900 whitespace-nowrap">{s.name}</p>
                                   <p className="text-xs text-gray-400">{s.parentName} · {s.parentPhone}</p>
@@ -858,6 +857,10 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
               </div>
             )}
           </>
+        )}
+
+        {role === "institute" && (
+          <StudentAuditPanel title="Student Activity Log" limit={15} />
         )}
       </div>
     </>

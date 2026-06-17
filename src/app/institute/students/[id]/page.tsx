@@ -10,6 +10,8 @@ import {
 import Link from "next/link";
 import { cn, formatDate, getSurahName } from "@/lib/utils";
 import { StudentProfileActions } from "@/components/institute/student-profile-actions";
+import { StudentAvatar } from "@/components/common/student-avatar";
+import { StudentAuditPanel } from "@/components/institute/student-audit-panel";
 
 export const metadata = { title: "Student Profile — QEMS" };
 
@@ -26,8 +28,6 @@ const typeBadge: Record<string, string> = {
   SABQI: "bg-blue-100 text-blue-800",
   MANZIL: "bg-amber-100 text-amber-800",
 };
-
-const avatarColors = ["from-emerald-400 to-green-600", "from-blue-400 to-indigo-600", "from-violet-400 to-purple-600"];
 
 function programLabel(programType: string) {
   if (programType === "NAZRA") return "Nazra";
@@ -68,9 +68,8 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
   const parentName = student.parent?.user?.name || "Parent";
   const parentEmail = student.parent?.user?.email || null;
   const status = student.user?.isActive ? "On Track" : "Needs Attention";
-  const colorIdx = student.fullName.charCodeAt(0) % avatarColors.length;
-  const avatarGrad = student.gender === "FEMALE" ? "from-pink-400 to-rose-600" : avatarColors[colorIdx];
   const completionPct = student.currentJuz ? Math.round((student.currentJuz / 30) * 100) : 0;
+  const showAudit = session.user.role === "INSTITUTE_OWNER" || session.user.role === "SUPER_ADMIN";
 
   const recentProgress = student.hifzRecords.map((r) => ({
     date: formatDate(r.date),
@@ -105,12 +104,13 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
           </div>
           <div className="px-6 pb-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 -mt-10 mb-5">
-              <div className={cn(
-                "h-20 w-20 rounded-2xl flex items-center justify-center text-2xl font-bold text-white shadow-lg ring-4 ring-white bg-gradient-to-br flex-shrink-0",
-                avatarGrad
-              )}>
-                {student.fullName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-              </div>
+              <StudentAvatar
+                name={student.fullName}
+                gender={student.gender}
+                photo={student.photo}
+                size="lg"
+                className="ring-4 ring-white"
+              />
               <div className="flex-1 pb-1">
                 <div className="flex items-center gap-3 flex-wrap">
                   <h2 className="font-display text-2xl font-bold text-gray-900">{student.fullName}</h2>
@@ -306,6 +306,14 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
             </div>
           </div>
         </div>
+
+        {showAudit && (
+          <StudentAuditPanel
+            studentId={student.id}
+            title="Profile Change History"
+            limit={20}
+          />
+        )}
       </div>
     </DashboardShell>
   );

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { Gender, ProgramType } from "@prisma/client";
 import { generateInvoiceNo } from "@/lib/utils";
+import { createAuditLog } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,7 @@ export async function POST(req: Request) {
       teacherId,
       feeAmount,
       scholarshipPct,
+      photo,
     } = body;
 
     if (!fullName || !gender || !dateOfBirth || !fatherName || !parentPhone || !program) {
@@ -142,6 +144,7 @@ export async function POST(req: Request) {
           role: "STUDENT",
           isActive: true,
           instituteId,
+          image: photo || null,
         },
       });
 
@@ -161,6 +164,7 @@ export async function POST(req: Request) {
           userId: studentUser.id,
           teacherId: resolvedTeacherId ?? undefined,
           currentJuz: programType === ProgramType.HIFZ ? 1 : null,
+          photo: photo || null,
         },
       });
 
@@ -186,6 +190,21 @@ export async function POST(req: Request) {
       }
 
       return student;
+    });
+
+    await createAuditLog({
+      entityType: "STUDENT",
+      entityId: result.id,
+      entityLabel: result.fullName,
+      action: "CREATE",
+      details: {
+        summary: `Student ${result.studentId} enrolled`,
+        studentId: result.studentId,
+        hasPhoto: Boolean(photo),
+      },
+      performedById: session.user.id,
+      performerRole: session.user.role,
+      instituteId,
     });
 
     return NextResponse.json({ success: true, student: result });

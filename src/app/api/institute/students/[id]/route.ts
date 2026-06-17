@@ -2,6 +2,20 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Gender, ProgramType } from "@prisma/client";
+import { createAuditLog, diffFields } from "@/lib/audit";
+
+const TRACKED_FIELDS = [
+  "fullName",
+  "gender",
+  "dateOfBirth",
+  "address",
+  "city",
+  "programType",
+  "teacherId",
+  "currentJuz",
+  "isActive",
+  "photo",
+] as const;
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -25,9 +39,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       teacherId,
       currentJuz,
       isActive,
+      photo,
     } = body;
 
-    // Verify student belongs to this institute
     const student = await prisma.student.findFirst({
       where: { id, instituteId: session.user.instituteId },
     });
@@ -36,9 +50,21 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
+    const beforeSnapshot = {
+      fullName: student.fullName,
+      gender: student.gender,
+      dateOfBirth: student.dateOfBirth,
+      address: student.address,
+      city: student.city,
+      programType: student.programType,
+      teacherId: student.teacherId,
+      currentJuz: student.currentJuz,
+      isActive: student.isActive,
+      photo: student.photo,
+    };
+
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Update Student record
-      const studentData: any = {};
+      const studentData: Record<string, unknown> = {};
       if (fullName) studentData.fullName = fullName;
       if (gender) studentData.gender = gender as Gender;
       if (dateOfBirth) studentData.dateOfBirth = new Date(dateOfBirth);
@@ -47,6 +73,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if (teacherId !== undefined) studentData.teacherId = teacherId || null;
       if (currentJuz !== undefined) studentData.currentJuz = currentJuz ? parseInt(currentJuz) : null;
       if (typeof isActive === "boolean") studentData.isActive = isActive;
+      if (photo !== undefined) studentData.photo = photo || null;
 
       if (program) {
         let programType = ProgramType.HIFZ;
@@ -60,7 +87,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         data: studentData,
       });
 
-      // 2. Update Student's user record if name changed
       if (fullName && student.userId) {
         await tx.user.update({
           where: { id: student.userId },
@@ -68,13 +94,19 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         });
       }
 
-      // 3. Update Parent User record if parent details provided
+      if (photo && student.userId) {
+        await tx.user.update({
+          where: { id: student.userId },
+          data: { image: photo },
+        });
+      }
+
       if (student.parentId && (fatherName || parentEmail)) {
         const parent = await tx.parent.findUnique({
           where: { id: student.parentId },
         });
         if (parent) {
-          const parentUserData: any = {};
+          const parentUserData: Record<string, string> = {};
           if (fatherName) parentUserData.name = fatherName;
           if (parentEmail) parentUserData.email = parentEmail.toLowerCase();
           await tx.user.update({
@@ -87,10 +119,38 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return updatedStudent;
     });
 
+    const afterSnapshot = {
+      fullName: result.fullName,
+      gender: result.gender,
+      dateOfBirth: result.dateOfBirth,
+      address: result.address,
+      city: result.city,
+      programType: result.programType,
+      teacherId: result.teacherId,
+      currentJuz: result.currentJuz,
+      isActive: result.isActive,
+      photo: result.photo,
+    };
+
+    const changes = diffFields(beforeSnapshot, afterSnapshot, [...TRACKED_FIELDS]);
+    if (changes.length > 0) {
+      await createAuditLog({
+        entityType: "STUDENT",
+        entityId: result.id,
+        entityLabel: result.fullName,
+        action: "UPDATE",
+        details: { changes },
+        performedById: session.user.id,
+        performerRole: session.user.role,
+        instituteId: session.user.instituteId,
+      });
+    }
+
     return NextResponse.json({ success: true, student: result });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Update student error:", error);
-    return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -103,7 +163,6 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
 
     const { id } = params;
 
-    // Verify student belongs to this institute
     const student = await prisma.student.findFirst({
       where: { id, instituteId: session.user.instituteId },
     });
@@ -112,21 +171,34 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
-    // Delete Student's User Login record (cascading cleanup or manually delete)
+    await createAuditLog({
+      entityType: "STUDENT",
+      entityId: student.id,
+      entityLabel: student.fullName,
+      action: "DELETE",
+      details: {
+        summary: `Student ${student.studentId} removed`,
+        studentId: student.studentId,
+      },
+      performedById: session.user.id,
+      performerRole: session.user.role,
+      instituteId: session.user.instituteId,
+    });
+
     if (student.userId) {
       await prisma.user.delete({
         where: { id: student.userId },
       });
     } else {
-      // Just delete the student directly
       await prisma.student.delete({
         where: { id },
       });
     }
 
     return NextResponse.json({ success: true, message: "Student deleted successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Delete student error:", error);
-    return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -7,6 +7,7 @@ import {
   ChevronLeft, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { StudentPhotoUpload } from "@/components/common/student-photo-upload";
 
 // ── Types ────────────────────────────────────────────────────
 type FormData = {
@@ -16,6 +17,7 @@ type FormData = {
   dateOfBirth: string;
   nationality: string;
   address: string;
+  photo: string;
   // Step 2: Parent Info
   fatherName: string;
   motherName: string;
@@ -38,6 +40,7 @@ const INITIAL: FormData = {
   dateOfBirth: "",
   nationality: "Pakistani",
   address: "",
+  photo: "",
   fatherName: "",
   motherName: "",
   parentPhone: "",
@@ -157,6 +160,7 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                   teacherId: validTeacherId,
                   feeAmount: form.feeAmount,
                   scholarshipPct: form.scholarshipPct,
+                  photo: form.photo || null,
                 }
           ),
         }
@@ -289,6 +293,15 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
             </div>
 
             <div className="grid md:grid-cols-2 gap-5">
+              <div className="md:col-span-2">
+                <StudentPhotoUpload
+                  name={form.fullName || "Student"}
+                  gender={form.gender}
+                  value={form.photo || null}
+                  onChange={(photo) => set("photo", photo || "")}
+                />
+              </div>
+
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                   Full Name <span className="text-red-500">*</span>
