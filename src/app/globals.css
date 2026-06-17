@@ -1,0 +1,300 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Google Fonts ─── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+
+/* ─── CSS Custom Properties ─── */
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 0 0% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 123 61% 24%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 120 8% 92%;
+    --secondary-foreground: 0 0% 10%;
+    --muted: 120 8% 95%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 42 95% 56%;
+    --accent-foreground: 0 0% 10%;
+    --destructive: 0 75% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 120 8% 88%;
+    --input: 120 8% 90%;
+    --ring: 123 61% 24%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 123 30% 6%;
+    --foreground: 0 0% 95%;
+    --card: 123 25% 9%;
+    --card-foreground: 0 0% 95%;
+    --popover: 123 25% 9%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 123 50% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 123 20% 15%;
+    --secondary-foreground: 0 0% 90%;
+    --muted: 123 20% 14%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 42 95% 56%;
+    --accent-foreground: 0 0% 10%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 123 20% 18%;
+    --input: 123 20% 16%;
+    --ring: 123 50% 40%;
+  }
+}
+
+/* ─── Base Resets ─── */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary/30 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/50;
+  }
+}
+
+/* ─── Utility Classes ─── */
+@layer utilities {
+  /* Glass morphism */
+  .glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .glass-dark {
+    background: rgba(27, 94, 32, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(27, 94, 32, 0.15);
+  }
+
+  /* Gold gradient text */
+  .text-gradient-gold {
+    background: linear-gradient(135deg, #D4AF37, #F5D87F, #D4AF37);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Green gradient text */
+  .text-gradient-green {
+    background: linear-gradient(135deg, #1B5E20, #388E3C);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Islamic pattern overlay */
+  .pattern-overlay {
+    position: relative;
+  }
+  .pattern-overlay::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%231B5E20' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Animated gradient border */
+  .gradient-border {
+    position: relative;
+    background: linear-gradient(var(--background), var(--background)) padding-box,
+                linear-gradient(135deg, #1B5E20, #D4AF37, #1B5E20) border-box;
+    border: 2px solid transparent;
+  }
+
+  /* Shimmer loading effect */
+  .shimmer {
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* Quran progress cell */
+  .juz-cell {
+    @apply relative flex items-center justify-center rounded-lg transition-all duration-300 cursor-pointer;
+    aspect-ratio: 1;
+  }
+  .juz-cell-completed {
+    @apply bg-gradient-to-br from-primary-700 to-primary-900 text-white shadow-glow-green;
+  }
+  .juz-cell-partial {
+    @apply bg-gradient-to-br from-accent-600 to-accent-800 text-white;
+  }
+  .juz-cell-empty {
+    @apply bg-muted text-muted-foreground hover:bg-primary-50 hover:text-primary-700;
+  }
+
+  /* Stat card */
+  .stat-card {
+    @apply relative overflow-hidden rounded-2xl p-6 transition-all duration-300;
+  }
+  .stat-card:hover {
+    @apply -translate-y-1 shadow-card-hover;
+  }
+
+  /* Role badge */
+  .role-badge-super-admin    { @apply bg-purple-100 text-purple-800 border-purple-200; }
+  .role-badge-institute-owner { @apply bg-blue-100 text-blue-800 border-blue-200; }
+  .role-badge-branch-manager  { @apply bg-indigo-100 text-indigo-800 border-indigo-200; }
+  .role-badge-teacher         { @apply bg-emerald-100 text-emerald-800 border-emerald-200; }
+  .role-badge-parent          { @apply bg-amber-100 text-amber-800 border-amber-200; }
+  .role-badge-student         { @apply bg-sky-100 text-sky-800 border-sky-200; }
+
+  /* Arabic text */
+  .arabic {
+    font-family: 'Amiri', 'Scheherazade New', serif;
+    direction: rtl;
+    line-height: 2;
+  }
+
+  /* Hide scrollbar */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Animate delay utilities */
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+  .delay-500 { animation-delay: 500ms; }
+}
+
+/* ─── Component Classes ─── */
+@layer components {
+  /* Primary button */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5
+           bg-gradient-primary text-white font-medium text-sm
+           transition-all duration-200 shadow-md
+           hover:shadow-glow-green hover:-translate-y-0.5
+           active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Gold/accent button */
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5
+           bg-gradient-gold text-gray-900 font-semibold text-sm
+           transition-all duration-200 shadow-md
+           hover:shadow-glow-gold hover:-translate-y-0.5
+           active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Ghost button */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5
+           text-primary-800 font-medium text-sm border border-primary-200
+           transition-all duration-200
+           hover:bg-primary-50 hover:border-primary-400
+           active:bg-primary-100 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Dashboard card */
+  .dash-card {
+    @apply bg-card rounded-2xl border border-border shadow-sm
+           transition-all duration-300 hover:shadow-card-hover hover:-translate-y-0.5;
+  }
+
+  /* Input field */
+  .form-input {
+    @apply flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2
+           text-sm ring-offset-background placeholder:text-muted-foreground
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
+           disabled:cursor-not-allowed disabled:opacity-50
+           transition-all duration-200;
+  }
+
+  /* Section heading */
+  .section-heading {
+    @apply font-display text-2xl font-bold text-foreground;
+  }
+
+  /* Page header */
+  .page-header {
+    @apply mb-8 flex flex-col gap-1;
+  }
+
+  /* KPI Card */
+  .kpi-card {
+    @apply stat-card bg-card border border-border;
+  }
+
+  /* Navigation item */
+  .nav-item {
+    @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium
+           transition-all duration-200 cursor-pointer;
+  }
+  .nav-item-active {
+    @apply bg-primary text-white shadow-md;
+  }
+  .nav-item-inactive {
+    @apply text-muted-foreground hover:bg-primary-50 hover:text-primary-800;
+  }
+
+  /* Badge/pill */
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border;
+  }
+  .pill-success  { @apply bg-green-50  text-green-700  border-green-200; }
+  .pill-warning  { @apply bg-amber-50  text-amber-700  border-amber-200; }
+  .pill-danger   { @apply bg-red-50    text-red-700    border-red-200; }
+  .pill-info     { @apply bg-blue-50   text-blue-700   border-blue-200; }
+  .pill-gold     { @apply bg-yellow-50 text-yellow-700 border-yellow-200; }
+  .pill-primary  { @apply bg-primary-50 text-primary-800 border-primary-200; }
+
+  /* Table */
+  .data-table {
+    @apply w-full text-sm;
+  }
+  .data-table thead tr {
+    @apply border-b border-border bg-muted/50;
+  }
+  .data-table thead th {
+    @apply px-4 py-3 text-left font-semibold text-muted-foreground uppercase tracking-wide text-xs;
+  }
+  .data-table tbody tr {
+    @apply border-b border-border transition-colors hover:bg-muted/30;
+  }
+  .data-table tbody td {
+    @apply px-4 py-3;
+  }
+}
