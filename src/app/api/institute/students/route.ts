@@ -5,20 +5,26 @@ import bcrypt from "bcryptjs";
 import { Gender, ProgramType } from "@prisma/client";
 import { generateInvoiceNo } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
+import { resolveInitialProgress } from "@/lib/student-progress";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     const session = await getAuthSession();
-    if (!session || !session.user.instituteId) {
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const isSuperAdmin = session.user.role === "SUPER_ADMIN";
+    if (!session.user.instituteId && !isSuperAdmin) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const instituteId = session.user.instituteId;
 
     const students = await prisma.student.findMany({
-      where: { instituteId },
+      where: isSuperAdmin && !instituteId ? {} : { instituteId: instituteId! },
       include: {
         parent: {
           include: {
@@ -52,7 +58,10 @@ export async function GET() {
     since.setDate(since.getDate() - 30);
 
     const attendanceRows = await prisma.attendance.findMany({
-      where: { student: { instituteId }, date: { gte: since } },
+      where: {
+        ...(isSuperAdmin && !instituteId ? {} : { student: { instituteId: instituteId! } }),
+        date: { gte: since },
+      },
       select: { studentId: true, status: true },
     });
 
@@ -73,7 +82,7 @@ export async function GET() {
 
     const hifzRatings = await prisma.hifzRecord.groupBy({
       by: ["studentId"],
-      where: { student: { instituteId } },
+      where: isSuperAdmin && !instituteId ? {} : { student: { instituteId: instituteId! } },
       _avg: { rating: true },
     });
     const qualityScore: Record<string, number> = {};
@@ -118,6 +127,12 @@ export async function POST(req: Request) {
       feeAmount,
       scholarshipPct,
       photo,
+      progressStartType,
+      previousInstitute,
+      currentJuz,
+      currentPara,
+      currentSurah,
+      currentPage,
     } = body;
 
     if (!fullName || !gender || !dateOfBirth || !fatherName || !parentPhone || !program) {
@@ -142,6 +157,15 @@ export async function POST(req: Request) {
       });
       if (teacher) resolvedTeacherId = teacher.id;
     }
+
+    const progress = resolveInitialProgress(programType, {
+      progressStartType,
+      previousInstitute,
+      currentJuz,
+      currentPara,
+      currentSurah,
+      currentPage,
+    });
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Check or create parent account
@@ -202,8 +226,14 @@ export async function POST(req: Request) {
           parentId: parent.id,
           userId: studentUser.id,
           teacherId: resolvedTeacherId ?? undefined,
-          currentJuz: programType === ProgramType.HIFZ ? 1 : null,
           photo: photo || null,
+          progressStartType: progress.progressStartType,
+          previousInstitute: progress.previousInstitute,
+          currentJuz: progress.currentJuz,
+          currentPara: progress.currentPara,
+          currentSurah: progress.currentSurah,
+          currentPage: progress.currentPage,
+          emergencyPhone: parentPhone || null,
         },
       });
 
@@ -246,7 +276,20 @@ export async function POST(req: Request) {
       instituteId,
     });
 
-    return NextResponse.json({ success: true, student: result });
+    return NextResponse.json({
+      success: true,
+      student: result,
+      parentPortal: {
+        loginUrl: "/auth/login",
+        parentEmail: parentEmail ? parentEmail.toLowerCase() : `parent.${result.studentId}@qems.io`,
+        defaultPassword: "parent123",
+        note: "Share these credentials with the parent/guardian. If the email already existed, the existing password was kept.",
+      },
+      studentPortal: {
+        email: `student.${result.studentId}@qems.io`,
+        defaultPassword: "student123",
+      },
+    });
   } catch (error: any) {
     console.error("Create student error:", error);
     return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 });

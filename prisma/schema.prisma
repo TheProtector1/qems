@@ -23,6 +23,11 @@ enum Role {
   STUDENT
 }
 
+enum ProgressStartType {
+  NEW
+  CONTINUING
+}
+
 enum Gender {
   MALE
   FEMALE
@@ -432,6 +437,8 @@ model Student {
   emergencyContact String?
   emergencyPhone  String?
   previousEducation String?
+  progressStartType ProgressStartType @default(NEW)
+  previousInstitute String?
   admissionDate   DateTime        @db.Date
   admissionStatus AdmissionStatus @default(ENROLLED)
   programType     ProgramType

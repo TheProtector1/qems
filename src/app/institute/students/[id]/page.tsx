@@ -13,6 +13,8 @@ import { StudentProfileActions } from "@/components/institute/student-profile-ac
 import { StudentAvatar } from "@/components/common/student-avatar";
 import { StudentAuditPanel } from "@/components/institute/student-audit-panel";
 import { StudentAttendanceCalendar } from "@/components/institute/student-attendance-calendar";
+import { StudentReportsPanel } from "@/components/institute/student-reports-panel";
+import { progressSummaryLabel } from "@/lib/student-progress";
 
 export const metadata = { title: "Student Profile — QEMS" };
 
@@ -147,6 +149,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               {[
                 { label: "Program", value: program, icon: BookOpen },
+                { label: "Progress", value: progressSummaryLabel(student.programType, student), icon: BookOpen },
                 { label: "Class", value: `${program} Class`, icon: GraduationCap },
                 { label: "Section", value: "Section 1", icon: GraduationCap },
                 { label: "Teacher", value: teacherName, icon: User },
@@ -333,6 +336,12 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
         )}
 
         <StudentAttendanceCalendar studentId={student.id} />
+
+        <StudentReportsPanel
+          studentId={student.id}
+          studentName={student.fullName}
+          program={program}
+        />
       </div>
     </DashboardShell>
   );

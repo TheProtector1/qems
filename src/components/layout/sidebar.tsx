@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Users, GraduationCap, BookOpen, CalendarCheck,
   ClipboardList, DollarSign, MessageSquare, BarChart3, Settings,
   Building2, Shield, Bell, LogOut, ChevronRight, Star, Menu, X,
-  Award, UserCheck, GitBranch, HeartHandshake, CreditCard,
+  Award, UserCheck, GitBranch, HeartHandshake, CreditCard, FileText,
 } from "lucide-react";
 
 interface NavItem {
@@ -43,6 +43,7 @@ const instituteNav: NavItem[] = [
     ],
   },
   { label: "Attendance", href: "/institute/attendance", icon: CalendarCheck },
+  { label: "Student Reports", href: "/institute/reports", icon: FileText },
   { label: "Assessments", href: "/institute/assessments", icon: ClipboardList },
   {
     label: "Finance",
@@ -67,6 +68,7 @@ const superAdminNav: NavItem[] = [
   { label: "Institutes", href: "/admin/institutes", icon: Building2 },
   { label: "Users", href: "/admin/users", icon: Users },
   { label: "Students", href: "/admin/students", icon: GraduationCap },
+  { label: "Student Reports", href: "/admin/reports", icon: FileText },
   { label: "Subscriptions", href: "/admin/subscriptions", icon: CreditCard },
   { label: "Announcements", href: "/admin/announcements", icon: Bell },
   { label: "Support Tickets", href: "/admin/support", icon: Shield },
@@ -78,6 +80,7 @@ const teacherNav: NavItem[] = [
   { label: "My Students", href: "/teacher/students", icon: GraduationCap },
   { label: "My Classes", href: "/teacher/classes", icon: Building2 },
   { label: "Attendance Entry", href: "/teacher/attendance", icon: CalendarCheck },
+  { label: "Student Reports", href: "/teacher/reports", icon: FileText },
   { label: "Hifz Records", href: "/teacher/quran/hifz", icon: Star },
   { label: "Assessments", href: "/teacher/assessments", icon: ClipboardList },
   { label: "Communication", href: "/teacher/communication", icon: MessageSquare },

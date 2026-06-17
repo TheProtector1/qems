@@ -32,6 +32,12 @@ type FormData = {
   scholarshipPct: string;
   startDate: string;
   notes: string;
+  progressStartType: string;
+  previousInstitute: string;
+  currentJuz: string;
+  currentPara: string;
+  currentSurah: string;
+  currentPage: string;
 };
 
 const INITIAL: FormData = {
@@ -53,6 +59,12 @@ const INITIAL: FormData = {
   scholarshipPct: "0",
   startDate: new Date().toISOString().split("T")[0],
   notes: "",
+  progressStartType: "NEW",
+  previousInstitute: "",
+  currentJuz: "1",
+  currentPara: "",
+  currentSurah: "1",
+  currentPage: "1",
 };
 
 const STEPS = [
@@ -85,6 +97,12 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [generatedId, setGeneratedId] = useState("");
+  const [portalCredentials, setPortalCredentials] = useState<{
+    parentEmail: string;
+    parentPassword: string;
+    studentEmail?: string;
+    studentPassword?: string;
+  } | null>(null);
   const [teachers, setTeachers] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -161,6 +179,12 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                   feeAmount: form.feeAmount,
                   scholarshipPct: form.scholarshipPct,
                   photo: form.photo || null,
+                  progressStartType: form.progressStartType,
+                  previousInstitute: form.progressStartType === "CONTINUING" ? form.previousInstitute : undefined,
+                  currentJuz: form.program === "Hifz" ? form.currentJuz : undefined,
+                  currentPara: form.program === "Hifz" ? form.currentPara : undefined,
+                  currentSurah: form.program === "Nazra" ? form.currentSurah : undefined,
+                  currentPage: form.program === "Nazra" ? form.currentPage : undefined,
                 }
           ),
         }
@@ -177,6 +201,14 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
           ? data.application?.applicationNo || "APP-NEW"
           : data.student?.studentId || "STU-NEW"
       );
+      if (!isApplication && data.parentPortal) {
+        setPortalCredentials({
+          parentEmail: data.parentPortal.parentEmail,
+          parentPassword: data.parentPortal.defaultPassword,
+          studentEmail: data.studentPortal?.email,
+          studentPassword: data.studentPortal?.defaultPassword,
+        });
+      }
       setSubmitted(true);
     } catch (err: any) {
       setError(err.message);
@@ -207,9 +239,45 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
           {mode === "application" ? "submitted for review in the" : "admitted to the"}{" "}
           <strong>{form.program}</strong> program.
         </p>
-        <p className="text-sm font-mono text-primary-700 bg-primary-50 rounded-xl px-4 py-2 inline-block mb-8 border border-primary-100">
+        <p className="text-sm font-mono text-primary-700 bg-primary-50 rounded-xl px-4 py-2 inline-block mb-4 border border-primary-100">
           {mode === "application" ? "Application No" : "Student ID"}: {generatedId}
         </p>
+
+        {portalCredentials && (
+          <div className="text-left rounded-2xl bg-amber-50 border border-amber-200 p-5 mb-6 space-y-3">
+            <h3 className="font-semibold text-amber-900 text-sm">Parent Portal Login</h3>
+            <p className="text-xs text-amber-800">
+              Parents sign in at <strong>/auth/login</strong> using:
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-white rounded-lg p-2 border border-amber-100">
+                <p className="text-gray-500">Email</p>
+                <p className="font-mono font-semibold text-gray-900 break-all">{portalCredentials.parentEmail}</p>
+              </div>
+              <div className="bg-white rounded-lg p-2 border border-amber-100">
+                <p className="text-gray-500">Password</p>
+                <p className="font-mono font-semibold text-gray-900">{portalCredentials.parentPassword}</p>
+              </div>
+            </div>
+            {portalCredentials.studentEmail && (
+              <>
+                <h3 className="font-semibold text-amber-900 text-sm pt-2">Student Portal Login</h3>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white rounded-lg p-2 border border-amber-100">
+                    <p className="text-gray-500">Email</p>
+                    <p className="font-mono font-semibold text-gray-900 break-all">{portalCredentials.studentEmail}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-2 border border-amber-100">
+                    <p className="text-gray-500">Password</p>
+                    <p className="font-mono font-semibold text-gray-900">{portalCredentials.studentPassword}</p>
+                  </div>
+                </div>
+              </>
+            )}
+            <p className="text-[10px] text-amber-700">Ask parents to change their password after first login.</p>
+          </div>
+        )}
+
         <div className="flex gap-3 justify-center">
           <button
             onClick={() => router.push(mode === "application" ? "/institute/students/admissions" : "/institute/students")}
@@ -222,6 +290,7 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
               setForm(INITIAL);
               setStep(1);
               setSubmitted(false);
+              setPortalCredentials(null);
             }}
             className="btn-primary text-sm py-2.5"
           >
@@ -577,6 +646,73 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                   {" "}PKR {netFee.toLocaleString()}
                 </div>
               )}
+
+              {/* Progress start */}
+              <div className="md:col-span-2 border-t border-gray-100 pt-5 mt-2">
+                <label className="block text-xs font-semibold text-gray-700 mb-2">
+                  Quran Progress at Admission
+                </label>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {[
+                    { value: "NEW", label: "Starting Fresh", desc: "Begin from the start of the program" },
+                    { value: "CONTINUING", label: "Continuing Elsewhere", desc: "Transfer with existing progress" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => set("progressStartType", opt.value)}
+                      className={cn(
+                        "py-3 px-4 rounded-xl border-2 text-left transition-all",
+                        form.progressStartType === opt.value
+                          ? "border-primary-600 bg-primary-50 text-primary-800"
+                          : "border-gray-200 text-gray-500 hover:border-gray-300"
+                      )}
+                    >
+                      <span className="text-sm font-semibold block">{opt.label}</span>
+                      <span className="text-[10px] opacity-70">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {form.progressStartType === "CONTINUING" && (
+                  <div className="grid md:grid-cols-2 gap-4 p-4 rounded-xl bg-blue-50 border border-blue-100">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">Previous Institute / Madrasa</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Jamia Ashrafia, local mosque hifz class..."
+                        value={form.previousInstitute}
+                        onChange={(e) => set("previousInstitute", e.target.value)}
+                        className="form-input"
+                      />
+                    </div>
+                    {form.program === "Hifz" && (
+                      <>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1.5">Current Juz (1–30)</label>
+                          <input type="number" min={1} max={30} value={form.currentJuz} onChange={(e) => set("currentJuz", e.target.value)} className="form-input" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1.5">Current Para (optional)</label>
+                          <input type="number" min={1} max={30} value={form.currentPara} onChange={(e) => set("currentPara", e.target.value)} className="form-input" />
+                        </div>
+                      </>
+                    )}
+                    {form.program === "Nazra" && (
+                      <>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1.5">Current Surah (1–114)</label>
+                          <input type="number" min={1} max={114} value={form.currentSurah} onChange={(e) => set("currentSurah", e.target.value)} className="form-input" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1.5">Current Mushaf Page</label>
+                          <input type="number" min={1} max={604} value={form.currentPage} onChange={(e) => set("currentPage", e.target.value)} className="form-input" />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">
