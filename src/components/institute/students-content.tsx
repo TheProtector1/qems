@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+<<<<<<< HEAD
 import { useSearchParams } from "next/navigation";
+=======
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
 import {
   Search, Plus, Download, Eye, Edit, Trash2,
   GraduationCap, BookOpen, CalendarCheck, Star,
@@ -409,18 +412,25 @@ interface StudentsContentProps {
 }
 
 export function StudentsContent({ backHref, addHref = "/institute/students/new", role = "institute" }: StudentsContentProps) {
+<<<<<<< HEAD
   const searchParams = useSearchParams();
+=======
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
+<<<<<<< HEAD
   const [programFilter, setProgramFilter] = useState(
     searchParams.get("program") && ALL_PROGRAMS.includes(searchParams.get("program")!)
       ? searchParams.get("program")!
       : "All Programs"
   );
+=======
+  const [programFilter, setProgramFilter] = useState("All Programs");
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
   const [classFilter, setClassFilter] = useState("All Classes");
   const [sectionFilter, setSectionFilter] = useState("All Sections");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -510,6 +520,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
     fetchStudentsAndTeachers();
   }, []);
 
+<<<<<<< HEAD
   useEffect(() => {
     const editId = searchParams.get("edit");
     if (!editId || students.length === 0) return;
@@ -517,6 +528,8 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
     if (match) setEditingStudent(match);
   }, [searchParams, students]);
 
+=======
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
   const perPage = viewMode === "grid" ? 9 : 8;
 
   const filtered = students.filter((s) => {

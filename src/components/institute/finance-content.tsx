@@ -5,7 +5,11 @@ import {
   DollarSign, CheckCircle2, Clock, AlertCircle, TrendingUp,
   Download, Plus, Search, CreditCard, Filter,
 } from "lucide-react";
+<<<<<<< HEAD
 import { cn, formatCurrency, getInitials, downloadCsv } from "@/lib/utils";
+=======
+import { cn, formatCurrency, getInitials } from "@/lib/utils";
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -39,10 +43,15 @@ const statusConfig: Record<string, { label: string; pill: string; icon: React.El
 export function FinanceContent() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+<<<<<<< HEAD
   const [fees, setFees] = useState(FEES);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
 
   const filtered = fees.filter((f) => {
+=======
+
+  const filtered = FEES.filter((f) => {
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
     const matchSearch =
       f.student.toLowerCase().includes(search.toLowerCase()) ||
       f.studentId.toLowerCase().includes(search.toLowerCase());
@@ -50,6 +59,7 @@ export function FinanceContent() {
     return matchSearch && matchStatus;
   });
 
+<<<<<<< HEAD
   const totalCollected = fees.filter((f) => f.status === "PAID").reduce((s, f) => s + f.amount, 0);
   const totalOutstanding = fees.filter((f) => f.status !== "PAID").reduce((s, f) => s + f.amount, 0);
   const collectionRate = Math.round((fees.filter((f) => f.status === "PAID").length / fees.length) * 100);
@@ -78,6 +88,11 @@ export function FinanceContent() {
       document.getElementById("input-search-fees")?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   };
+=======
+  const totalCollected = FEES.filter((f) => f.status === "PAID").reduce((s, f) => s + f.amount, 0);
+  const totalOutstanding = FEES.filter((f) => f.status !== "PAID").reduce((s, f) => s + f.amount, 0);
+  const collectionRate = Math.round((FEES.filter((f) => f.status === "PAID").length / FEES.length) * 100);
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
 
   return (
     <div className="space-y-6">
@@ -85,6 +100,7 @@ export function FinanceContent() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="section-heading">Fee Management</h2>
+<<<<<<< HEAD
           <p className="text-sm text-gray-500 mt-0.5">June 2025 — {fees.length} students</p>
         </div>
         <div className="flex gap-3">
@@ -93,6 +109,16 @@ export function FinanceContent() {
             Export
           </button>
           <button className="btn-primary text-sm py-2" id="btn-record-payment" onClick={handleRecordPayment}>
+=======
+          <p className="text-sm text-gray-500 mt-0.5">June 2025 — {FEES.length} students</p>
+        </div>
+        <div className="flex gap-3">
+          <button className="btn-ghost text-sm py-2">
+            <Download className="h-4 w-4" />
+            Export
+          </button>
+          <button className="btn-primary text-sm py-2" id="btn-record-payment">
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
             <Plus className="h-4 w-4" />
             Record Payment
           </button>
@@ -218,7 +244,10 @@ export function FinanceContent() {
                         <button
                           className="btn-ghost text-xs py-1.5 px-3"
                           id={`btn-collect-${f.id}`}
+<<<<<<< HEAD
                           onClick={() => handleCollect(f.id)}
+=======
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
                         >
                           Collect
                         </button>

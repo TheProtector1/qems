@@ -117,9 +117,15 @@ const recentStudents = [
 ];
 
 const alerts = [
+<<<<<<< HEAD
   { type: "warning", msg: "8 students missed 3+ consecutive days", action: "View Students", href: "/institute/attendance" },
   { type: "danger", msg: "PKR 120,000 in overdue fees", action: "View Dues", href: "/institute/finance/fees" },
   { type: "info", msg: "Quarterly assessment due in 5 days", action: "Schedule Now", href: "/institute/assessments/new" },
+=======
+  { type: "warning", msg: "8 students missed 3+ consecutive days", action: "View Students" },
+  { type: "danger", msg: "PKR 120,000 in overdue fees", action: "View Dues" },
+  { type: "info", msg: "Quarterly assessment due in 5 days", action: "Schedule Now" },
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
 ];
 
 const COLORS = ["#1B5E20", "#D4AF37", "#388E3C"];
@@ -164,12 +170,18 @@ export function InstituteDashboardContent() {
             >
               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
               <span className="flex-1">{a.msg}</span>
+<<<<<<< HEAD
               <Link
                 href={a.href}
                 className="font-semibold text-xs underline underline-offset-2"
               >
                 {a.action}
               </Link>
+=======
+              <button className="font-semibold text-xs underline underline-offset-2">
+                {a.action}
+              </button>
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
             </div>
           ))}
         </div>

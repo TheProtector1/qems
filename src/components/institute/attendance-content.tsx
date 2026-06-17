@@ -5,7 +5,11 @@ import {
   CalendarCheck, Save, CheckCircle2, X, Clock,
   AlertTriangle, Users, TrendingUp, Download,
 } from "lucide-react";
+<<<<<<< HEAD
 import { cn, formatDate, getInitials, downloadCsv } from "@/lib/utils";
+=======
+import { cn, formatDate, getInitials } from "@/lib/utils";
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
 
 type AttStatus = "PRESENT" | "ABSENT" | "LATE" | "LEAVE" | null;
 
@@ -63,6 +67,15 @@ export function AttendanceContent() {
     marked: Object.values(attendance).filter(Boolean).length,
   };
 
+<<<<<<< HEAD
+=======
+  const handleSave = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  // Mock history
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
   const history = STUDENTS.map((s) => ({
     ...s,
     dates: PAST_DATES.map(() =>
@@ -70,6 +83,7 @@ export function AttendanceContent() {
     ),
   }));
 
+<<<<<<< HEAD
   const handleSave = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -81,6 +95,8 @@ export function AttendanceContent() {
     downloadCsv(`attendance-${selectedClass}-${today}.csv`, headers, rows);
   };
 
+=======
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
@@ -92,7 +108,11 @@ export function AttendanceContent() {
           </p>
         </div>
         <div className="flex gap-3">
+<<<<<<< HEAD
           <button className="btn-ghost text-sm py-2" onClick={handleExport}>
+=======
+          <button className="btn-ghost text-sm py-2">
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
             <Download className="h-4 w-4" />
             Export
           </button>

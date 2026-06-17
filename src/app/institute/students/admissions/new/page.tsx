@@ -18,7 +18,11 @@ export default async function NewAdmissionPage() {
         { label: "New" },
       ]}
     >
+<<<<<<< HEAD
       <AdmissionForm mode="application" />
+=======
+      <AdmissionForm />
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
     </DashboardShell>
   );
 }

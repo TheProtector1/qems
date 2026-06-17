@@ -68,9 +68,16 @@ export async function POST(req: Request) {
         parentPhone,
         parentEmail: parentEmail || null,
         address: address || null,
+<<<<<<< HEAD
         programType: programType,
         status: AdmissionStatus.APPLIED,
         interviewNotes: notes || null,
+=======
+        city: city || "Islamabad",
+        program: programType,
+        stage: AdmissionStatus.APPLIED,
+        notes: notes || null,
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
         instituteId: session.user.instituteId,
       },
     });

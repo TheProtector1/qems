@@ -140,6 +140,7 @@ export function slugify(str: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
+<<<<<<< HEAD
 
 export function downloadCsv(filename: string, headers: string[], rows: (string | number | null | undefined)[][]) {
   const escape = (value: string | number | null | undefined) => {
@@ -156,3 +157,5 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
   link.click();
   URL.revokeObjectURL(url);
 }
+=======
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac

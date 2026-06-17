@@ -1,7 +1,10 @@
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
+<<<<<<< HEAD
 import Link from "next/link";
+=======
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
 import { Building2, Users, Clock, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -49,8 +52,13 @@ export default async function ClassesPage() {
                 <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5 text-gray-400" /> {c.time} • {c.room}</div>
               </div>
               <div className="mt-5 pt-4 border-t border-gray-100 flex gap-2">
+<<<<<<< HEAD
                 <Link href="/institute/settings" className="btn-ghost flex-1 text-xs py-1.5 text-center">Edit</Link>
                 <Link href={`/institute/students?program=${c.program}`} className="btn-primary flex-1 text-xs py-1.5 text-center">View Students</Link>
+=======
+                <button className="btn-ghost flex-1 text-xs py-1.5">Edit</button>
+                <button className="btn-primary flex-1 text-xs py-1.5">View Students</button>
+>>>>>>> 69c1b278484f624f04044e45de8438706888ccac
               </div>
             </div>
           ))}
