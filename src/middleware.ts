@@ -55,7 +55,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  if (pathname === "/auth/change-password") {
+    return NextResponse.next();
+  }
+
   const role = token.role as string;
+
+  // Force password change before accessing protected routes
+  if (
+    token.mustChangePassword &&
+    pathname !== "/auth/change-password" &&
+    !pathname.startsWith("/api/auth/change-password")
+  ) {
+    return NextResponse.redirect(new URL("/auth/change-password", request.url));
+  }
 
   // Guard admin routes
   if (pathname.startsWith("/admin") && role !== "SUPER_ADMIN") {

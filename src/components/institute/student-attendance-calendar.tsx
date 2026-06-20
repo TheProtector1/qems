@@ -34,7 +34,13 @@ function buildCalendarDays(year: number, month: number) {
   return days;
 }
 
-export function StudentAttendanceCalendar({ studentId }: { studentId: string }) {
+export function StudentAttendanceCalendar({
+  studentId,
+  apiScope = "institute",
+}: {
+  studentId: string;
+  apiScope?: "institute" | "parent";
+}) {
   const today = new Date().toISOString().slice(0, 10);
   const [month, setMonth] = useState(() => new Date().getMonth() + 1);
   const [year, setYear] = useState(() => new Date().getFullYear());
@@ -49,7 +55,7 @@ export function StudentAttendanceCalendar({ studentId }: { studentId: string }) 
         month: String(month),
         year: String(year),
       });
-      const res = await fetch(`/api/institute/attendance?${params}`);
+      const res = await fetch(`/api/${apiScope}/attendance?${params}`);
       if (!res.ok) return;
       const data = await res.json();
       const map: Record<string, AttStatus> = {};
@@ -58,7 +64,7 @@ export function StudentAttendanceCalendar({ studentId }: { studentId: string }) 
     } finally {
       setLoading(false);
     }
-  }, [studentId, month, year]);
+  }, [studentId, month, year, apiScope]);
 
   useEffect(() => { load(); }, [load]);
 

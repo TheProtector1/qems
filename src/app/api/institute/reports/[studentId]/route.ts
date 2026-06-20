@@ -97,6 +97,25 @@ export async function GET(
       ? hifzRows.reduce((sum, r) => sum + r.rating, 0) / hifzRows.length
       : 0;
 
+    const nazraRows = await prisma.nazraRecord.findMany({
+      where: { studentId, date: { gte: from, lte: to } },
+      orderBy: { date: "desc" },
+    });
+
+    const avgReading = nazraRows.length
+      ? nazraRows.reduce((sum, r) => sum + Number(r.readingAccuracy), 0) / nazraRows.length
+      : 0;
+
+    const tajweedRows = await prisma.tajweedRecord.findMany({
+      where: { studentId },
+      include: { rule: true },
+      orderBy: { updatedAt: "desc" },
+      take: 30,
+    });
+
+    const totalTajweedRules = await prisma.tajweedRule.count();
+    const masteredCount = tajweedRows.filter((r) => r.isMastered).length;
+
     const reportData = {
       instituteName: student.institute.name,
       student: {
@@ -138,6 +157,27 @@ export async function GET(
           errors: r.errorCount,
         })),
         avgRating,
+      },
+      nazra: {
+        rows: nazraRows.map((r) => ({
+          date: r.date.toISOString().slice(0, 10),
+          surah: r.surahName || getSurahName(r.surahNumber),
+          pages: `${r.pageFrom}–${r.pageTo}`,
+          readingAccuracy: Number(r.readingAccuracy),
+          tajweedAccuracy: Number(r.tajweedAccuracy),
+          fluency: r.fluency,
+        })),
+        avgReading,
+      },
+      tajweed: {
+        rows: tajweedRows.map((r) => ({
+          rule: r.rule.ruleName,
+          category: r.rule.category,
+          mastered: r.isMastered ? "Yes" : "In progress",
+          score: r.practiceScore != null ? String(r.practiceScore) : "—",
+        })),
+        masteredCount,
+        totalRules: totalTajweedRules,
       },
       generatedBy: session.user.name || session.user.email || "Staff",
       generatedAt: new Date(),

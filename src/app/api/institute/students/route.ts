@@ -6,6 +6,7 @@ import { Gender, ProgramType } from "@prisma/client";
 import { generateInvoiceNo } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
 import { resolveInitialProgress } from "@/lib/student-progress";
+import { sendParentWelcomeEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -171,9 +172,11 @@ export async function POST(req: Request) {
       // 1. Check or create parent account
       const pEmail = parentEmail ? parentEmail.toLowerCase() : `parent.${studentId}@qems.io`;
       let parentUser = await tx.user.findUnique({ where: { email: pEmail } });
+      let parentCreatedFresh = false;
 
       if (!parentUser) {
         const defaultPassword = await bcrypt.hash("parent123", 12);
+        parentCreatedFresh = true;
         parentUser = await tx.user.create({
           data: {
             name: fatherName,
@@ -181,6 +184,7 @@ export async function POST(req: Request) {
             password: defaultPassword,
             role: "PARENT",
             isActive: true,
+            mustChangePassword: true,
             instituteId,
           },
         });
@@ -206,6 +210,7 @@ export async function POST(req: Request) {
           password: defaultStudentPassword,
           role: "STUDENT",
           isActive: true,
+          mustChangePassword: true,
           instituteId,
           image: photo || null,
         },
@@ -258,17 +263,17 @@ export async function POST(req: Request) {
         });
       }
 
-      return student;
+      return { student, pEmail, parentCreatedFresh };
     });
 
     await createAuditLog({
       entityType: "STUDENT",
-      entityId: result.id,
-      entityLabel: result.fullName,
+      entityId: result.student.id,
+      entityLabel: result.student.fullName,
       action: "CREATE",
       details: {
-        summary: `Student ${result.studentId} enrolled`,
-        studentId: result.studentId,
+        summary: `Student ${result.student.studentId} enrolled`,
+        studentId: result.student.studentId,
         hasPhoto: Boolean(photo),
       },
       performedById: session.user.id,
@@ -276,17 +281,35 @@ export async function POST(req: Request) {
       instituteId,
     });
 
+    if (result.parentCreatedFresh) {
+      const institute = await prisma.institute.findUnique({
+        where: { id: instituteId },
+        select: { name: true },
+      });
+      const loginUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/auth/login`;
+      await sendParentWelcomeEmail({
+        to: result.pEmail,
+        parentName: fatherName,
+        studentName: fullName,
+        studentId: result.student.studentId,
+        instituteName: institute?.name || "Your Institute",
+        loginUrl,
+        email: result.pEmail,
+        temporaryPassword: "parent123",
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      student: result,
+      student: result.student,
       parentPortal: {
         loginUrl: "/auth/login",
-        parentEmail: parentEmail ? parentEmail.toLowerCase() : `parent.${result.studentId}@qems.io`,
+        parentEmail: result.pEmail,
         defaultPassword: "parent123",
         note: "Share these credentials with the parent/guardian. If the email already existed, the existing password was kept.",
       },
       studentPortal: {
-        email: `student.${result.studentId}@qems.io`,
+        email: `student.${result.student.studentId}@qems.io`,
         defaultPassword: "student123",
       },
     });

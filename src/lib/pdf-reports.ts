@@ -42,6 +42,27 @@ export type StudentReportData = {
     }>;
     avgRating: number;
   };
+  nazra: {
+    rows: Array<{
+      date: string;
+      surah: string;
+      pages: string;
+      readingAccuracy: number;
+      tajweedAccuracy: number;
+      fluency: number;
+    }>;
+    avgReading: number;
+  };
+  tajweed: {
+    rows: Array<{
+      rule: string;
+      category: string;
+      mastered: string;
+      score: string;
+    }>;
+    masteredCount: number;
+    totalRules: number;
+  };
   generatedBy: string;
   generatedAt: Date;
 };
@@ -110,7 +131,7 @@ function addAttendanceSection(doc: jsPDF, data: StudentReportData, startY: numbe
 function addHifzSection(doc: jsPDF, data: StudentReportData, startY: number) {
   doc.setFontSize(12);
   doc.setTextColor(22, 101, 52);
-  doc.text("Hifz / Quran Learning Activity", 14, startY);
+  doc.text("Hifz / Quran Memorization", 14, startY);
   doc.setFontSize(9);
   doc.setTextColor(60, 60, 60);
   doc.text(`Average lesson rating: ${data.hifz.avgRating ? data.hifz.avgRating.toFixed(1) : "—"} / 5`, 14, startY + 6);
@@ -126,6 +147,80 @@ function addHifzSection(doc: jsPDF, data: StudentReportData, startY: number) {
     styles: { fontSize: 8 },
     margin: { left: 14, right: 14 },
   });
+}
+
+function addNazraSection(doc: jsPDF, data: StudentReportData, startY: number) {
+  doc.setFontSize(12);
+  doc.setTextColor(22, 101, 52);
+  doc.text("Nazra Reading Progress", 14, startY);
+  doc.setFontSize(9);
+  doc.setTextColor(60, 60, 60);
+  doc.text(
+    `Average reading accuracy: ${data.nazra.avgReading ? data.nazra.avgReading.toFixed(1) : "—"}%`,
+    14,
+    startY + 6
+  );
+
+  autoTable(doc, {
+    startY: startY + 10,
+    head: [["Date", "Surah", "Pages", "Reading %", "Tajweed %", "Fluency"]],
+    body: data.nazra.rows.length
+      ? data.nazra.rows.map((r) => [
+          formatDate(r.date),
+          r.surah,
+          r.pages,
+          `${r.readingAccuracy.toFixed(1)}%`,
+          `${r.tajweedAccuracy.toFixed(1)}%`,
+          String(r.fluency),
+        ])
+      : [["—", "No nazra records in this period", "—", "—", "—", "—"]],
+    theme: "striped",
+    headStyles: { fillColor: [22, 101, 52] },
+    styles: { fontSize: 8 },
+    margin: { left: 14, right: 14 },
+  });
+}
+
+function addTajweedSection(doc: jsPDF, data: StudentReportData, startY: number) {
+  doc.setFontSize(12);
+  doc.setTextColor(22, 101, 52);
+  doc.text("Tajweed Mastery", 14, startY);
+  doc.setFontSize(9);
+  doc.setTextColor(60, 60, 60);
+  doc.text(
+    `Mastered rules: ${data.tajweed.masteredCount} / ${data.tajweed.totalRules || "—"}`,
+    14,
+    startY + 6
+  );
+
+  autoTable(doc, {
+    startY: startY + 10,
+    head: [["Rule", "Category", "Mastered", "Practice Score"]],
+    body: data.tajweed.rows.length
+      ? data.tajweed.rows.map((r) => [r.rule, r.category, r.mastered, r.score])
+      : [["—", "No tajweed records yet", "—", "—"]],
+    theme: "striped",
+    headStyles: { fillColor: [22, 101, 52] },
+    styles: { fontSize: 8 },
+    margin: { left: 14, right: 14 },
+  });
+}
+
+function addProgramActivitySection(doc: jsPDF, data: StudentReportData, startY: number) {
+  if (data.student.programType === ProgramType.HIFZ) {
+    addHifzSection(doc, data, startY);
+    return;
+  }
+  if (data.student.programType === ProgramType.NAZRA) {
+    addNazraSection(doc, data, startY);
+    return;
+  }
+  if (data.student.programType === ProgramType.TAJWEED) {
+    addTajweedSection(doc, data, startY);
+    return;
+  }
+  doc.setFontSize(10);
+  doc.text("No program activity section available.", 14, startY);
 }
 
 function addFooter(doc: jsPDF, data: StudentReportData) {
@@ -174,12 +269,7 @@ export function buildStudentReportPdf(type: ReportType, data: StudentReportData)
       addStudentInfo(doc, data, y);
       y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 12;
     }
-    if (data.student.programType === ProgramType.HIFZ) {
-      addHifzSection(doc, data, y);
-    } else {
-      doc.setFontSize(10);
-      doc.text("Hifz records apply to Hifz program students only.", 14, y);
-    }
+    addProgramActivitySection(doc, data, y);
   }
 
   addFooter(doc, data);

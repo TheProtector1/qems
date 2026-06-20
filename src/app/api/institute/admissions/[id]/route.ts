@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { AdmissionStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { createAuditLog } from "@/lib/audit";
+import { sendParentWelcomeEmail } from "@/lib/email";
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -33,7 +34,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         },
       });
 
-      let createdStudent: { id: string; fullName: string; studentId: string } | null = null;
+      let createdStudent: {
+        id: string;
+        fullName: string;
+        studentId: string;
+        parentEmail: string;
+        parentName: string;
+        parentCreatedFresh: boolean;
+      } | null = null;
 
       if ((stage === "ENROLLED" || stage === "APPROVED") && !application.studentId) {
         // Generate studentId
@@ -45,9 +53,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         // Create parent user account
         const pEmail = application.parentEmail ? application.parentEmail.toLowerCase() : `parent.${studentId}@qems.io`;
         let parentUser = await tx.user.findUnique({ where: { email: pEmail } });
+        let parentCreatedFresh = false;
 
         if (!parentUser) {
           const defaultPassword = await bcrypt.hash("parent123", 12);
+          parentCreatedFresh = true;
           parentUser = await tx.user.create({
             data: {
               name: application.parentName,
@@ -55,6 +65,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
               password: defaultPassword,
               role: "PARENT",
               isActive: true,
+              mustChangePassword: true,
               instituteId: session.user.instituteId,
             },
           });
@@ -80,6 +91,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
             password: defaultStudentPassword,
             role: "STUDENT",
             isActive: true,
+            mustChangePassword: true,
             instituteId: session.user.instituteId,
           },
         });
@@ -112,6 +124,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
           id: student.id,
           fullName: student.fullName,
           studentId: student.studentId,
+          parentEmail: pEmail,
+          parentName: application.parentName,
+          parentCreatedFresh,
         };
       }
 
@@ -132,6 +147,24 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         performerRole: session.user.role,
         instituteId: session.user.instituteId,
       });
+
+      if (result.createdStudent.parentCreatedFresh) {
+        const institute = await prisma.institute.findUnique({
+          where: { id: session.user.instituteId },
+          select: { name: true },
+        });
+        const loginUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/auth/login`;
+        await sendParentWelcomeEmail({
+          to: result.createdStudent.parentEmail,
+          parentName: result.createdStudent.parentName,
+          studentName: result.createdStudent.fullName,
+          studentId: result.createdStudent.studentId,
+          instituteName: institute?.name || "Your Institute",
+          loginUrl,
+          email: result.createdStudent.parentEmail,
+          temporaryPassword: "parent123",
+        });
+      }
     }
 
     return NextResponse.json({ success: true, application: result.updated });

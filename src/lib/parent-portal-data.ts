@@ -1,0 +1,171 @@
+import { prisma } from "@/lib/prisma";
+import { ProgramType } from "@prisma/client";
+
+export type ParentChildView = {
+  id: string;
+  studentId: string;
+  fullName: string;
+  programType: string;
+  className: string;
+  teacherName: string;
+  currentJuz: number;
+  qualityScore: number;
+  attendancePct: number;
+  status: string;
+  targetDate: string;
+  recentLessons: Array<{
+    date: string;
+    type: "SABAQ" | "SABQI" | "MANZIL";
+    surahNumber: number;
+    ayahFrom: number;
+    ayahTo: number;
+    rating: number;
+    teacherNote?: string | null;
+  }>;
+  achievements: Array<{ icon: string; name: string; date: string; color: string }>;
+  radarMetrics: Array<{ subject: string; score: number }>;
+};
+
+function buildRadarMetrics(attendancePct: number, qualityScore: number, lessonCount: number) {
+  const q = qualityScore > 0 ? Math.min(100, Math.round(qualityScore * 10)) : 0;
+  const consistency = lessonCount >= 20 ? 95 : lessonCount >= 10 ? 85 : lessonCount >= 5 ? 70 : lessonCount > 0 ? 55 : 0;
+  return [
+    { subject: "Accuracy", score: q || attendancePct },
+    { subject: "Fluency", score: q },
+    { subject: "Retention", score: q ? Math.min(100, q + 5) : 0 },
+    { subject: "Attendance", score: attendancePct },
+    { subject: "Consistency", score: consistency },
+  ];
+}
+
+function buildAchievements(currentJuz: number | null, programType: ProgramType) {
+  const achievements: ParentChildView["achievements"] = [];
+  if (programType === ProgramType.HIFZ && currentJuz && currentJuz >= 1) {
+    achievements.push({
+      icon: "📖",
+      name: `Working on Juz ${currentJuz}`,
+      date: new Date().toLocaleDateString("en-PK", { month: "short", year: "numeric" }),
+      color: "from-green-400 to-emerald-600",
+    });
+    if (currentJuz >= 5) {
+      achievements.push({
+        icon: "🏆",
+        name: `${currentJuz} Juz Progress`,
+        date: new Date().toLocaleDateString("en-PK", { month: "short", year: "numeric" }),
+        color: "from-yellow-400 to-amber-600",
+      });
+    }
+  }
+  return achievements;
+}
+
+export async function getParentChildrenViewData(userId: string): Promise<ParentChildView[]> {
+  const dbParent = await prisma.parent.findUnique({
+    where: { userId },
+    include: {
+      students: {
+        include: {
+          enrollments: {
+            where: { isActive: true },
+            include: { class: true },
+          },
+          teacher: { include: { user: true } },
+          hifzRecords: {
+            orderBy: { date: "desc" },
+            take: 10,
+          },
+        },
+      },
+    },
+  });
+
+  if (!dbParent?.students.length) return [];
+
+  const studentIds = dbParent.students.map((s) => s.id);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const [attendanceGroups, qualityGroups] = await Promise.all([
+    prisma.attendance.groupBy({
+      by: ["studentId", "status"],
+      where: { studentId: { in: studentIds }, date: { gte: thirtyDaysAgo } },
+      _count: true,
+    }),
+    prisma.hifzRecord.groupBy({
+      by: ["studentId"],
+      where: { studentId: { in: studentIds } },
+      _avg: { rating: true },
+      _count: true,
+    }),
+  ]);
+
+  const attendancePct: Record<string, number> = {};
+  const attendanceTotals: Record<string, { present: number; total: number }> = {};
+  for (const row of attendanceGroups) {
+    if (!attendanceTotals[row.studentId]) attendanceTotals[row.studentId] = { present: 0, total: 0 };
+    attendanceTotals[row.studentId].total += row._count;
+    if (row.status === "PRESENT" || row.status === "LATE") {
+      attendanceTotals[row.studentId].present += row._count;
+    }
+  }
+  for (const sid of studentIds) {
+    const stats = attendanceTotals[sid];
+    attendancePct[sid] = stats?.total ? Math.round((stats.present / stats.total) * 100) : 0;
+  }
+
+  const qualityScore: Record<string, number> = {};
+  const lessonCounts: Record<string, number> = {};
+  for (const row of qualityGroups) {
+    if (row._avg.rating) qualityScore[row.studentId] = Number((row._avg.rating * 2).toFixed(1));
+    lessonCounts[row.studentId] = row._count;
+  }
+
+  return dbParent.students.map((student) => {
+    const activeClass = student.enrollments?.[0]?.class?.name || "Unassigned Class";
+    const pct = attendancePct[student.id] ?? 0;
+    const quality = qualityScore[student.id] ?? 0;
+
+    const recentLessons = student.hifzRecords.map((rec) => ({
+      date: new Date(rec.date).toLocaleDateString("en-PK", { day: "numeric", month: "short" }),
+      type: rec.type as "SABAQ" | "SABQI" | "MANZIL",
+      surahNumber: rec.surahNumber,
+      ayahFrom: rec.ayahFrom,
+      ayahTo: rec.ayahTo,
+      rating: rec.rating,
+      teacherNote: rec.teacherNote,
+    }));
+
+    return {
+      id: student.id,
+      studentId: student.studentId,
+      fullName: student.fullName,
+      programType: student.programType,
+      className: activeClass,
+      teacherName: student.teacher?.user.name || "Unassigned Instructor",
+      currentJuz: student.currentJuz || 1,
+      qualityScore: quality,
+      attendancePct: pct,
+      status: pct >= 90 ? "On Track" : pct >= 75 ? "Needs Attention" : "At Risk",
+      targetDate: "—",
+      recentLessons,
+      achievements: buildAchievements(student.currentJuz, student.programType),
+      radarMetrics: buildRadarMetrics(pct, quality, lessonCounts[student.id] ?? 0),
+    };
+  });
+}
+
+export async function getParentChildIds(userId: string): Promise<Array<{ id: string; fullName: string; studentId: string }>> {
+  const parent = await prisma.parent.findUnique({
+    where: { userId },
+    include: { students: { select: { id: true, fullName: true, studentId: true } } },
+  });
+  return parent?.students ?? [];
+}
+
+export async function assertParentOwnsStudent(userId: string, studentId: string) {
+  const parent = await prisma.parent.findUnique({
+    where: { userId },
+    include: { students: { where: { id: studentId }, select: { id: true } } },
+  });
+  return Boolean(parent?.students.length);
+}

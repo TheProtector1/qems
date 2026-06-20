@@ -64,18 +64,23 @@ export const authOptions: NextAuthOptions = {
           instituteId: user.instituteId,
           instituteSlug: user.institute?.slug || null,
           instituteName: user.institute?.name || null,
+          mustChangePassword: user.mustChangePassword,
         };
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
         token.instituteId = (user as any).instituteId;
         token.instituteSlug = (user as any).instituteSlug;
         token.instituteName = (user as any).instituteName;
+        token.mustChangePassword = (user as any).mustChangePassword ?? false;
+      }
+      if (trigger === "update" && session?.mustChangePassword !== undefined) {
+        token.mustChangePassword = session.mustChangePassword as boolean;
       }
       return token;
     },
@@ -86,6 +91,7 @@ export const authOptions: NextAuthOptions = {
         session.user.instituteId = token.instituteId as string;
         session.user.instituteSlug = token.instituteSlug as string;
         session.user.instituteName = token.instituteName as string;
+        session.user.mustChangePassword = Boolean(token.mustChangePassword);
       }
       return session;
     },
