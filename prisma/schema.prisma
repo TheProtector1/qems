@@ -529,16 +529,19 @@ model Class {
   code        String?
   programType ProgramType
   capacity    Int       @default(30)
-  schedule    Json?     // e.g. [{day: "MONDAY", startTime: "08:00", endTime: "10:00"}]
-  isActive    Boolean   @default(true)
-  teacherId   String?
-  teacher     Teacher?  @relation(fields: [teacherId], references: [id], onDelete: SetNull)
-  instituteId String
-  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
-  branchId    String?
-  branch      Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  schedule        Json?     // e.g. [{day: "MONDAY", startTime: "08:00", endTime: "10:00"}]
+  meetingLink     String?   // For live classes (Zoom, Meet, etc.)
+  meetingPlatform String?   // "Zoom", "Google Meet", etc.
+  meetingPassword String?
+  isActive        Boolean   @default(true)
+  teacherId       String?
+  teacher         Teacher?  @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  instituteId     String
+  institute       Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  branchId        String?
+  branch          Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // Relations
   enrollments ClassEnrollment[]

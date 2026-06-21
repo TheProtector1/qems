@@ -18,6 +18,9 @@ interface ClassRow {
   isActive: boolean;
   teacherName: string | null;
   enrolledCount: number;
+  meetingLink: string | null;
+  meetingPlatform: string | null;
+  meetingPassword: string | null;
 }
 
 const PROGRAM_COLORS: Record<ProgramType, string> = {
@@ -43,6 +46,9 @@ function ClassModal({
   const [programType, setProgramType] = useState<ProgramType>(cls?.programType || "HIFZ");
   const [capacity, setCapacity] = useState(cls?.capacity?.toString() || "30");
   const [teacherId, setTeacherId] = useState("");
+  const [meetingLink, setMeetingLink] = useState(cls?.meetingLink || "");
+  const [meetingPlatform, setMeetingPlatform] = useState(cls?.meetingPlatform || "Zoom");
+  const [meetingPassword, setMeetingPassword] = useState(cls?.meetingPassword || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,7 +63,7 @@ function ClassModal({
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, programType, capacity, teacherId }),
+        body: JSON.stringify({ name, programType, capacity, teacherId, meetingLink, meetingPlatform, meetingPassword }),
       });
       if (!res.ok) throw new Error((await res.json()).error || "Failed to save.");
       onSave();
@@ -107,6 +113,29 @@ function ClassModal({
               {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
+          <div className="pt-2 border-t border-gray-100">
+            <h4 className="text-xs font-bold text-gray-900 mb-2">Live Class Settings (Optional)</h4>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Platform</label>
+                  <select value={meetingPlatform} onChange={e => setMeetingPlatform(e.target.value)} className="form-input text-xs">
+                    <option value="Zoom">Zoom</option>
+                    <option value="Google Meet">Google Meet</option>
+                    <option value="Teams">Microsoft Teams</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Password</label>
+                  <input value={meetingPassword} onChange={e => setMeetingPassword(e.target.value)} className="form-input text-xs" placeholder="Meeting Password" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Meeting Link</label>
+                <input value={meetingLink} onChange={e => setMeetingLink(e.target.value)} className="form-input text-xs" placeholder="https://zoom.us/j/..." />
+              </div>
+            </div>
+          </div>
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn-ghost text-xs py-2 flex-1" disabled={loading}>Cancel</button>
             <button type="submit" className="btn-primary text-xs py-2 flex-1 justify-center" disabled={loading}>
@@ -149,6 +178,9 @@ export function ClassesContent() {
         isActive: c.isActive,
         teacherName: c.teacher?.user?.name || null,
         enrolledCount: c._count?.enrollments || 0,
+        meetingLink: c.meetingLink,
+        meetingPlatform: c.meetingPlatform,
+        meetingPassword: c.meetingPassword,
       })));
 
       if (teacherRes.ok) {

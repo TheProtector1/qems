@@ -10,7 +10,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
     const { id } = params;
     const body = await req.json();
-    const { name, staffRole, phone, salary, isActive } = body;
+    const { name, staffRole, phone, salary, isActive, image } = body;
 
     const existing = await prisma.user.findFirst({
       where: { id, instituteId: session.user.instituteId, role: "STAFF" },
@@ -25,6 +25,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         ...(phone !== undefined && { phone }),
         ...(salary !== undefined && { salary: salary ? parseFloat(salary) : null }),
         ...(typeof isActive === "boolean" && { isActive }),
+        ...(image !== undefined && { image: image || null }),
       },
     });
     return NextResponse.json({ success: true, staff: updated });

@@ -118,11 +118,15 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
 
         {/* User avatar */}
         <div className="flex items-center gap-2 pl-2 border-l border-border cursor-pointer hover:bg-gray-50 rounded-xl px-3 py-1.5 transition-colors">
-          <div className="h-8 w-8 rounded-full bg-gradient-primary flex items-center justify-center">
-            <span className="text-white text-xs font-bold">
-              {session?.user?.name ? getInitials(session.user.name) : "U"}
-            </span>
-          </div>
+          {session?.user?.image ? (
+            <img src={session.user.image} alt="User Avatar" className="h-8 w-8 rounded-full object-cover ring-1 ring-gray-200" />
+          ) : (
+            <div className="h-8 w-8 rounded-full bg-gradient-primary flex items-center justify-center">
+              <span className="text-white text-xs font-bold">
+                {session?.user?.name ? getInitials(session.user.name) : "U"}
+              </span>
+            </div>
+          )}
           <div className="hidden sm:block text-left">
             <p className="text-xs font-semibold text-gray-900 leading-tight">
               {session?.user?.name?.split(" ")[0]}

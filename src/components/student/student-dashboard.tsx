@@ -61,7 +61,33 @@ export function StudentDashboardContent({ initialStudent }: { initialStudent: an
       {activeTab === "today" && (
         <div className="space-y-4">
           <h3 className="font-semibold text-gray-900">Today's Schedule</h3>
-          <p className="text-sm text-gray-500">No lessons scheduled for today.</p>
+          {initialStudent?.enrollments?.length > 0 ? (
+            initialStudent.enrollments.map((enrollment: any) => {
+              const c = enrollment.class;
+              return (
+                <div key={c.id} className="dash-card p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-gray-900">{c.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{c.programType} Program</p>
+                    </div>
+                    {c.meetingLink && (
+                      <a
+                        href={c.meetingLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-primary text-xs py-1.5 px-4"
+                      >
+                        Join Live Class
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <p className="text-sm text-gray-500">No classes assigned yet.</p>
+          )}
         </div>
       )}
 

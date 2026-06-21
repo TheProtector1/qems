@@ -24,6 +24,7 @@ export async function GET() {
         createdAt: true,
         staffRole: true,
         phone: true,
+        image: true,
       },
       orderBy: { createdAt: "desc" },
     });
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const body = await req.json();
-    const { name, email, password, staffRole, phone } = body;
+    const { name, email, password, staffRole, phone, image } = body;
     if (!name || !email || !password) {
       return NextResponse.json({ error: "Name, email, and password are required" }, { status: 400 });
     }
@@ -60,6 +61,7 @@ export async function POST(req: Request) {
         instituteId: session.user.instituteId,
         staffRole: staffRole || null,
         phone: phone || null,
+        image: image || null,
       },
     });
     return NextResponse.json({ success: true, staff: user });

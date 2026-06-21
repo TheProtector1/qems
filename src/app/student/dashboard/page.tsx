@@ -14,6 +14,12 @@ export default async function StudentDashboard() {
   const student = await prisma.student.findUnique({
     where: { userId },
     include: {
+      enrollments: {
+        include: {
+          class: true
+        },
+        where: { isActive: true }
+      },
       hifzRecords: {
         orderBy: { date: "desc" },
         take: 3
@@ -28,7 +34,8 @@ export default async function StudentDashboard() {
           name: student.fullName,
           currentJuz: student.currentJuz || 1,
           streak: 0,
-          quality: 0
+          quality: 0,
+          enrollments: student.enrollments
         } : null} 
       />
     </DashboardShell>

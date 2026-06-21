@@ -181,9 +181,24 @@ export function TeacherDashboardContent({
                     <div>
                       <p className="font-bold text-gray-900 text-base">{c.name}</p>
                       <p className="text-xs text-gray-400 mt-0.5">{c.time} • {c.program} Program</p>
+                      {c.meetingLink && (
+                        <p className="text-[10px] text-primary-600 font-medium mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" /> Live Class on {c.meetingPlatform || "Zoom"}
+                        </p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                       <span className="pill pill-primary">{c.studentsCount} Students</span>
+                      {c.meetingLink && (
+                        <a
+                          href={c.meetingLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn-primary text-xs py-1.5 px-3"
+                        >
+                          Join Live
+                        </a>
+                      )}
                       <button
                         onClick={() => {
                           setSelectedClass(c.name);
@@ -191,7 +206,7 @@ export function TeacherDashboardContent({
                         }}
                         className="btn-ghost text-xs py-1.5 px-3"
                       >
-                        Manage Class
+                        Manage
                       </button>
                     </div>
                   </div>

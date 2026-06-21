@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   UserCheck, Plus, Search, Trash2, Edit, Loader2, RefreshCw,
   XCircle, DollarSign, ChevronDown, Users, Briefcase, AlertTriangle,
-  Check, X,
+  Check, X, Camera,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { compressImageFile } from "@/lib/image";
 
 // ─── Types ────────────────────────────────────────────────────
 interface TeacherRow {
@@ -20,6 +21,7 @@ interface TeacherRow {
   salary: number | null;
   isActive: boolean;
   joinDate: string;
+  image: string | null;
 }
 
 interface StaffRow {
@@ -31,6 +33,7 @@ interface StaffRow {
   salary: number | null;
   isActive: boolean;
   createdAt: string;
+  image: string | null;
 }
 
 // ─── Confirm Delete Modal ─────────────────────────────────────
@@ -96,8 +99,26 @@ function PersonModal({
   const [salary, setSalary] = useState((person as any)?.salary?.toString() || "");
   const [staffRole, setStaffRole] = useState((person as StaffRow)?.staffRole || "");
   const [phone, setPhone] = useState((person as StaffRow)?.phone || "");
+  const [image, setImage] = useState((person as any)?.image || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const handleImageChange = async (file: File | undefined) => {
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const compressed = await compressImageFile(file);
+      setImage(compressed);
+    } catch (err: any) {
+      setError(err.message || "Failed to process image.");
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,8 +135,8 @@ function PersonModal({
         : (isEdit ? `/api/institute/staff/${(person as StaffRow).id}` : "/api/institute/staff");
       const method = isEdit ? "PATCH" : "POST";
       const payload = isTeacher
-        ? { name, email, qualification, specialization, experience, salary, ...(password && { password }) }
-        : { name, email, staffRole, phone, salary, ...(password && { password }) };
+        ? { name, email, qualification, specialization, experience, salary, image, ...(password && { password }) }
+        : { name, email, staffRole, phone, salary, image, ...(password && { password }) };
 
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!res.ok) {
@@ -151,6 +172,59 @@ function PersonModal({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
           {error && <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-semibold">{error}</div>}
+
+          {/* Profile Image Uploader */}
+          <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-xl mb-2">
+            <div className="relative flex-shrink-0">
+              {image ? (
+                <img src={image} alt="Preview" className="h-16 w-16 rounded-full object-cover ring-2 ring-primary-500" />
+              ) : (
+                <div className="h-16 w-16 rounded-full bg-gradient-primary flex items-center justify-center text-white font-bold text-lg">
+                  {name ? name.split(" ").map((n: string) => n[0]).join("").slice(0, 2) : "?"}
+                </div>
+              )}
+              {uploadingImage && (
+                <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center">
+                  <Loader2 className="h-4 w-4 text-white animate-spin" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 space-y-1.5 min-w-0">
+              <span className="block text-xs font-semibold text-gray-700">Profile Photo</span>
+              <div className="flex gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={e => handleImageChange(e.target.files?.[0])}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-[10px] font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Camera className="h-3.5 w-3.5" /> Upload File
+                </button>
+                {image && (
+                  <button
+                    type="button"
+                    onClick={() => setImage("")}
+                    className="px-2.5 py-1.5 bg-red-50 text-red-600 rounded-lg text-[10px] font-semibold hover:bg-red-100 flex items-center gap-1 transition-colors"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                placeholder="Or paste image URL..."
+                value={image}
+                onChange={e => setImage(e.target.value)}
+                className="form-input text-[10px] h-7 px-2"
+              />
+            </div>
+          </div>
 
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">Full Name <span className="text-red-500">*</span></label>
@@ -269,9 +343,13 @@ function SalaryModal({
         <div className="p-5 max-h-[65vh] overflow-y-auto space-y-3">
           {teachers.map(t => (
             <div key={t.id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
-              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
-                {t.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
-              </div>
+              {t.image ? (
+                <img src={t.image} alt={t.name} className="h-9 w-9 rounded-full object-cover flex-shrink-0 ring-1 ring-gray-200" />
+              ) : (
+                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                  {t.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
                 <p className="text-[10px] text-gray-400">{t.specialization}</p>
@@ -352,6 +430,7 @@ export function TeachersContent() {
         joinDate: t.joinDate
           ? new Date(t.joinDate).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" })
           : "—",
+        image: t.user?.image || null,
       }));
       setTeachers(rows);
 
@@ -366,6 +445,7 @@ export function TeachersContent() {
           salary: s.salary ? parseFloat(s.salary) : null,
           isActive: s.isActive,
           createdAt: new Date(s.createdAt).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" }),
+          image: s.image || null,
         }));
         setStaff(staffRows);
       }
@@ -540,9 +620,13 @@ export function TeachersContent() {
                   <tr key={t.id}>
                     <td>
                       <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-gradient-primary flex items-center justify-center text-white font-bold text-xs">
-                          {t.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
-                        </div>
+                        {t.image ? (
+                          <img src={t.image} alt={t.name} className="h-9 w-9 rounded-full object-cover ring-1 ring-gray-200" />
+                        ) : (
+                          <div className="h-9 w-9 rounded-full bg-gradient-primary flex items-center justify-center text-white font-bold text-xs">
+                            {t.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                          </div>
+                        )}
                         <div>
                           <p className="font-semibold text-gray-900 text-sm">{t.name}</p>
                           <p className="text-[10px] text-gray-400 font-mono">{t.teacherCode} · {t.email}</p>
@@ -595,9 +679,13 @@ export function TeachersContent() {
                   <tr key={s.id}>
                     <td>
                       <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs">
-                          {s.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
-                        </div>
+                        {s.image ? (
+                          <img src={s.image} alt={s.name} className="h-9 w-9 rounded-full object-cover ring-1 ring-gray-200" />
+                        ) : (
+                          <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs">
+                            {s.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                          </div>
+                        )}
                         <div>
                           <p className="font-semibold text-gray-900 text-sm">{s.name}</p>
                           <p className="text-[10px] text-gray-400">{s.email}</p>

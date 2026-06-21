@@ -10,7 +10,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
     const { id } = params;
     const body = await req.json();
-    const { name, programType, capacity, teacherId, isActive } = body;
+    const { name, programType, capacity, teacherId, isActive, meetingLink, meetingPlatform, meetingPassword } = body;
 
     const existing = await prisma.class.findFirst({
       where: { id, instituteId: session.user.instituteId },
@@ -25,6 +25,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         ...(capacity !== undefined && { capacity: parseInt(capacity) }),
         ...(teacherId !== undefined && { teacherId: teacherId || null }),
         ...(typeof isActive === "boolean" && { isActive }),
+        ...(meetingLink !== undefined && { meetingLink }),
+        ...(meetingPlatform !== undefined && { meetingPlatform }),
+        ...(meetingPassword !== undefined && { meetingPassword }),
       },
       include: {
         teacher: { include: { user: { select: { name: true } } } },

@@ -240,11 +240,15 @@ export function Sidebar({ collapsed, onCollapse }: SidebarProps) {
       <div className="border-t border-border p-3">
         {!collapsed ? (
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">
-                {session?.user?.name ? getInitials(session.user.name) : "U"}
-              </span>
-            </div>
+            {session?.user?.image ? (
+              <img src={session.user.image} alt="User Avatar" className="h-9 w-9 rounded-full object-cover ring-1 ring-gray-200 flex-shrink-0" />
+            ) : (
+              <div className="h-9 w-9 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
+                <span className="text-white text-xs font-bold">
+                  {session?.user?.name ? getInitials(session.user.name) : "U"}
+                </span>
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900 truncate">
                 {session?.user?.name}

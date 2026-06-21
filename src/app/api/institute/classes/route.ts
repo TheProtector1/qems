@@ -32,7 +32,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const body = await req.json();
-    const { name, programType, capacity, teacherId } = body;
+    const { name, programType, capacity, teacherId, meetingLink, meetingPlatform, meetingPassword } = body;
     if (!name || !programType) {
       return NextResponse.json({ error: "Name and program type are required" }, { status: 400 });
     }
@@ -45,6 +45,9 @@ export async function POST(req: Request) {
         programType,
         capacity: capacity ? parseInt(capacity) : 30,
         teacherId: teacherId || null,
+        meetingLink: meetingLink || null,
+        meetingPlatform: meetingPlatform || null,
+        meetingPassword: meetingPassword || null,
         instituteId: session.user.instituteId,
       },
       include: {

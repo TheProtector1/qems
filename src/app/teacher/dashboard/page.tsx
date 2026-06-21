@@ -14,7 +14,11 @@ export default async function TeacherDashboardPage() {
   const teacher = await prisma.teacher.findUnique({
     where: { userId },
     include: {
-      classes: true,
+      classes: {
+        include: {
+          _count: { select: { enrollments: true } }
+        }
+      },
       students: {
         where: { isActive: true },
         select: {
@@ -22,30 +26,52 @@ export default async function TeacherDashboardPage() {
           fullName: true,
           programType: true,
           currentJuz: true,
+          enrollments: {
+            include: { class: true },
+            where: { isActive: true },
+            take: 1
+          },
+          hifzRecords: {
+            orderBy: { date: "desc" },
+            take: 1,
+            select: {
+              type: true,
+              surahName: true,
+              ayahFrom: true,
+              ayahTo: true,
+              rating: true,
+            }
+          }
         }
       }
     }
   });
 
-  const students = teacher?.students.map((s: any) => ({
-    id: s.id,
-    name: s.fullName,
-    program: s.programType,
-    class: "N/A", // This could be mapped from enrollment, but keeping simple for now to remove mock data
-    currentJuz: s.currentJuz,
-    lastType: "N/A",
-    lastSurah: "N/A",
-    lastAyahs: "N/A",
-    status: "Active",
-    rating: 0
-  })) || [];
+  const students = teacher?.students.map((s: any) => {
+    const lastRecord = s.hifzRecords[0];
+    return {
+      id: s.id,
+      name: s.fullName,
+      program: s.programType,
+      class: s.enrollments?.[0]?.class?.name || "Not Assigned",
+      currentJuz: s.currentJuz,
+      lastType: lastRecord?.type || "None",
+      lastSurah: lastRecord?.surahName || "N/A",
+      lastAyahs: lastRecord ? `${lastRecord.ayahFrom}-${lastRecord.ayahTo}` : "N/A",
+      status: "Active",
+      rating: lastRecord?.rating || 0
+    };
+  }) || [];
 
   const classes = teacher?.classes.map((c: any) => ({
     id: c.id,
     name: c.name,
     program: c.programType,
-    studentsCount: c.capacity, // Using capacity as placeholder if enrollment not fetched
-    time: "N/A" // Schedule not parsed
+    studentsCount: c._count?.enrollments || 0,
+    time: "Scheduled", // Time parsing can be complex, just placeholder for now or remove if unused
+    meetingLink: c.meetingLink,
+    meetingPlatform: c.meetingPlatform,
+    meetingPassword: c.meetingPassword,
   })) || [];
 
   return (

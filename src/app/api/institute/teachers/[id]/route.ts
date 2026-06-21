@@ -11,7 +11,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
     const { id } = params;
     const body = await req.json();
-    const { name, email, qualification, specialization, experience, salary, isActive } = body;
+    const { name, email, qualification, specialization, experience, salary, isActive, image } = body;
 
     // Verify teacher belongs to the institute
     const teacher = await prisma.teacher.findFirst({
@@ -28,6 +28,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if (name) userData.name = name;
       if (email) userData.email = email.toLowerCase();
       if (typeof isActive === "boolean") userData.isActive = isActive;
+      if (image !== undefined) userData.image = image || null;
 
       await tx.user.update({
         where: { id: teacher.userId },
