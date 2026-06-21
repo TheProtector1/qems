@@ -77,10 +77,19 @@ export function AttendanceContent() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"mark" | "history" | "calendar">("mark");
 
+  const [leaveDetails, setLeaveDetails] = useState<Record<string, { reason: string; requestedBy: string }>>({});
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [pendingLeaveStudentId, setPendingLeaveStudentId] = useState<string | null>(null);
+  const [leaveForm, setLeaveForm] = useState({ reason: "", requestedBy: "" });
+
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editRecordId, setEditRecordId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const [calendarStudentId, setCalendarStudentId] = useState("");
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth() + 1);
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
-  const [calendarRecords, setCalendarRecords] = useState<Record<string, AttStatus>>({});
+  const [calendarRecords, setCalendarRecords] = useState<Record<string, { status: AttStatus; id: string }>>({});
   const [calendarLoading, setCalendarLoading] = useState(false);
 
   const loadAttendance = useCallback(async () => {
@@ -124,9 +133,9 @@ export function AttendanceContent() {
       const res = await fetch(`/api/institute/attendance?${params}`);
       if (!res.ok) throw new Error("Failed to load calendar.");
       const data = await res.json();
-      const map: Record<string, AttStatus> = {};
+      const map: Record<string, { status: AttStatus; id: string }> = {};
       for (const r of data.records || []) {
-        map[r.date] = r.status;
+        map[r.date] = { status: r.status, id: r.id };
       }
       setCalendarRecords(map);
     } catch {
@@ -151,10 +160,25 @@ export function AttendanceContent() {
   };
 
   const toggle = (id: string, status: AttStatus) => {
+    if (status === "LEAVE" && attendance[id] !== "LEAVE") {
+      setPendingLeaveStudentId(id);
+      setLeaveForm({ reason: "", requestedBy: "" });
+      setLeaveModalOpen(true);
+      return;
+    }
+
     setAttendance((prev) => ({
       ...prev,
       [id]: prev[id] === status ? null : status,
     }));
+
+    if (status !== "LEAVE") {
+      setLeaveDetails((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
   };
 
   const summary = useMemo(() => ({
@@ -172,7 +196,12 @@ export function AttendanceContent() {
     try {
       const records = Object.entries(attendance)
         .filter(([, status]) => status)
-        .map(([studentId, status]) => ({ studentId, status: status as AttStatus }));
+        .map(([studentId, status]) => ({ 
+          studentId, 
+          status: status as AttStatus,
+          leaveReason: leaveDetails[studentId]?.reason,
+          leaveRequestedBy: leaveDetails[studentId]?.requestedBy,
+        }));
 
       const res = await fetch("/api/institute/attendance", {
         method: "POST",
@@ -203,6 +232,22 @@ export function AttendanceContent() {
       ...historyDates.map((d) => history[s.id]?.[d] || ""),
     ]);
     downloadCsv(`attendance-${selectedDate}.csv`, headers, rows);
+  };
+
+  const handleDeleteRecord = async () => {
+    if (!editRecordId) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/institute/attendance?id=${editRecordId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete record.");
+      setEditModalOpen(false);
+      loadAttendance();
+      if (activeTab === "calendar") loadCalendar();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete.");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const calendarDays = buildCalendarDays(calendarYear, calendarMonth);
@@ -529,14 +574,21 @@ export function AttendanceContent() {
                   if (!cell.inMonth) {
                     return <div key={`empty-${idx}`} className="aspect-square" />;
                   }
-                  const status = calendarRecords[cell.date];
+                  const record = calendarRecords[cell.date];
+                  const status = record?.status;
                   const isToday = cell.date === today;
                   return (
                     <div
                       key={cell.date}
                       title={status ? STATUS_CONFIG[status].fullLabel : "No record"}
+                      onClick={() => {
+                        if (record) {
+                          setEditRecordId(record.id);
+                          setEditModalOpen(true);
+                        }
+                      }}
                       className={cn(
-                        "aspect-square rounded-xl flex flex-col items-center justify-center text-xs border transition-all",
+                        "aspect-square rounded-xl flex flex-col items-center justify-center text-xs border transition-all cursor-pointer hover:ring-2 hover:ring-primary-300",
                         status ? STATUS_CONFIG[status].cal : "bg-gray-50 text-gray-500 border-gray-100",
                         isToday && "ring-2 ring-primary-500 ring-offset-1"
                       )}
@@ -564,6 +616,88 @@ export function AttendanceContent() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {leaveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
+            <h3 className="font-display font-bold text-gray-900 mb-1">Leave Details</h3>
+            <p className="text-sm text-gray-500 mb-4">Provide details for this leave request.</p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Requested By</label>
+                <input
+                  type="text"
+                  className="form-input w-full"
+                  placeholder="e.g. Father, Mother, Self"
+                  value={leaveForm.requestedBy}
+                  onChange={e => setLeaveForm({ ...leaveForm, requestedBy: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Reason (Optional)</label>
+                <input
+                  type="text"
+                  className="form-input w-full"
+                  placeholder="e.g. Sick, Family Event"
+                  value={leaveForm.reason}
+                  onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })}
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  className="btn-ghost flex-1 py-2"
+                  onClick={() => setLeaveModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary flex-1 py-2"
+                  onClick={() => {
+                    if (pendingLeaveStudentId) {
+                      setAttendance(prev => ({ ...prev, [pendingLeaveStudentId]: "LEAVE" }));
+                      setLeaveDetails(prev => ({ ...prev, [pendingLeaveStudentId]: leaveForm }));
+                    }
+                    setLeaveModalOpen(false);
+                  }}
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl w-full max-w-xs p-6 shadow-xl text-center">
+            <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <h3 className="font-display font-bold text-gray-900 mb-2">Manage Record</h3>
+            <p className="text-sm text-gray-500 mb-6">Do you want to delete this attendance record? This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                className="btn-ghost flex-1 py-2"
+                onClick={() => setEditModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-danger flex-1 py-2 bg-red-500 text-white hover:bg-red-600 rounded-lg font-semibold transition-colors"
+                disabled={deleting}
+                onClick={handleDeleteRecord}
+              >
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Delete Record"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

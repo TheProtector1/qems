@@ -182,7 +182,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { date, records } = body as {
       date: string;
-      records: Array<{ studentId: string; status: AttendanceStatus }>;
+      records: Array<{ studentId: string; status: AttendanceStatus; leaveReason?: string; leaveRequestedBy?: string }>;
     };
 
     if (!date || !Array.isArray(records)) {
@@ -217,6 +217,8 @@ export async function POST(req: Request) {
           data: {
             status: rec.status,
             markedById: teacher?.id ?? existing.markedById,
+            leaveReason: rec.status === "LEAVE" ? rec.leaveReason : null,
+            leaveRequestedBy: rec.status === "LEAVE" ? rec.leaveRequestedBy : null,
           },
         });
       } else {
@@ -227,6 +229,8 @@ export async function POST(req: Request) {
             status: rec.status,
             classId: null,
             markedById: teacher?.id ?? null,
+            leaveReason: rec.status === "LEAVE" ? rec.leaveReason : null,
+            leaveRequestedBy: rec.status === "LEAVE" ? rec.leaveRequestedBy : null,
           },
         });
       }
@@ -235,6 +239,40 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Save attendance error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const session = await getAuthSession();
+    if (!session?.user.instituteId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json({ error: "Missing record ID" }, { status: 400 });
+    }
+
+    const existing = await prisma.attendance.findUnique({
+      where: { id },
+      include: { student: true },
+    });
+
+    if (!existing || existing.student.instituteId !== session.user.instituteId) {
+      return NextResponse.json({ error: "Record not found" }, { status: 404 });
+    }
+
+    await prisma.attendance.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Delete attendance error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

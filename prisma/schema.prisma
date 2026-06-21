@@ -660,21 +660,22 @@ model HifzQualityScore {
 // ─────────────────────────────────────────────
 
 model Attendance {
-  id          String           @id @default(cuid())
-  date        DateTime         @db.Date
-  status      AttendanceStatus
-  method      AttendanceMethod @default(MANUAL)
-  checkInTime DateTime?
-  leaveReason String?
-  notes       String?
-  studentId   String
-  student     Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  classId     String?
-  class       Class?           @relation(fields: [classId], references: [id], onDelete: SetNull)
-  markedById  String?
-  markedBy    Teacher?         @relation(fields: [markedById], references: [id], onDelete: SetNull)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id               String           @id @default(cuid())
+  date             DateTime         @db.Date
+  status           AttendanceStatus
+  method           AttendanceMethod @default(MANUAL)
+  checkInTime      DateTime?
+  leaveReason      String?
+  leaveRequestedBy String?
+  notes            String?
+  studentId        String
+  student          Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId          String?
+  class            Class?           @relation(fields: [classId], references: [id], onDelete: SetNull)
+  markedById       String?
+  markedBy         Teacher?         @relation(fields: [markedById], references: [id], onDelete: SetNull)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@unique([studentId, date, classId])
   @@index([studentId])
