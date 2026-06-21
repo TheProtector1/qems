@@ -44,11 +44,7 @@ const typeColors: Record<string, string> = {
   MANZIL: "pill-primary",
 };
 
-const NOTIFICATIONS = [
-  { icon: "📖", msg: "Child scored 5★ on today's Sabaq!", time: "Today 9:00 AM", type: "achievement" },
-  { icon: "📅", msg: "Monthly assessment scheduled for June 20", time: "2 days ago", type: "info" },
-  { icon: "💰", msg: "June academic tuition due on June 25", time: "3 days ago", type: "warning" },
-];
+const NOTIFICATIONS: any[] = [];
 
 export function ParentDashboardContent({ childrenData }: ParentDashboardContentProps) {
   const [selectedChildIndex, setSelectedChildIndex] = useState(0);
@@ -230,28 +226,7 @@ export function ParentDashboardContent({ childrenData }: ParentDashboardContentP
           <div className="dash-card p-6">
             <h3 className="font-semibold text-gray-900 mb-4">💰 Tuition Fee Status</h3>
             <div className="space-y-3">
-              {[
-                { month: "June 2025", amount: 3500, status: "DUE", dueDate: "Jun 25" },
-                { month: "May 2025", amount: 3500, status: "PAID", paidOn: "May 2" },
-                { month: "Apr 2025", amount: 3500, status: "PAID", paidOn: "Apr 1" },
-              ].map((f, i) => (
-                <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
-                  <div>
-                    <p className="font-medium text-gray-900 text-sm">{f.month}</p>
-                    <p className="text-xs text-gray-400">
-                      {f.status === "DUE" ? `Due: ${f.dueDate}` : `Paid: ${f.paidOn}`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold text-gray-900">{formatCurrency(f.amount)}</span>
-                    {f.status === "DUE" ? (
-                      <button className="btn-primary text-xs py-1.5 px-3" id="btn-pay-fee">Pay Now</button>
-                    ) : (
-                      <span className="pill pill-success"><CheckCircle2 className="h-3 w-3" /> Paid</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+              <p className="text-sm text-gray-500">No fee records found.</p>
             </div>
           </div>
         </div>

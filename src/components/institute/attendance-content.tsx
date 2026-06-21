@@ -63,7 +63,7 @@ function buildCalendarDays(year: number, month: number) {
   return days;
 }
 
-export function AttendanceContent() {
+export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) {
   const today = new Date().toISOString().split("T")[0];
   const [selectedDate, setSelectedDate] = useState(today);
   const [programFilter, setProgramFilter] = useState("ALL");
@@ -75,7 +75,8 @@ export function AttendanceContent() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"mark" | "history" | "calendar">("mark");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"mark" | "history" | "calendar">(readOnly ? "history" : "mark");
 
   const [leaveDetails, setLeaveDetails] = useState<Record<string, { reason: string; requestedBy: string }>>({});
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -89,7 +90,7 @@ export function AttendanceContent() {
   const [calendarStudentId, setCalendarStudentId] = useState("");
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth() + 1);
   const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
-  const [calendarRecords, setCalendarRecords] = useState<Record<string, { status: AttStatus; id: string }>>({});
+  const [calendarRecords, setCalendarRecords] = useState<Record<string, { status: AttStatus; id: string; leaveReason?: string | null; leaveRequestedBy?: string | null }>>({});
   const [calendarLoading, setCalendarLoading] = useState(false);
 
   const loadAttendance = useCallback(async () => {
@@ -133,9 +134,14 @@ export function AttendanceContent() {
       const res = await fetch(`/api/institute/attendance?${params}`);
       if (!res.ok) throw new Error("Failed to load calendar.");
       const data = await res.json();
-      const map: Record<string, { status: AttStatus; id: string }> = {};
+      const map: Record<string, { status: AttStatus; id: string; leaveReason?: string | null; leaveRequestedBy?: string | null }> = {};
       for (const r of data.records || []) {
-        map[r.date] = { status: r.status, id: r.id };
+        map[r.date] = {
+          status: r.status,
+          id: r.id,
+          leaveReason: r.leaveReason,
+          leaveRequestedBy: r.leaveRequestedBy,
+        };
       }
       setCalendarRecords(map);
     } catch {
@@ -237,6 +243,7 @@ export function AttendanceContent() {
   const handleDeleteRecord = async () => {
     if (!editRecordId) return;
     setDeleting(true);
+    setDeleteError(null);
     try {
       const res = await fetch(`/api/institute/attendance?id=${editRecordId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete record.");
@@ -244,7 +251,7 @@ export function AttendanceContent() {
       loadAttendance();
       if (activeTab === "calendar") loadCalendar();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to delete.");
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete.");
     } finally {
       setDeleting(false);
     }
@@ -271,30 +278,32 @@ export function AttendanceContent() {
             {students.length} enrolled student{students.length !== 1 ? "s" : ""} • live database records
           </p>
         </div>
-        <div className="flex gap-3">
-          <button className="btn-ghost text-sm py-2" onClick={loadAttendance} disabled={loading}>
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-            Refresh
-          </button>
-          <button className="btn-ghost text-sm py-2" onClick={handleExport} disabled={!students.length}>
-            <Download className="h-4 w-4" />
-            Export
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || !students.length}
-            id="btn-save-attendance"
-            className="btn-primary text-sm py-2"
-          >
-            {saved ? (
-              <><CheckCircle2 className="h-4 w-4" /> Saved!</>
-            ) : saving ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
-            ) : (
-              <><Save className="h-4 w-4" /> Save Attendance</>
-            )}
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex gap-3">
+            <button className="btn-ghost text-sm py-2" onClick={loadAttendance} disabled={loading}>
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+              Refresh
+            </button>
+            <button className="btn-ghost text-sm py-2" onClick={handleExport} disabled={!students.length}>
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || !students.length}
+              id="btn-save-attendance"
+              className="btn-primary text-sm py-2"
+            >
+              {saved ? (
+                <><CheckCircle2 className="h-4 w-4" /> Saved!</>
+              ) : saving ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+              ) : (
+                <><Save className="h-4 w-4" /> Save Attendance</>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -325,7 +334,7 @@ export function AttendanceContent() {
 
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit flex-wrap">
         {[
-          { key: "mark", label: "Mark Attendance" },
+          ...(!readOnly ? [{ key: "mark", label: "Mark Attendance" }] : []),
           { key: "history", label: "History Table" },
           { key: "calendar", label: "Student Calendar" },
         ].map((t) => (
@@ -357,7 +366,7 @@ export function AttendanceContent() {
         </div>
       )}
 
-      {!loading && students.length > 0 && activeTab === "mark" && (
+      {!loading && students.length > 0 && !readOnly && activeTab === "mark" && (
         <div className="dash-card overflow-hidden">
           <div className="p-5 border-b border-border flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             <input
@@ -580,15 +589,22 @@ export function AttendanceContent() {
                   return (
                     <div
                       key={cell.date}
-                      title={status ? STATUS_CONFIG[status].fullLabel : "No record"}
+                      title={
+                        status === "LEAVE"
+                          ? `Leave - Requested by: ${record.leaveRequestedBy || "N/A"}. Reason: ${record.leaveReason || "N/A"}`
+                          : status
+                          ? STATUS_CONFIG[status].fullLabel
+                          : "No record"
+                      }
                       onClick={() => {
-                        if (record) {
+                        if (!readOnly && record) {
                           setEditRecordId(record.id);
                           setEditModalOpen(true);
                         }
                       }}
                       className={cn(
-                        "aspect-square rounded-xl flex flex-col items-center justify-center text-xs border transition-all cursor-pointer hover:ring-2 hover:ring-primary-300",
+                        "aspect-square rounded-xl flex flex-col items-center justify-center text-xs border transition-all",
+                        !readOnly && record && "cursor-pointer hover:ring-2 hover:ring-primary-300",
                         status ? STATUS_CONFIG[status].cal : "bg-gray-50 text-gray-500 border-gray-100",
                         isToday && "ring-2 ring-primary-500 ring-offset-1"
                       )}
@@ -619,7 +635,7 @@ export function AttendanceContent() {
         </div>
       )}
 
-      {leaveModalOpen && (
+      {!readOnly && leaveModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
             <h3 className="font-display font-bold text-gray-900 mb-1">Leave Details</h3>
@@ -672,19 +688,22 @@ export function AttendanceContent() {
         </div>
       )}
 
-      {editModalOpen && (
+      {!readOnly && editModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white rounded-2xl w-full max-w-xs p-6 shadow-xl text-center">
             <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertTriangle className="h-6 w-6" />
             </div>
             <h3 className="font-display font-bold text-gray-900 mb-2">Manage Record</h3>
-            <p className="text-sm text-gray-500 mb-6">Do you want to delete this attendance record? This action cannot be undone.</p>
+            <p className="text-sm text-gray-500 mb-4">Do you want to delete this attendance record? This action cannot be undone.</p>
+            {deleteError && (
+              <p className="text-xs text-red-600 bg-red-50 rounded-lg p-2 mb-4">{deleteError}</p>
+            )}
             <div className="flex gap-3">
               <button
                 type="button"
                 className="btn-ghost flex-1 py-2"
-                onClick={() => setEditModalOpen(false)}
+                onClick={() => { setEditModalOpen(false); setDeleteError(null); }}
               >
                 Cancel
               </button>

@@ -50,6 +50,14 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Your account has been deactivated. Please contact support.");
         }
 
+        if (!user.emailVerified) {
+          throw new Error("Please verify your email address before logging in. Check your inbox.");
+        }
+
+        if (user.institute && !user.institute.isApproved) {
+          throw new Error("Your institute is pending approval from the Super Admin.");
+        }
+
         const isValidPassword = await bcrypt.compare(credentials.password, user.password);
         if (!isValidPassword) {
           throw new Error("Invalid credentials");

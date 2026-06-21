@@ -76,7 +76,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if (photo !== undefined) studentData.photo = photo || null;
 
       if (program) {
-        let programType = ProgramType.HIFZ;
+        let programType: ProgramType = ProgramType.HIFZ;
         if (program.toUpperCase() === "NAZRA") programType = ProgramType.NAZRA;
         if (program.toUpperCase() === "TAJWEED") programType = ProgramType.TAJWEED;
         studentData.programType = programType;

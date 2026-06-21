@@ -69,7 +69,7 @@ export async function POST(req: Request) {
           password: hashedPassword,
           role: "TEACHER",
           isActive: true,
-          instituteId: session.user.instituteId,
+          instituteId: session.user.instituteId as string,
         },
       });
 
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
           salary: salary ? parseFloat(salary) : null,
           joinDate: new Date(),
           userId: user.id,
-          instituteId: session.user.instituteId,
+          instituteId: session.user.instituteId as string,
         },
       });
 

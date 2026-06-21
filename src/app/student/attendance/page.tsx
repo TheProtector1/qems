@@ -14,7 +14,7 @@ export default async function StudentAttendancePage() {
       title="My Attendance History"
       breadcrumbs={[{ label: "Student Portal" }, { label: "My Attendance" }]}
     >
-      <AttendanceContent />
+      <AttendanceContent readOnly />
     </DashboardShell>
   );
 }

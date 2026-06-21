@@ -17,10 +17,11 @@ function isEmailConfigured() {
 
 function getTransporter() {
   const port = Number(process.env.SMTP_PORT || 587);
+  const secure = process.env.SMTP_SECURE === "true" || port === 465;
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port,
-    secure: port === 465,
+    secure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -72,6 +73,43 @@ export async function sendParentWelcomeEmail(params: ParentWelcomeEmailParams): 
     return true;
   } catch (error) {
     console.error("[email] Failed to send parent welcome email:", error);
+    return false;
+  }
+}
+
+export async function sendVerificationEmail(to: string, token: string) {
+  if (!isEmailConfigured()) return false;
+  const from = process.env.EMAIL_FROM || process.env.SMTP_USER;
+  const verificationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/auth/verify-email?token=${token}`;
+  
+  const subject = "Verify your QEMS Account";
+  const html = `<p>Please verify your email by clicking the link below:</p>
+                <p><a href="${verificationUrl}">Verify Email</a></p>`;
+
+  try {
+    await getTransporter().sendMail({ from, to, subject, html });
+    return true;
+  } catch (err) {
+    console.error("Verification email error:", err);
+    return false;
+  }
+}
+
+export async function sendPasswordResetEmail(to: string, token: string) {
+  if (!isEmailConfigured()) return false;
+  const from = process.env.EMAIL_FROM || process.env.SMTP_USER;
+  const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/auth/reset-password?token=${token}`;
+  
+  const subject = "Reset your QEMS Password";
+  const html = `<p>You requested a password reset. Click the link below to set a new password:</p>
+                <p><a href="${resetUrl}">Reset Password</a></p>
+                <p>If you didn't request this, you can safely ignore this email.</p>`;
+
+  try {
+    await getTransporter().sendMail({ from, to, subject, html });
+    return true;
+  } catch (err) {
+    console.error("Password reset email error:", err);
     return false;
   }
 }

@@ -19,21 +19,35 @@ export default function RegisterPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     if (form.password !== form.confirmPassword) {
-      alert("Passwords do not match!");
+      setError("Passwords do not match!");
       return;
     }
     setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
+    
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form)
+      });
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.error || "Registration failed");
+      }
+      
       setSuccess(true);
-      setTimeout(() => {
-        router.push("/auth/login");
-      }, 2000);
-    }, 1500);
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -69,6 +83,11 @@ export default function RegisterPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4">
+                  {error}
+                </div>
+              )}
               <div className="grid md:grid-cols-2 gap-5">
                 {/* Institute Name */}
                 <div className="md:col-span-2">

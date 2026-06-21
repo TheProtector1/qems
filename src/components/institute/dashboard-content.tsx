@@ -12,119 +12,88 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 
-// ── Mock Data ──────────────────────────────────────────────
-const kpis = [
-  {
-    label: "Total Students",
-    value: "284",
-    change: "+12",
-    changePct: "+4.4%",
-    up: true,
-    icon: GraduationCap,
-    color: "from-blue-500 to-indigo-600",
-    bg: "bg-blue-50",
-    text: "text-blue-600",
-  },
-  {
-    label: "Attendance Rate",
-    value: "94.7%",
-    change: "+1.2%",
-    changePct: "vs last month",
-    up: true,
-    icon: CalendarCheck,
-    color: "from-emerald-500 to-green-600",
-    bg: "bg-emerald-50",
-    text: "text-emerald-600",
-  },
-  {
-    label: "Hifz Quality Score",
-    value: "8.4 / 10",
-    change: "+0.3",
-    changePct: "vs last month",
-    up: true,
-    icon: BookOpen,
-    color: "from-violet-500 to-purple-600",
-    bg: "bg-violet-50",
-    text: "text-violet-600",
-  },
-  {
-    label: "Fee Collection",
-    value: "PKR 1.8M",
-    change: "-PKR 120K",
-    changePct: "outstanding",
-    up: false,
-    icon: DollarSign,
-    color: "from-amber-500 to-orange-600",
-    bg: "bg-amber-50",
-    text: "text-amber-600",
-  },
-  {
-    label: "Active Teachers",
-    value: "18",
-    change: "+2",
-    changePct: "this month",
-    up: true,
-    icon: Users,
-    color: "from-pink-500 to-rose-600",
-    bg: "bg-pink-50",
-    text: "text-pink-600",
-  },
-  {
-    label: "Completions (YTD)",
-    value: "12",
-    change: "+5",
-    changePct: "vs last year",
-    up: true,
-    icon: Award,
-    color: "from-teal-500 to-cyan-600",
-    bg: "bg-teal-50",
-    text: "text-teal-600",
-  },
-];
+export function InstituteDashboardContent({
+  initialTotalStudents,
+  initialActiveTeachers
+}: {
+  initialTotalStudents: number,
+  initialActiveTeachers: number
+}) {
+  const kpis = [
+    {
+      label: "Total Students",
+      value: initialTotalStudents.toString(),
+      change: "Active",
+      changePct: "",
+      up: true,
+      icon: GraduationCap,
+      color: "from-blue-500 to-indigo-600",
+      bg: "bg-blue-50",
+      text: "text-blue-600",
+    },
+    {
+      label: "Attendance Rate",
+      value: "N/A",
+      change: "0%",
+      changePct: "vs last month",
+      up: true,
+      icon: CalendarCheck,
+      color: "from-emerald-500 to-green-600",
+      bg: "bg-emerald-50",
+      text: "text-emerald-600",
+    },
+    {
+      label: "Hifz Quality Score",
+      value: "N/A",
+      change: "0",
+      changePct: "vs last month",
+      up: true,
+      icon: BookOpen,
+      color: "from-violet-500 to-purple-600",
+      bg: "bg-violet-50",
+      text: "text-violet-600",
+    },
+    {
+      label: "Fee Collection",
+      value: "N/A",
+      change: "0",
+      changePct: "outstanding",
+      up: false,
+      icon: DollarSign,
+      color: "from-amber-500 to-orange-600",
+      bg: "bg-amber-50",
+      text: "text-amber-600",
+    },
+    {
+      label: "Active Teachers",
+      value: initialActiveTeachers.toString(),
+      change: "Active",
+      changePct: "",
+      up: true,
+      icon: Users,
+      color: "from-pink-500 to-rose-600",
+      bg: "bg-pink-50",
+      text: "text-pink-600",
+    },
+    {
+      label: "Completions (YTD)",
+      value: "0",
+      change: "0",
+      changePct: "vs last year",
+      up: true,
+      icon: Award,
+      color: "from-teal-500 to-cyan-600",
+      bg: "bg-teal-50",
+      text: "text-teal-600",
+    },
+  ];
 
-const attendanceData = [
-  { week: "W1", present: 268, absent: 16 },
-  { week: "W2", present: 275, absent: 9 },
-  { week: "W3", present: 258, absent: 26 },
-  { week: "W4", present: 280, absent: 4 },
-  { week: "W5", present: 271, absent: 13 },
-  { week: "W6", present: 269, absent: 15 },
-  { week: "W7", present: 278, absent: 6 },
-  { week: "W8", present: 282, absent: 2 },
-];
+  const attendanceData: any[] = [];
+  const hifzProgressData: any[] = [];
+  const programDistribution: any[] = [];
+  const recentStudents: any[] = [];
+  const alerts: any[] = [];
 
-const hifzProgressData = [
-  { month: "Jan", sabaq: 420, sabqi: 380, manzil: 310 },
-  { month: "Feb", sabaq: 445, sabqi: 400, manzil: 330 },
-  { month: "Mar", sabaq: 410, sabqi: 390, manzil: 360 },
-  { month: "Apr", sabaq: 465, sabqi: 420, manzil: 380 },
-  { month: "May", sabaq: 490, sabqi: 455, manzil: 400 },
-  { month: "Jun", sabaq: 510, sabqi: 470, manzil: 420 },
-];
-
-const programDistribution = [
-  { name: "Hifz", value: 165, color: "#1B5E20" },
-  { name: "Nazra", value: 82, color: "#D4AF37" },
-  { name: "Tajweed", value: 37, color: "#388E3C" },
-];
-
-const recentStudents = [
-  { name: "Ahmad Raza Khan", program: "Hifz", juz: 13, quality: 9.2, status: "On Track" },
-  { name: "Fatima Noor", program: "Hifz", juz: 8, quality: 8.7, status: "On Track" },
-  { name: "Usman Ali", program: "Nazra", juz: null, quality: 7.4, status: "Needs Attention" },
-  { name: "Zainab Hassan", program: "Hifz", juz: 22, quality: 9.5, status: "Excellent" },
-  { name: "Ibrahim Sheikh", program: "Tajweed", juz: null, quality: 8.1, status: "On Track" },
-];
-
-const alerts = [
-  { type: "warning", msg: "8 students missed 3+ consecutive days", action: "View Students", href: "/institute/attendance" },
-  { type: "danger", msg: "PKR 120,000 in overdue fees", action: "View Dues", href: "/institute/finance/fees" },
-  { type: "info", msg: "Quarterly assessment due in 5 days", action: "Schedule Now", href: "/institute/assessments/new" },
-];
-
-const COLORS = ["#1B5E20", "#D4AF37", "#388E3C"];
-
-export function InstituteDashboardContent() {
   return (
     <div className="space-y-6">
       {/* ── Greeting ── */}
@@ -323,7 +292,7 @@ export function InstituteDashboardContent() {
               <div key={i} className="flex items-center gap-3">
                 <div className="h-9 w-9 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
                   <span className="text-white text-xs font-bold">
-                    {s.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                    {s.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">

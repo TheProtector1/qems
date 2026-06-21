@@ -12,63 +12,21 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-
-const stats = [
-  {
-    label: "Total Institutes",
-    value: "142",
-    change: "+8",
-    changePct: "this month",
-    up: true,
-    icon: Building2,
-    bg: "bg-emerald-50",
-    text: "text-emerald-600",
-  },
-  {
-    label: "Active Students",
-    value: "12,480",
-    change: "+620",
-    changePct: "vs last month",
-    up: true,
-    icon: Users,
-    bg: "bg-blue-50",
-    text: "text-blue-600",
-  },
-  {
-    label: "Monthly Recurring Revenue",
-    value: "PKR 490K",
-    change: "+12.4%",
-    changePct: "growth",
-    up: true,
-    icon: CreditCard,
-    bg: "bg-violet-50",
-    text: "text-violet-600",
-  },
-  {
-    label: "Pending Approvals",
-    value: "5",
-    change: "Requires action",
-    changePct: "",
-    up: false,
-    icon: AlertCircle,
-    bg: "bg-amber-50",
-    text: "text-amber-600",
-  },
-];
+import { useRouter } from "next/navigation";
 
 const revenueData = [
-  { month: "Jan", revenue: 320000, institutes: 110 },
-  { month: "Feb", revenue: 350000, institutes: 115 },
-  { month: "Mar", revenue: 390000, institutes: 122 },
-  { month: "Apr", revenue: 420000, institutes: 128 },
-  { month: "May", revenue: 450000, institutes: 134 },
-  { month: "Jun", revenue: 490000, institutes: 142 },
+  { month: "Jan", revenue: 250000, institutes: 8 },
+  { month: "Feb", revenue: 310000, institutes: 11 },
+  { month: "Mar", revenue: 380000, institutes: 14 },
+  { month: "Apr", revenue: 420000, institutes: 15 },
+  { month: "May", revenue: 450000, institutes: 17 },
+  { month: "Jun", revenue: 490000, institutes: 19 },
 ];
 
 const planData = [
-  { name: "Starter (Free)", value: 85, color: "#94A3B8" },
-  { name: "Growth (Paid)", value: 48, color: "#1B5E20" },
-  { name: "Enterprise (Custom)", value: 9, color: "#D4AF37" },
+  { name: "Premium Hifz", value: 12, color: "#1B5E20" },
+  { name: "Nazra Standard", value: 5, color: "#D4AF37" },
+  { name: "Custom Enterprise", value: 2, color: "#3B82F6" },
 ];
 
 interface PendingInstitute {
@@ -81,47 +39,89 @@ interface PendingInstitute {
   plan: string;
 }
 
-const mockPending: PendingInstitute[] = [
-  {
-    id: "inst_1",
-    name: "Al-Azhar Tajweed Institute",
-    director: "Dr. Abdur Rahman",
-    email: "contact@alazhar.edu",
-    phone: "+92 300 1234567",
-    requestedAt: "2026-06-12",
-    plan: "Growth",
-  },
-  {
-    id: "inst_2",
-    name: "Minhaj Quran School",
-    director: "Mohammad Ali",
-    email: "info@minhajquran.org",
-    phone: "+92 312 9876543",
-    requestedAt: "2026-06-14",
-    plan: "Starter",
-  },
-  {
-    id: "inst_3",
-    name: "Noor-ul-Huda Hifz Center",
-    director: "Qari Ahmad Raza",
-    email: "noorulhuda@gmail.com",
-    phone: "+92 321 4567890",
-    requestedAt: "2026-06-15",
-    plan: "Growth",
-  },
-];
+export function AdminDashboardContent({ 
+  initialPendingList,
+  initialTotalInstitutes,
+  initialActiveStudents
+}: { 
+  initialPendingList: PendingInstitute[],
+  initialTotalInstitutes: number,
+  initialActiveStudents: number
+}) {
+  const router = useRouter();
+  const [pendingList, setPendingList] = useState<PendingInstitute[]>(initialPendingList);
+  const [approvedCount, setApprovedCount] = useState(initialTotalInstitutes);
+  
+  const stats = [
+    {
+      label: "Total Institutes",
+      value: approvedCount.toString(),
+      change: "Active",
+      changePct: "",
+      up: true,
+      icon: Building2,
+      bg: "bg-emerald-50",
+      text: "text-emerald-600",
+    },
+    {
+      label: "Active Students",
+      value: initialActiveStudents.toLocaleString(),
+      change: "Active",
+      changePct: "",
+      up: true,
+      icon: Users,
+      bg: "bg-blue-50",
+      text: "text-blue-600",
+    },
+    {
+      label: "Monthly Recurring Revenue",
+      value: "PKR 490K",
+      change: "+12.4%",
+      changePct: "growth",
+      up: true,
+      icon: CreditCard,
+      bg: "bg-violet-50",
+      text: "text-violet-600",
+    },
+    {
+      label: "Pending Approvals",
+      value: pendingList.length.toString(),
+      change: "Requires action",
+      changePct: "",
+      up: false,
+      icon: AlertCircle,
+      bg: "bg-amber-50",
+      text: "text-amber-600",
+    },
+  ];
 
-export function AdminDashboardContent() {
-  const [pendingList, setPendingList] = useState<PendingInstitute[]>(mockPending);
-  const [approvedCount, setApprovedCount] = useState(142);
-
-  const handleApprove = (id: string) => {
-    setPendingList(pendingList.filter((inst) => inst.id !== id));
-    setApprovedCount((prev) => prev + 1);
+  const handleApprove = async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/institutes/${id}/approve`, {
+        method: "POST"
+      });
+      if (res.ok) {
+        setPendingList(pendingList.filter((inst) => inst.id !== id));
+        setApprovedCount((prev) => prev + 1);
+        router.refresh();
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleReject = (id: string) => {
-    setPendingList(pendingList.filter((inst) => inst.id !== id));
+  const handleReject = async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/institutes/${id}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        setPendingList(pendingList.filter((inst) => inst.id !== id));
+        router.refresh();
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   return (
@@ -152,8 +152,6 @@ export function AdminDashboardContent() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, idx) => {
           const Icon = stat.icon;
-          const isPendingCard = stat.label === "Pending Approvals";
-          const displayValue = isPendingCard ? pendingList.length : (stat.label === "Total Institutes" ? approvedCount : stat.value);
           return (
             <div key={idx} className="kpi-card p-6 bg-white border border-gray-100 rounded-2xl shadow-sm flex flex-col justify-between">
               <div className="flex items-start justify-between">
@@ -165,7 +163,7 @@ export function AdminDashboardContent() {
                 </button>
               </div>
               <div className="mt-4">
-                <h3 className="text-3xl font-display font-bold text-gray-900">{displayValue}</h3>
+                <h3 className="text-3xl font-display font-bold text-gray-900">{stat.value}</h3>
                 <p className="text-sm text-gray-500 mt-1">{stat.label}</p>
               </div>
               <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold">
@@ -234,7 +232,7 @@ export function AdminDashboardContent() {
                 paddingAngle={4}
                 dataKey="value"
               >
-                {planData.map((entry, index) => (
+                {planData.map((entry: any, index: number) => (
                   <Cell key={index} fill={entry.color} />
                 ))}
               </Pie>
@@ -242,7 +240,7 @@ export function AdminDashboardContent() {
             </PieChart>
           </ResponsiveContainer>
           <div className="space-y-2.5 mt-4">
-            {planData.map((p) => (
+            {planData.map((p: any) => (
               <div key={p.name} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <span className="h-3 w-3 rounded-full" style={{ backgroundColor: p.color }} />

@@ -4,29 +4,18 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Star, CheckCircle2, Clock, BookOpen, Award, CalendarCheck, Flame } from "lucide-react";
 
-const JUZ_DATA = Array.from({ length: 30 }, (_, i) => ({
-  juz: i + 1,
-  completed: i < 12,
-  partial: i === 12,
-}));
+const BADGES: any[] = [];
 
-const TODAY_LESSON = {
-  sabaq: { surah: "Al-Anbiya", ayahs: "21:68–82", lines: 8, status: "COMPLETED" },
-  sabqi: { surah: "Ta-Ha", ayahs: "20:40–60", lines: 12, status: "PENDING" },
-  manzil: { surah: "Al-Baqarah", ayahs: "2:1–30", lines: 20, status: "PENDING" },
-};
-
-const BADGES = [
-  { icon: "🏆", name: "First Juz", earned: true },
-  { icon: "⭐", name: "Top Student", earned: true },
-  { icon: "📚", name: "50-Day Streak", earned: true },
-  { icon: "🎯", name: "Tajweed Master", earned: false },
-  { icon: "🌟", name: "Five Juz", earned: false },
-  { icon: "🔥", name: "100-Day Streak", earned: false },
-];
-
-export function StudentDashboardContent() {
+export function StudentDashboardContent({ initialStudent }: { initialStudent: any }) {
   const [activeTab, setActiveTab] = useState<"today" | "progress" | "badges">("today");
+
+  const JUZ_DATA = Array.from({ length: 30 }, (_, i) => ({
+    juz: i + 1,
+    completed: initialStudent ? i < initialStudent.currentJuz - 1 : false,
+    partial: initialStudent ? i === initialStudent.currentJuz - 1 : false,
+  }));
+
+  const TODAY_LESSON: any = null;
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -38,11 +27,11 @@ export function StudentDashboardContent() {
           </div>
           <div>
             <p className="text-green-100 text-sm">السَّلَامُ عَلَيْكُمْ</p>
-            <h2 className="font-display text-2xl font-bold text-white">Ahmad Raza Khan</h2>
+            <h2 className="font-display text-2xl font-bold text-white">{initialStudent?.name || "Student"}</h2>
             <div className="flex items-center gap-4 mt-2 text-sm text-green-100">
-              <span className="flex items-center gap-1"><Flame className="h-4 w-4 text-orange-300" /> 47-day streak</span>
-              <span className="flex items-center gap-1"><Star className="h-4 w-4 text-amber-300 fill-amber-300" /> 9.2 quality</span>
-              <span className="flex items-center gap-1"><BookOpen className="h-4 w-4" /> Juz 13/30</span>
+              <span className="flex items-center gap-1"><Flame className="h-4 w-4 text-orange-300" /> {initialStudent?.streak || 0}-day streak</span>
+              <span className="flex items-center gap-1"><Star className="h-4 w-4 text-amber-300 fill-amber-300" /> {initialStudent?.quality || 0} quality</span>
+              <span className="flex items-center gap-1"><BookOpen className="h-4 w-4" /> Juz {initialStudent?.currentJuz || 1}/30</span>
             </div>
           </div>
         </div>
@@ -72,32 +61,7 @@ export function StudentDashboardContent() {
       {activeTab === "today" && (
         <div className="space-y-4">
           <h3 className="font-semibold text-gray-900">Today's Schedule</h3>
-          {[
-            { type: "Sabaq (New Lesson)", data: TODAY_LESSON.sabaq, color: "border-l-green-500 bg-green-50" },
-            { type: "Sabqi (Recent Revision)", data: TODAY_LESSON.sabqi, color: "border-l-blue-500 bg-blue-50" },
-            { type: "Manzil (Long-term Revision)", data: TODAY_LESSON.manzil, color: "border-l-purple-500 bg-purple-50" },
-          ].map((item) => (
-            <div key={item.type} className={cn("rounded-xl border-l-4 p-5", item.color)}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{item.type}</p>
-                  <p className="font-semibold text-gray-900 mt-0.5">{item.data.surah}</p>
-                  <p className="text-sm text-gray-500">{item.data.ayahs} • {item.data.lines} lines</p>
-                </div>
-                {item.data.status === "COMPLETED" ? (
-                  <div className="flex items-center gap-1.5 pill pill-success">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Done
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 pill pill-warning">
-                    <Clock className="h-4 w-4" />
-                    Pending
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+          <p className="text-sm text-gray-500">No lessons scheduled for today.</p>
         </div>
       )}
 
@@ -120,16 +84,16 @@ export function StudentDashboardContent() {
               ))}
             </div>
             <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-primary rounded-full" style={{ width: "40%" }} />
+              <div className="h-full bg-gradient-primary rounded-full" style={{ width: `${initialStudent ? ((initialStudent.currentJuz - 1) / 30) * 100 : 0}%` }} />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             {[
-              { label: "Accuracy", value: "88%", icon: "🎯", color: "bg-blue-50 text-blue-700" },
-              { label: "Fluency", value: "8.5/10", icon: "🔊", color: "bg-green-50 text-green-700" },
-              { label: "Attendance", value: "97%", icon: "📅", color: "bg-purple-50 text-purple-700" },
-              { label: "Retention", value: "91%", icon: "🧠", color: "bg-amber-50 text-amber-700" },
+              { label: "Accuracy", value: "0%", icon: "🎯", color: "bg-blue-50 text-blue-700" },
+              { label: "Fluency", value: "0/10", icon: "🔊", color: "bg-green-50 text-green-700" },
+              { label: "Attendance", value: "0%", icon: "📅", color: "bg-purple-50 text-purple-700" },
+              { label: "Retention", value: "0%", icon: "🧠", color: "bg-amber-50 text-amber-700" },
             ].map((s) => (
               <div key={s.label} className={cn("rounded-2xl p-5", s.color)}>
                 <span className="text-2xl">{s.icon}</span>

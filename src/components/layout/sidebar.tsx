@@ -10,6 +10,7 @@ import {
   ClipboardList, DollarSign, MessageSquare, BarChart3, Settings,
   Building2, Shield, Bell, LogOut, ChevronRight, Star, Menu, X,
   Award, UserCheck, GitBranch, HeartHandshake, CreditCard, FileText,
+  Sparkles, Calendar,
 } from "lucide-react";
 
 interface NavItem {
@@ -58,6 +59,8 @@ const instituteNav: NavItem[] = [
   { label: "Teachers", href: "/institute/teachers", icon: UserCheck },
   { label: "Branches", href: "/institute/branches", icon: GitBranch },
   { label: "Communication", href: "/institute/communication", icon: MessageSquare },
+  { label: "Character Building", href: "/institute/character-building", icon: HeartHandshake },
+  { label: "Calendar", href: "/institute/calendar", icon: Calendar },
   { label: "Analytics", href: "/institute/analytics", icon: BarChart3 },
   { label: "Safeguarding", href: "/institute/safeguarding", icon: Shield },
   { label: "Settings", href: "/institute/settings", icon: Settings },
@@ -83,7 +86,10 @@ const teacherNav: NavItem[] = [
   { label: "Student Reports", href: "/teacher/reports", icon: FileText },
   { label: "Hifz Records", href: "/teacher/quran/hifz", icon: Star },
   { label: "Assessments", href: "/teacher/assessments", icon: ClipboardList },
+  { label: "Character Building", href: "/teacher/character-building", icon: HeartHandshake },
   { label: "Communication", href: "/teacher/communication", icon: MessageSquare },
+  { label: "Calendar", href: "/teacher/calendar", icon: Calendar },
+  { label: "Spiritual Tracker", href: "/teacher/worship", icon: Sparkles },
 ];
 
 const parentNav: NavItem[] = [
@@ -92,6 +98,8 @@ const parentNav: NavItem[] = [
   { label: "Attendance", href: "/parent/attendance", icon: CalendarCheck },
   { label: "Fees & Payments", href: "/parent/fees", icon: DollarSign },
   { label: "Messaging", href: "/parent/communication", icon: MessageSquare },
+  { label: "Spiritual Tracker", href: "/parent/worship", icon: Sparkles },
+  { label: "Calendar", href: "/parent/calendar", icon: Calendar },
 ];
 
 const studentNav: NavItem[] = [
@@ -99,6 +107,8 @@ const studentNav: NavItem[] = [
   { label: "Quran Hifz Map", href: "/student/quran/hifz", icon: BookOpen },
   { label: "Achievements", href: "/student/achievements", icon: Award },
   { label: "My Attendance", href: "/student/attendance", icon: CalendarCheck },
+  { label: "Spiritual Tracker", href: "/student/worship", icon: Sparkles },
+  { label: "Calendar", href: "/student/calendar", icon: Calendar },
 ];
 
 interface SidebarProps {

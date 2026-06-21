@@ -44,7 +44,7 @@ export function StudentAttendanceCalendar({
   const today = new Date().toISOString().slice(0, 10);
   const [month, setMonth] = useState(() => new Date().getMonth() + 1);
   const [year, setYear] = useState(() => new Date().getFullYear());
-  const [records, setRecords] = useState<Record<string, AttStatus>>({});
+  const [records, setRecords] = useState<Record<string, { status: AttStatus; leaveReason?: string | null; leaveRequestedBy?: string | null }>>({});
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -58,8 +58,14 @@ export function StudentAttendanceCalendar({
       const res = await fetch(`/api/${apiScope}/attendance?${params}`);
       if (!res.ok) return;
       const data = await res.json();
-      const map: Record<string, AttStatus> = {};
-      for (const r of data.records || []) map[r.date] = r.status;
+      const map: Record<string, { status: AttStatus; leaveReason?: string | null; leaveRequestedBy?: string | null }> = {};
+      for (const r of data.records || []) {
+        map[r.date] = {
+          status: r.status,
+          leaveReason: r.leaveReason,
+          leaveRequestedBy: r.leaveRequestedBy,
+        };
+      }
       setRecords(map);
     } finally {
       setLoading(false);
@@ -110,10 +116,18 @@ export function StudentAttendanceCalendar({
           <div className="grid grid-cols-7 gap-1">
             {days.map((cell, idx) => {
               if (!cell.inMonth) return <div key={`e-${idx}`} className="aspect-square" />;
-              const status = records[cell.date];
+              const rec = records[cell.date];
+              const status = rec?.status;
+              const titleText = status === "LEAVE"
+                ? `Leave - Requested by: ${rec.leaveRequestedBy || "N/A"}. Reason: ${rec.leaveReason || "N/A"}`
+                : status
+                ? status
+                : "No record";
+
               return (
                 <div
                   key={cell.date}
+                  title={titleText}
                   className={cn(
                     "aspect-square rounded-lg flex flex-col items-center justify-center text-[10px] border",
                     status ? STATUS_CAL[status] : "bg-gray-50 text-gray-400 border-gray-100",

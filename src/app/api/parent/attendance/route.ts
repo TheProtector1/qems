@@ -42,6 +42,8 @@ export async function GET(req: Request) {
       records: records.map((r) => ({
         date: r.date.toISOString().slice(0, 10),
         status: r.status,
+        leaveReason: r.leaveReason,
+        leaveRequestedBy: r.leaveRequestedBy,
       })),
     });
   } catch (error) {

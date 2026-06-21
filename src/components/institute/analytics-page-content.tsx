@@ -43,7 +43,10 @@ export function AnalyticsPageContent() {
         </div>
       </div>
 
-      <InstituteDashboardContent />
+      <InstituteDashboardContent 
+        initialTotalStudents={284} 
+        initialActiveTeachers={18} 
+      />
     </div>
   );
 }

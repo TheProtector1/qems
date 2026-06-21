@@ -46,7 +46,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if ((stage === "ENROLLED" || stage === "APPROVED") && !application.studentId) {
         // Generate studentId
         const count = await tx.student.count({
-          where: { instituteId: session.user.instituteId },
+          where: { instituteId: session.user.instituteId as string },
         });
         const studentId = `STU-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
 
@@ -66,7 +66,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
               role: "PARENT",
               isActive: true,
               mustChangePassword: true,
-              instituteId: session.user.instituteId,
+              instituteId: session.user.instituteId as string,
             },
           });
         }
@@ -92,7 +92,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
             role: "STUDENT",
             isActive: true,
             mustChangePassword: true,
-            instituteId: session.user.instituteId,
+            instituteId: session.user.instituteId as string,
           },
         });
 
@@ -107,7 +107,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
             address: application.address,
             programType: application.programType,
             admissionStatus: stage as any,
-            instituteId: session.user.instituteId,
+            instituteId: session.user.instituteId as string,
             parentId: parent.id,
             userId: studentUser.id,
             currentJuz: application.programType === "HIFZ" ? 1 : null,

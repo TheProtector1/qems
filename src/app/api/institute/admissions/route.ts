@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     });
     const applicationNo = `APP-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
 
-    let programType = ProgramType.HIFZ;
+    let programType: ProgramType = ProgramType.HIFZ;
     if (program.toUpperCase() === "NAZRA") programType = ProgramType.NAZRA;
     if (program.toUpperCase() === "TAJWEED") programType = ProgramType.TAJWEED;
 

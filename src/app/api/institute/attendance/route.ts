@@ -71,6 +71,8 @@ export async function GET(req: Request) {
           id: r.id,
           date: dateKey(r.date),
           status: r.status,
+          leaveReason: r.leaveReason,
+          leaveRequestedBy: r.leaveRequestedBy,
         })),
       });
     }

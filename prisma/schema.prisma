@@ -19,6 +19,7 @@ enum Role {
   INSTITUTE_OWNER
   BRANCH_MANAGER
   TEACHER
+  STAFF
   PARENT
   STUDENT
 }
@@ -216,6 +217,8 @@ model Institute {
   assessments       Assessment[]
   notifications     Notification[]
   auditLogs         AuditLog[]
+  characterTasks    CharacterTask[]
+  calendarEvents    CalendarEvent[]
 
   @@index([slug])
   @@index([isApproved])
@@ -275,6 +278,9 @@ model User {
   role            Role
   isActive        Boolean   @default(true)
   mustChangePassword Boolean @default(false)
+  staffRole       String?   // e.g. "Accountant", "Receptionist", "Cleaner"
+  phone           String?
+  salary          Decimal?  @db.Decimal(10, 2)
   instituteId     String?
   institute       Institute? @relation(fields: [instituteId], references: [id], onDelete: SetNull)
   branchId        String?
@@ -378,6 +384,7 @@ model Teacher {
   teacherAttendance TeacherAttendance[]
   assessments     Assessment[]
   feedbacks       TeacherFeedback[]
+  characterTaskProgress CharacterTaskProgress[]
 
   @@index([instituteId])
   @@index([branchId])
@@ -474,6 +481,8 @@ model Student {
   badges          StudentBadge[]
   qualityScores   HifzQualityScore[]
   admissionApplications AdmissionApplication[]
+  characterTaskProgress CharacterTaskProgress[]
+  dailyWorshipRecords   DailyWorshipRecord[]
 
   @@index([instituteId])
   @@index([branchId])
@@ -998,4 +1007,99 @@ model SupportTicket {
 
   @@index([instituteId])
   @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// CHARACTER BUILDING
+// ─────────────────────────────────────────────
+
+model CharacterTask {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  dueDate     DateTime @db.Date
+  isActive    Boolean  @default(true)
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  progress    CharacterTaskProgress[]
+
+  @@index([instituteId])
+}
+
+model CharacterTaskProgress {
+  id          String   @id @default(cuid())
+  status      String   @default("PENDING") // PENDING, COMPLETED
+  notes       String?
+  completedAt DateTime?
+  
+  taskId      String
+  task        CharacterTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  studentId   String
+  student     Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  teacherId   String?
+  teacher     Teacher? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([taskId, studentId])
+  @@index([taskId])
+  @@index([studentId])
+}
+
+// ─────────────────────────────────────────────
+// CALENDAR & SPIRITUAL TRACKING
+// ─────────────────────────────────────────────
+
+enum EventType {
+  HOLIDAY
+  EXAM
+  EVENT
+  ACADEMIC
+}
+
+model CalendarEvent {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  startDate   DateTime  @db.Date
+  endDate     DateTime  @db.Date
+  type        EventType
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([instituteId])
+  @@index([startDate])
+}
+
+model DailyWorshipRecord {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date
+  
+  // Prayers (True if offered)
+  fajr        Boolean  @default(false)
+  dhuhr       Boolean  @default(false)
+  asr         Boolean  @default(false)
+  maghrib     Boolean  @default(false)
+  isha        Boolean  @default(false)
+  
+  // Durood
+  duroodCount Int      @default(0)
+  
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  loggedById  String   // User ID who logged it (Student or Parent)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([studentId, date])
+  @@index([studentId])
 }

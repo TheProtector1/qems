@@ -86,7 +86,7 @@ export function StudentReportsPanel({ studentId, studentName, program, className
             <button
               key={opt.type}
               type="button"
-              disabled={downloading !== null || (opt.type === "hifz" && program && program !== "Hifz")}
+              disabled={downloading !== null || !!(opt.type === "hifz" && program && program !== "Hifz")}
               onClick={() => downloadReport(opt.type)}
               className="w-full flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-primary-200 hover:bg-primary-50/50 transition-all text-left disabled:opacity-50"
             >

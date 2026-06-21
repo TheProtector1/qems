@@ -12,40 +12,14 @@ import {
   BarChart, Bar, Legend
 } from "recharts";
 
-// ── Mock Data for Teacher Dashboard ───────────────────────────
-const INITIAL_STUDENTS = [
-  { id: "1", name: "Ahmad Raza Khan", program: "Hifz", class: "Hifz A", currentJuz: 13, lastType: "SABAQ", lastSurah: "Al-Anbiya", lastAyahs: "21:68–82", status: "On Track", rating: 5 },
-  { id: "2", name: "Fatima Noor", program: "Hifz", class: "Hifz A", currentJuz: 8, lastType: "SABQI", lastSurah: "Ta-Ha", lastAyahs: "20:40–60", status: "On Track", rating: 4 },
-  { id: "3", name: "Usman Ali", program: "Nazra", class: "Nazra B", currentJuz: 2, lastType: "SABAQ", lastSurah: "Al-Baqarah", lastAyahs: "2:284-286", status: "Needs Attention", rating: 3 },
-  { id: "4", name: "Zainab Hassan", program: "Hifz", class: "Hifz A", currentJuz: 22, lastType: "MANZIL", lastSurah: "Al-Kahf", lastAyahs: "18:1–30", status: "Excellent", rating: 5 },
-  { id: "5", name: "Ibrahim Sheikh", program: "Tajweed", class: "Tajweed Intermediate", currentJuz: null, lastType: "RULE", lastSurah: "Al-Muzzammil", lastAyahs: "73:1-10", status: "On Track", rating: 4 },
-  { id: "6", name: "Omar Farooq", program: "Hifz", class: "Hifz A", currentJuz: 15, lastType: "SABAQ", lastSurah: "Al-Isra", lastAyahs: "17:1-12", status: "On Track", rating: 4 },
-  { id: "7", name: "Aisha Siddiqa", program: "Hifz", class: "Hifz A", currentJuz: 5, lastType: "SABQI", lastSurah: "An-Nisa", lastAyahs: "4:100-115", status: "Needs Attention", rating: 2 },
-];
-
-const CLASSES = [
-  { id: "c1", name: "Hifz A", program: "Hifz", studentsCount: 12, time: "08:00 AM - 12:00 PM" },
-  { id: "c2", name: "Nazra B", program: "Nazra", studentsCount: 8, time: "02:00 PM - 04:00 PM" },
-  { id: "c3", name: "Tajweed Intermediate", program: "Tajweed", studentsCount: 6, time: "04:30 PM - 06:00 PM" },
-];
-
-const WEEKLY_PERFORMANCE = [
-  { day: "Mon", avgRating: 4.2, attendance: 95 },
-  { day: "Tue", avgRating: 4.5, attendance: 98 },
-  { day: "Wed", avgRating: 4.1, attendance: 92 },
-  { day: "Thu", avgRating: 4.6, attendance: 100 },
-  { day: "Fri", avgRating: 4.4, attendance: 96 },
-  { day: "Sat", avgRating: 4.3, attendance: 95 },
-];
-
-const SABAQ_STATS = [
-  { category: "Sabaq", completed: 18, pending: 4 },
-  { category: "Sabqi", completed: 16, pending: 6 },
-  { category: "Manzil", completed: 19, pending: 3 },
-];
-
-export function TeacherDashboardContent() {
-  const [students, setStudents] = useState(INITIAL_STUDENTS);
+export function TeacherDashboardContent({
+  initialStudents,
+  initialClasses
+}: {
+  initialStudents: any[];
+  initialClasses: any[];
+}) {
+  const [students, setStudents] = useState(initialStudents);
   const [activeTab, setActiveTab] = useState<"overview" | "class-list" | "log-lesson">("overview");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClass, setSelectedClass] = useState("All");
@@ -62,17 +36,10 @@ export function TeacherDashboardContent() {
     remarks: "",
   });
 
-  const [notifications, setNotifications] = useState([
-    { id: 1, type: "absent", text: "Aisha Siddiqa has been absent for 2 consecutive days.", time: "1 hour ago" },
-    { id: 2, type: "progress", text: "Zainab Hassan completed Juz 22 with excellent score (5★).", time: "2 hours ago" },
-    { id: 3, type: "warning", text: "Usman Ali needs extra attention in Tajweed rules.", time: "Yesterday" },
-  ]);
-
-  const [lessonsLog, setLessonsLog] = useState([
-    { id: "l1", name: "Ahmad Raza Khan", type: "SABAQ", surah: "Al-Anbiya", ayahs: "21:68-82", rating: 5, mistakes: 0, time: "Today 09:15 AM" },
-    { id: "l2", name: "Fatima Noor", type: "SABQI", surah: "Ta-Ha", ayahs: "20:40-60", rating: 4, mistakes: 2, time: "Today 09:30 AM" },
-    { id: "l3", name: "Zainab Hassan", type: "MANZIL", surah: "Al-Kahf", ayahs: "18:1-30", rating: 5, mistakes: 1, time: "Today 10:05 AM" },
-  ]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [lessonsLog, setLessonsLog] = useState<any[]>([]);
+  const WEEKLY_PERFORMANCE: any[] = [];
+  const SABAQ_STATS: any[] = [];
 
   const handleLogSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,10 +127,10 @@ export function TeacherDashboardContent() {
       {/* ── KPI Grid ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "My Students", value: "26", sub: "3 Classes", icon: Users, color: "from-blue-500 to-blue-600", bg: "bg-blue-50", text: "text-blue-600" },
-          { label: "Attendance Today", value: "96.1%", sub: "25 Present / 1 Absent", icon: CalendarCheck, color: "from-emerald-500 to-emerald-600", bg: "bg-emerald-50", text: "text-emerald-600" },
-          { label: "Lessons Logged Today", value: "18 / 26", sub: "8 pending", icon: BookOpenCheck, color: "from-violet-500 to-violet-600", bg: "bg-violet-50", text: "text-violet-600" },
-          { label: "Avg Quality Score", value: "8.8 / 10", sub: "9.2 target", icon: Star, color: "from-amber-500 to-amber-600", bg: "bg-amber-50", text: "text-amber-600" },
+          { label: "My Students", value: students.length.toString(), sub: `${initialClasses.length} Classes`, icon: Users, color: "from-blue-500 to-blue-600", bg: "bg-blue-50", text: "text-blue-600" },
+          { label: "Attendance Today", value: "N/A", sub: "Data pending", icon: CalendarCheck, color: "from-emerald-500 to-emerald-600", bg: "bg-emerald-50", text: "text-emerald-600" },
+          { label: "Lessons Logged Today", value: "0", sub: "0 pending", icon: BookOpenCheck, color: "from-violet-500 to-violet-600", bg: "bg-violet-50", text: "text-violet-600" },
+          { label: "Avg Quality Score", value: "N/A", sub: "N/A", icon: Star, color: "from-amber-500 to-amber-600", bg: "bg-amber-50", text: "text-amber-600" },
         ].map((kpi, idx) => {
           const Icon = kpi.icon;
           return (
@@ -209,7 +176,7 @@ export function TeacherDashboardContent() {
             <div className="dash-card p-6">
               <h3 className="font-semibold text-gray-900 mb-4">My Schedule & Active Classes</h3>
               <div className="space-y-3">
-                {CLASSES.map((c) => (
+                {initialClasses.length > 0 ? initialClasses.map((c) => (
                   <div key={c.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-gray-50 border border-gray-100 gap-3">
                     <div>
                       <p className="font-bold text-gray-900 text-base">{c.name}</p>
@@ -228,7 +195,9 @@ export function TeacherDashboardContent() {
                       </button>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <p className="text-sm text-gray-500">No classes assigned yet.</p>
+                )}
               </div>
             </div>
 
@@ -256,7 +225,7 @@ export function TeacherDashboardContent() {
             <div className="dash-card p-6">
               <h3 className="font-semibold text-gray-900 mb-4">Today's Activity Feed</h3>
               <div className="space-y-3">
-                {lessonsLog.map((log) => (
+                {lessonsLog.length > 0 ? lessonsLog.map((log) => (
                   <div key={log.id} className="flex items-center justify-between p-3.5 rounded-xl bg-gray-50 border border-gray-100">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-gray-900">{log.name}</p>
@@ -281,7 +250,9 @@ export function TeacherDashboardContent() {
                       <p className="text-[10px] text-gray-400">{log.time} • {log.mistakes} mistakes</p>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <p className="text-sm text-gray-500">No lessons logged today.</p>
+                )}
               </div>
             </div>
           </div>
@@ -292,7 +263,7 @@ export function TeacherDashboardContent() {
             <div className="dash-card p-6">
               <h3 className="font-semibold text-gray-900 mb-4">🔔 Action Required</h3>
               <div className="space-y-3.5">
-                {notifications.map((n) => (
+                {notifications.length > 0 ? notifications.map((n) => (
                   <div key={n.id} className="flex items-start gap-3 p-3 rounded-xl bg-amber-50/50 border border-amber-100">
                     <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
@@ -300,7 +271,9 @@ export function TeacherDashboardContent() {
                       <p className="text-[10px] text-amber-600/70 mt-1">{n.time}</p>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <p className="text-sm text-gray-500">No new notifications.</p>
+                )}
               </div>
             </div>
 
@@ -357,9 +330,9 @@ export function TeacherDashboardContent() {
                 className="form-input w-40 h-10 text-xs py-1"
               >
                 <option value="All">All Classes</option>
-                <option value="Hifz A">Hifz A</option>
-                <option value="Nazra B">Nazra B</option>
-                <option value="Tajweed Intermediate">Tajweed Intermediate</option>
+                {initialClasses.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
               </select>
             </div>
           </div>

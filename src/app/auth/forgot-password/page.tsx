@@ -8,14 +8,28 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to send reset link");
+      }
       setSubmitted(true);
-    }, 1200);
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -56,6 +70,11 @@ export default function ForgotPasswordPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4">
+                  {error}
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1">
                   <Mail className="h-3.5 w-3.5 text-gray-400" /> Account Email Address
