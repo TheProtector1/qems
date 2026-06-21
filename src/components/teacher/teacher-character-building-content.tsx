@@ -202,12 +202,12 @@ export function TeacherCharacterBuildingContent() {
                       </div>
                       
                       <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Teacher Notes (Optional)</label>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Completion Feedback / Notes</label>
                         <textarea
                           rows={3}
                           value={notes}
                           onChange={e => setNotes(e.target.value)}
-                          placeholder="e.g. Needs more focus, performed excellently..."
+                          placeholder="Provide details on how the task was completed, student's behavior, or lessons taught..."
                           className="form-input w-full text-sm"
                         />
                       </div>

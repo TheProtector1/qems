@@ -14,12 +14,35 @@ export async function GET(req: Request) {
     const instituteId = session.user.instituteId;
     if (!instituteId) return new NextResponse("Institute Not Found", { status: 400 });
 
-    const tasks = await prisma.characterTask.findMany({
-      where: { instituteId },
-      orderBy: { createdAt: "desc" },
-    });
+    const [tasks, students] = await Promise.all([
+      prisma.characterTask.findMany({
+        where: { instituteId },
+        include: {
+          progress: {
+            include: {
+              student: {
+                select: { id: true, fullName: true, studentId: true }
+              },
+              teacher: {
+                include: {
+                  user: {
+                    select: { name: true }
+                  }
+                }
+              }
+            }
+          }
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.student.findMany({
+        where: { instituteId, isActive: true },
+        select: { id: true, fullName: true, studentId: true },
+        orderBy: { fullName: "asc" }
+      })
+    ]);
 
-    return NextResponse.json(tasks);
+    return NextResponse.json({ tasks, students });
   } catch (error) {
     console.error("[CHARACTER_TASKS_GET]", error);
     return new NextResponse("Internal Error", { status: 500 });
