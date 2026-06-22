@@ -67,6 +67,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
               isActive: true,
               mustChangePassword: true,
               instituteId: session.user.instituteId as string,
+              emailVerified: new Date(),
             },
           });
         }
@@ -93,6 +94,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
             isActive: true,
             mustChangePassword: true,
             instituteId: session.user.instituteId as string,
+            emailVerified: new Date(),
           },
         });
 

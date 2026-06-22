@@ -62,6 +62,7 @@ export async function POST(req: Request) {
         staffRole: staffRole || null,
         phone: phone || null,
         image: image || null,
+        emailVerified: new Date(),
       },
     });
     return NextResponse.json({ success: true, staff: user });

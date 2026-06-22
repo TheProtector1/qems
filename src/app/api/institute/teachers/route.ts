@@ -72,6 +72,7 @@ export async function POST(req: Request) {
           isActive: true,
           image: image || null,
           instituteId: session.user.instituteId as string,
+          emailVerified: new Date(),
         },
       });
 

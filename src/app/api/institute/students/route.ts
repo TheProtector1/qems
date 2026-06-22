@@ -186,6 +186,7 @@ export async function POST(req: Request) {
             isActive: true,
             mustChangePassword: true,
             instituteId,
+            emailVerified: new Date(),
           },
         });
       }
@@ -213,6 +214,7 @@ export async function POST(req: Request) {
           mustChangePassword: true,
           instituteId,
           image: photo || null,
+          emailVerified: new Date(),
         },
       });
 
