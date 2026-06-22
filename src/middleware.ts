@@ -33,6 +33,34 @@ const publicApiRoutes = ["/api/auth", "/api/register", "/api/webhook"];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Detect if the cookie header is too large to prevent 494 REQUEST_HEADER_TOO_LARGE on Vercel lambda gateway
+  const cookieHeader = request.headers.get("cookie") || "";
+  if (cookieHeader.length > 3000) {
+    const response = NextResponse.redirect(new URL("/auth/login", request.url));
+    const cookiesToClear = [
+      "next-auth.session-token",
+      "next-auth.session-token.0",
+      "next-auth.session-token.1",
+      "next-auth.session-token.2",
+      "next-auth.session-token.3",
+      "next-auth.session-token.4",
+      "__Secure-next-auth.session-token",
+      "__Secure-next-auth.session-token.0",
+      "__Secure-next-auth.session-token.1",
+      "__Secure-next-auth.session-token.2",
+      "__Secure-next-auth.session-token.3",
+      "__Secure-next-auth.session-token.4",
+    ];
+    for (const cookieName of cookiesToClear) {
+      response.cookies.delete(cookieName);
+      response.headers.append(
+        "Set-Cookie",
+        `${cookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0`
+      );
+    }
+    return response;
+  }
+
   // Allow public API routes
   if (publicApiRoutes.some((route) => pathname.startsWith(route))) {
     return NextResponse.next();

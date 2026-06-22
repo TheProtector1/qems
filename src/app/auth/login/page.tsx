@@ -16,10 +16,36 @@ function LoginContent() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleResendVerification = async () => {
+    if (!form.email) return;
+    setResending(true);
+    setResendStatus(null);
+    try {
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setResendStatus({ success: false, message: data.error || "Failed to resend verification email." });
+      } else {
+        setResendStatus({ success: true, message: data.message || "Verification email sent!" });
+      }
+    } catch {
+      setResendStatus({ success: false, message: "An unexpected error occurred. Please try again." });
+    } finally {
+      setResending(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setResendStatus(null);
     setLoading(true);
 
     try {
@@ -128,9 +154,28 @@ function LoginContent() {
             </div>
 
             {error && (
-              <div className="mb-6 flex items-center gap-3 rounded-xl bg-red-50 border border-red-200 p-4">
-                <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                <p className="text-red-700 text-sm">{error}</p>
+              <div className="mb-6 flex flex-col gap-2 rounded-xl bg-red-50 border border-red-200 p-4">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                  <p className="text-red-700 text-sm">{error}</p>
+                </div>
+                {error.toLowerCase().includes("verify your email") && (
+                  <div className="mt-1 pl-8">
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      disabled={resending}
+                      className="text-xs font-semibold text-primary-700 hover:text-primary-950 underline disabled:opacity-50 text-left"
+                    >
+                      {resending ? "Resending..." : "Click here to resend verification email"}
+                    </button>
+                  </div>
+                )}
+                {resendStatus && (
+                  <p className={`text-xs mt-1 pl-8 font-medium ${resendStatus.success ? "text-green-600" : "text-red-600"}`}>
+                    {resendStatus.message}
+                  </p>
+                )}
               </div>
             )}
 

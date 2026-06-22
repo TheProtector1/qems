@@ -189,6 +189,11 @@ export async function POST(req: Request) {
             emailVerified: new Date(),
           },
         });
+      } else if (!parentUser.emailVerified) {
+        parentUser = await tx.user.update({
+          where: { id: parentUser.id },
+          data: { emailVerified: new Date() },
+        });
       }
 
       let parent = await tx.parent.findUnique({ where: { userId: parentUser.id } });
