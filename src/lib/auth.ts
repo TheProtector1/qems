@@ -67,7 +67,10 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           name: user.name,
-          image: user.image,
+          // NOTE: Do NOT include `image` here — base64 images stored in the JWT
+          // cause 494 REQUEST_HEADER_TOO_LARGE on Vercel. Profile photos are
+          // fetched on-demand from /api/profile instead.
+          image: null,
           role: user.role,
           instituteId: user.instituteId,
           instituteSlug: user.institute?.slug || null,
@@ -87,6 +90,15 @@ export const authOptions: NextAuthOptions = {
         token.instituteName = (user as any).instituteName;
         token.mustChangePassword = (user as any).mustChangePassword ?? false;
       }
+
+      // Clean up base64 image strings from NextAuth JWT to prevent 494 REQUEST_HEADER_TOO_LARGE cookie bloat
+      if (token.picture && typeof token.picture === "string" && token.picture.startsWith("data:")) {
+        token.picture = null;
+      }
+      if ((token as any).image && typeof (token as any).image === "string" && (token as any).image.startsWith("data:")) {
+        (token as any).image = null;
+      }
+
       if (trigger === "update" && session?.mustChangePassword !== undefined) {
         token.mustChangePassword = session.mustChangePassword as boolean;
       }
@@ -100,6 +112,9 @@ export const authOptions: NextAuthOptions = {
         session.user.instituteSlug = token.instituteSlug as string;
         session.user.instituteName = token.instituteName as string;
         session.user.mustChangePassword = Boolean(token.mustChangePassword);
+        // Explicitly clear image from session — profile photos are fetched
+        // on-demand from /api/profile to keep the session cookie small.
+        session.user.image = null;
       }
       return session;
     },

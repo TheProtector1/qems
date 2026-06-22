@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn, getInitials } from "@/lib/utils";
 import {
   LayoutDashboard, Users, GraduationCap, BookOpen, CalendarCheck,
@@ -184,6 +184,18 @@ function NavItemRow({
 export function Sidebar({ collapsed, onCollapse }: SidebarProps) {
   const { data: session } = useSession();
   const role = session?.user?.role;
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (session?.user?.image) {
+      setProfileImage(session.user.image);
+    } else if (session?.user) {
+      fetch("/api/profile")
+        .then((res) => res.json())
+        .then((data) => { if (data.image) setProfileImage(data.image); })
+        .catch(console.error);
+    }
+  }, [session]);
 
   let currentNav = instituteNav;
   if (role === "SUPER_ADMIN") {
@@ -240,8 +252,8 @@ export function Sidebar({ collapsed, onCollapse }: SidebarProps) {
       <div className="border-t border-border p-3">
         {!collapsed ? (
           <div className="flex items-center gap-3">
-            {session?.user?.image ? (
-              <img src={session.user.image} alt="User Avatar" className="h-9 w-9 rounded-full object-cover ring-1 ring-gray-200 flex-shrink-0" />
+            {profileImage ? (
+              <img src={profileImage} alt="User Avatar" className="h-9 w-9 rounded-full object-cover ring-1 ring-gray-200 flex-shrink-0" />
             ) : (
               <div className="h-9 w-9 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
                 <span className="text-white text-xs font-bold">

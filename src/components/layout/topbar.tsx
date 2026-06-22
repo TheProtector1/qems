@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { Bell, Search, Sun, Moon, ChevronDown } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -17,6 +17,20 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
   const { theme, setTheme } = useTheme();
   const [notifOpen, setNotifOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (session?.user?.image) {
+      setProfileImage(session.user.image);
+    } else if (session?.user) {
+      fetch("/api/profile")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.image) setProfileImage(data.image);
+        })
+        .catch(console.error);
+    }
+  }, [session]);
 
   const roleLabel: Record<string, string> = {
     SUPER_ADMIN: "Super Admin",
@@ -118,8 +132,8 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
 
         {/* User avatar */}
         <div className="flex items-center gap-2 pl-2 border-l border-border cursor-pointer hover:bg-gray-50 rounded-xl px-3 py-1.5 transition-colors">
-          {session?.user?.image ? (
-            <img src={session.user.image} alt="User Avatar" className="h-8 w-8 rounded-full object-cover ring-1 ring-gray-200" />
+          {profileImage ? (
+            <img src={profileImage} alt="User Avatar" className="h-8 w-8 rounded-full object-cover ring-1 ring-gray-200" />
           ) : (
             <div className="h-8 w-8 rounded-full bg-gradient-primary flex items-center justify-center">
               <span className="text-white text-xs font-bold">
