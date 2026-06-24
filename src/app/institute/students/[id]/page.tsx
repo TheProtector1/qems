@@ -335,7 +335,18 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
           />
         )}
 
-        <StudentAttendanceCalendar studentId={student.id} />
+        <StudentAttendanceCalendar
+          studentId={student.id}
+          compact
+          student={{
+            id: student.id,
+            fullName: student.fullName,
+            studentId: student.studentId,
+            photo: student.photo,
+            gender: student.gender,
+            programType: student.programType,
+          }}
+        />
 
         <StudentReportsPanel
           studentId={student.id}

@@ -1,0 +1,111 @@
+import { CheckCircle2, X, Clock, AlertTriangle } from "lucide-react";
+
+export type AttStatus = "PRESENT" | "ABSENT" | "LATE" | "LEAVE";
+
+export const ATTENDANCE_STATUS: Record<
+  AttStatus,
+  {
+    label: string;
+    fullLabel: string;
+    icon: typeof CheckCircle2;
+    pill: string;
+    cal: string;
+    dot: string;
+    gradient: string;
+    bg: string;
+    text: string;
+    border: string;
+    btn: string;
+  }
+> = {
+  PRESENT: {
+    label: "P",
+    fullLabel: "Present",
+    icon: CheckCircle2,
+    pill: "pill-success",
+    cal: "bg-green-100 text-green-700 border-green-200",
+    dot: "bg-green-500",
+    gradient: "from-green-500 to-emerald-600",
+    bg: "bg-green-50",
+    text: "text-green-700",
+    border: "border-green-200",
+    btn: "bg-green-500 text-white ring-green-300",
+  },
+  ABSENT: {
+    label: "A",
+    fullLabel: "Absent",
+    icon: X,
+    pill: "pill-danger",
+    cal: "bg-red-100 text-red-700 border-red-200",
+    dot: "bg-red-500",
+    gradient: "from-red-500 to-rose-600",
+    bg: "bg-red-50",
+    text: "text-red-700",
+    border: "border-red-200",
+    btn: "bg-red-500 text-white ring-red-300",
+  },
+  LATE: {
+    label: "L",
+    fullLabel: "Late",
+    icon: Clock,
+    pill: "pill-warning",
+    cal: "bg-amber-100 text-amber-700 border-amber-200",
+    dot: "bg-amber-500",
+    gradient: "from-amber-500 to-orange-500",
+    bg: "bg-amber-50",
+    text: "text-amber-800",
+    border: "border-amber-200",
+    btn: "bg-amber-500 text-white ring-amber-300",
+  },
+  LEAVE: {
+    label: "LV",
+    fullLabel: "Leave",
+    icon: AlertTriangle,
+    pill: "pill-info",
+    cal: "bg-blue-100 text-blue-700 border-blue-200",
+    dot: "bg-blue-500",
+    gradient: "from-blue-500 to-indigo-600",
+    bg: "bg-blue-50",
+    text: "text-blue-700",
+    border: "border-blue-200",
+    btn: "bg-blue-500 text-white ring-blue-300",
+  },
+};
+
+export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export type DayRecord = {
+  id?: string;
+  status: AttStatus;
+  leaveReason?: string | null;
+  leaveRequestedBy?: string | null;
+};
+
+export function buildCalendarDays(year: number, month: number) {
+  const first = new Date(year, month - 1, 1);
+  const last = new Date(year, month, 0);
+  const days: Array<{ date: string; day: number; inMonth: boolean }> = [];
+  for (let i = 0; i < first.getDay(); i++) days.push({ date: "", day: 0, inMonth: false });
+  for (let d = 1; d <= last.getDate(); d++) {
+    const dt = new Date(year, month - 1, d);
+    days.push({ date: dt.toISOString().slice(0, 10), day: d, inMonth: true });
+  }
+  return days;
+}
+
+export function computeMonthStats(records: Record<string, DayRecord>) {
+  const values = Object.values(records);
+  const present = values.filter((r) => r.status === "PRESENT").length;
+  const absent = values.filter((r) => r.status === "ABSENT").length;
+  const late = values.filter((r) => r.status === "LATE").length;
+  const leave = values.filter((r) => r.status === "LEAVE").length;
+  const marked = values.length;
+  const rate = marked ? Math.round(((present + late) / marked) * 100) : 0;
+  return { present, absent, late, leave, marked, rate };
+}
+
+export function programLabel(type?: string) {
+  if (type === "NAZRA") return "Nazra";
+  if (type === "TAJWEED") return "Tajweed";
+  return "Hifz";
+}

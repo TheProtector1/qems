@@ -70,6 +70,7 @@ export async function POST(req: Request) {
           password: hashedPassword,
           role: "TEACHER",
           isActive: true,
+          mustChangePassword: true,
           image: image || null,
           instituteId: session.user.instituteId as string,
           emailVerified: new Date(),

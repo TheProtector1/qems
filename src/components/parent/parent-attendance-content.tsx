@@ -4,7 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Users } from "lucide-react";
 import { StudentAttendanceCalendar } from "@/components/institute/student-attendance-calendar";
 
-type ChildOption = { id: string; fullName: string; studentId: string };
+type ChildOption = {
+  id: string;
+  fullName: string;
+  studentId: string;
+  photo?: string | null;
+  gender?: string;
+  programType?: string;
+};
 
 export function ParentAttendanceContent() {
   const [children, setChildren] = useState<ChildOption[]>([]);
@@ -19,18 +26,18 @@ export function ParentAttendanceContent() {
       const data = await res.json();
       const list: ChildOption[] = data.children || [];
       setChildren(list);
-      if (list.length && !selectedId) setSelectedId(list[0].id);
+      setSelectedId((prev) => prev || list[0]?.id || "");
     } finally {
       setLoading(false);
     }
-  }, [selectedId]);
+  }, []);
 
   useEffect(() => { loadChildren(); }, [loadChildren]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-gray-400">
-        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading…
+        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading attendance…
       </div>
     );
   }
@@ -46,23 +53,14 @@ export function ParentAttendanceContent() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm font-medium text-gray-700">Select child</label>
-        <select
-          className="form-input w-auto min-w-[220px]"
-          value={selectedId}
-          onChange={(e) => setSelectedId(e.target.value)}
-        >
-          {children.map((c) => (
-            <option key={c.id} value={c.id}>{c.fullName} ({c.studentId})</option>
-          ))}
-        </select>
-      </div>
-
-      {selectedId && (
-        <StudentAttendanceCalendar studentId={selectedId} apiScope="parent" />
-      )}
-    </div>
+    <StudentAttendanceCalendar
+      studentId={selectedId}
+      apiScope="parent"
+      students={children}
+      selectedStudentId={selectedId}
+      onStudentChange={setSelectedId}
+      student={children.find((c) => c.id === selectedId)}
+      readOnly
+    />
   );
 }

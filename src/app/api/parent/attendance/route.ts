@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { assertParentOwnsStudent, getParentChildIds } from "@/lib/parent-portal-data";
+import { assertParentOwnsStudent } from "@/lib/parent-portal-data";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +18,23 @@ export async function GET(req: Request) {
     const year = Number(searchParams.get("year") || new Date().getFullYear());
 
     if (!studentId) {
-      const children = await getParentChildIds(session.user.id);
-      return NextResponse.json({ children });
+      const parent = await prisma.parent.findUnique({
+        where: { userId: session.user.id },
+        include: {
+          students: {
+            select: {
+              id: true,
+              fullName: true,
+              studentId: true,
+              photo: true,
+              gender: true,
+              programType: true,
+            },
+            orderBy: { fullName: "asc" },
+          },
+        },
+      });
+      return NextResponse.json({ children: parent?.students ?? [] });
     }
 
     const allowed = await assertParentOwnsStudent(session.user.id, studentId);

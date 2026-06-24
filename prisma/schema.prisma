@@ -385,6 +385,7 @@ model Teacher {
   assessments     Assessment[]
   feedbacks       TeacherFeedback[]
   characterTaskProgress CharacterTaskProgress[]
+  characterTaskAssignments CharacterTaskAssignment[]
 
   @@index([instituteId])
   @@index([branchId])
@@ -1020,6 +1021,8 @@ model CharacterTask {
   id          String   @id @default(cuid())
   title       String
   description String?
+  category    String   @default("AKHLAAQ") // AKHLAAQ, ADAB, RESPONSIBILITY, WORSHIP, SOCIAL
+  priority    String   @default("NORMAL")  // HIGH, NORMAL, LOW
   dueDate     DateTime @db.Date
   isActive    Boolean  @default(true)
   instituteId String
@@ -1028,15 +1031,30 @@ model CharacterTask {
   updatedAt   DateTime @updatedAt
 
   progress    CharacterTaskProgress[]
+  assignments CharacterTaskAssignment[]
 
   @@index([instituteId])
 }
 
+model CharacterTaskAssignment {
+  id         String   @id @default(cuid())
+  taskId     String
+  task       CharacterTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  teacherId  String
+  teacher    Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  assignedAt DateTime @default(now())
+
+  @@unique([taskId, teacherId])
+  @@index([taskId])
+  @@index([teacherId])
+}
+
 model CharacterTaskProgress {
   id          String   @id @default(cuid())
-  status      String   @default("PENDING") // PENDING, COMPLETED
+  status      String   @default("PENDING") // PENDING, TAUGHT, COMPLETED
   notes       String?
   completedAt DateTime?
+  taughtAt    DateTime?
   
   taskId      String
   task        CharacterTask @relation(fields: [taskId], references: [id], onDelete: Cascade)

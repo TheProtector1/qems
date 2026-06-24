@@ -4,7 +4,25 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+const taskInclude = {
+  assignments: {
+    include: {
+      teacher: {
+        include: {
+          user: { select: { id: true, name: true, image: true } },
+        },
+      },
+    },
+  },
+  progress: {
+    include: {
+      student: { select: { id: true, fullName: true, studentId: true } },
+      teacher: { include: { user: { select: { name: true } } } },
+    },
+  },
+} as const;
+
+export async function GET() {
   try {
     const session = await getAuthSession();
     if (!session || session.user.role !== "INSTITUTE_OWNER") {
@@ -14,35 +32,28 @@ export async function GET(req: Request) {
     const instituteId = session.user.instituteId;
     if (!instituteId) return new NextResponse("Institute Not Found", { status: 400 });
 
-    const [tasks, students] = await Promise.all([
+    const [tasks, students, teachers] = await Promise.all([
       prisma.characterTask.findMany({
         where: { instituteId },
-        include: {
-          progress: {
-            include: {
-              student: {
-                select: { id: true, fullName: true, studentId: true }
-              },
-              teacher: {
-                include: {
-                  user: {
-                    select: { name: true }
-                  }
-                }
-              }
-            }
-          }
-        },
-        orderBy: { createdAt: "desc" },
+        include: taskInclude,
+        orderBy: [{ isActive: "desc" }, { dueDate: "asc" }],
       }),
       prisma.student.findMany({
         where: { instituteId, isActive: true },
-        select: { id: true, fullName: true, studentId: true },
-        orderBy: { fullName: "asc" }
-      })
+        select: { id: true, fullName: true, studentId: true, teacherId: true },
+        orderBy: { fullName: "asc" },
+      }),
+      prisma.teacher.findMany({
+        where: { instituteId, isActive: true },
+        include: {
+          user: { select: { id: true, name: true, image: true } },
+          _count: { select: { students: true } },
+        },
+        orderBy: { user: { name: "asc" } },
+      }),
     ]);
 
-    return NextResponse.json({ tasks, students });
+    return NextResponse.json({ tasks, students, teachers });
   } catch (error) {
     console.error("[CHARACTER_TASKS_GET]", error);
     return new NextResponse("Internal Error", { status: 500 });
@@ -60,19 +71,31 @@ export async function POST(req: Request) {
     if (!instituteId) return new NextResponse("Institute Not Found", { status: 400 });
 
     const body = await req.json();
-    const { title, description, dueDate } = body;
+    const { title, description, dueDate, category, priority, teacherIds } = body;
 
     if (!title || !dueDate) {
       return new NextResponse("Missing required fields", { status: 400 });
     }
 
+    const validTeacherIds = Array.isArray(teacherIds)
+      ? teacherIds.filter((id: unknown): id is string => typeof id === "string")
+      : [];
+
     const task = await prisma.characterTask.create({
       data: {
         title,
-        description,
+        description: description || null,
         dueDate: new Date(dueDate),
+        category: category || "AKHLAAQ",
+        priority: priority || "NORMAL",
         instituteId,
+        assignments: validTeacherIds.length
+          ? {
+              create: validTeacherIds.map((teacherId: string) => ({ teacherId })),
+            }
+          : undefined,
       },
+      include: taskInclude,
     });
 
     return NextResponse.json(task);

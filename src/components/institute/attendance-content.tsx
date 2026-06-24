@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarCheck, Save, CheckCircle2, X, Clock,
-  AlertTriangle, Download, ChevronLeft, ChevronRight,
+  AlertTriangle, Download,
   Loader2, RefreshCw, Users,
 } from "lucide-react";
 import { cn, formatDate, downloadCsv } from "@/lib/utils";
 import { StudentAvatar } from "@/components/common/student-avatar";
-
-type AttStatus = "PRESENT" | "ABSENT" | "LATE" | "LEAVE";
+import { StudentAttendanceCalendar } from "@/components/institute/student-attendance-calendar";
+import { ATTENDANCE_STATUS, type AttStatus } from "@/lib/attendance-status";
 
 type StudentRow = {
   id: string;
@@ -20,12 +20,7 @@ type StudentRow = {
   programType: string;
 };
 
-const STATUS_CONFIG = {
-  PRESENT: { label: "P", fullLabel: "Present", icon: CheckCircle2, color: "bg-green-500 text-white ring-green-300", pill: "pill-success", cal: "bg-green-100 text-green-700 border-green-200" },
-  ABSENT: { label: "A", fullLabel: "Absent", icon: X, color: "bg-red-500 text-white ring-red-300", pill: "pill-danger", cal: "bg-red-100 text-red-700 border-red-200" },
-  LATE: { label: "L", fullLabel: "Late", icon: Clock, color: "bg-amber-500 text-white ring-amber-300", pill: "pill-warning", cal: "bg-amber-100 text-amber-700 border-amber-200" },
-  LEAVE: { label: "LV", fullLabel: "Leave", icon: AlertTriangle, color: "bg-blue-500 text-white ring-blue-300", pill: "pill-info", cal: "bg-blue-100 text-blue-700 border-blue-200" },
-};
+const STATUS_CONFIG = ATTENDANCE_STATUS;
 
 const PROGRAM_FILTERS = [
   { value: "ALL", label: "All Programs" },
@@ -34,33 +29,10 @@ const PROGRAM_FILTERS = [
   { value: "TAJWEED", label: "Tajweed" },
 ];
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 function programLabel(type: string) {
   if (type === "NAZRA") return "Nazra";
   if (type === "TAJWEED") return "Tajweed";
   return "Hifz";
-}
-
-function buildCalendarDays(year: number, month: number) {
-  const first = new Date(year, month - 1, 1);
-  const last = new Date(year, month, 0);
-  const days: Array<{ date: string; day: number; inMonth: boolean }> = [];
-
-  for (let i = 0; i < first.getDay(); i++) {
-    days.push({ date: "", day: 0, inMonth: false });
-  }
-
-  for (let d = 1; d <= last.getDate(); d++) {
-    const dt = new Date(year, month - 1, d);
-    days.push({
-      date: dt.toISOString().slice(0, 10),
-      day: d,
-      inMonth: true,
-    });
-  }
-
-  return days;
 }
 
 export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) {
@@ -88,10 +60,7 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
   const [deleting, setDeleting] = useState(false);
 
   const [calendarStudentId, setCalendarStudentId] = useState("");
-  const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth() + 1);
-  const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
-  const [calendarRecords, setCalendarRecords] = useState<Record<string, { status: AttStatus; id: string; leaveReason?: string | null; leaveRequestedBy?: string | null }>>({});
-  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarRefresh, setCalendarRefresh] = useState(0);
 
   const loadAttendance = useCallback(async () => {
     setLoading(true);
@@ -122,42 +91,9 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
     }
   }, [selectedDate, programFilter]);
 
-  const loadCalendar = useCallback(async () => {
-    if (!calendarStudentId) return;
-    setCalendarLoading(true);
-    try {
-      const params = new URLSearchParams({
-        studentId: calendarStudentId,
-        month: String(calendarMonth),
-        year: String(calendarYear),
-      });
-      const res = await fetch(`/api/institute/attendance?${params}`);
-      if (!res.ok) throw new Error("Failed to load calendar.");
-      const data = await res.json();
-      const map: Record<string, { status: AttStatus; id: string; leaveReason?: string | null; leaveRequestedBy?: string | null }> = {};
-      for (const r of data.records || []) {
-        map[r.date] = {
-          status: r.status,
-          id: r.id,
-          leaveReason: r.leaveReason,
-          leaveRequestedBy: r.leaveRequestedBy,
-        };
-      }
-      setCalendarRecords(map);
-    } catch {
-      setCalendarRecords({});
-    } finally {
-      setCalendarLoading(false);
-    }
-  }, [calendarStudentId, calendarMonth, calendarYear]);
-
   useEffect(() => {
     loadAttendance();
   }, [loadAttendance]);
-
-  useEffect(() => {
-    if (activeTab === "calendar") loadCalendar();
-  }, [activeTab, loadCalendar]);
 
   const markAll = (status: AttStatus) => {
     const all: Record<string, AttStatus | null> = {};
@@ -249,24 +185,12 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
       if (!res.ok) throw new Error("Failed to delete record.");
       setEditModalOpen(false);
       loadAttendance();
-      if (activeTab === "calendar") loadCalendar();
+      setCalendarRefresh((n) => n + 1);
     } catch (err: unknown) {
       setDeleteError(err instanceof Error ? err.message : "Failed to delete.");
     } finally {
       setDeleting(false);
     }
-  };
-
-  const calendarDays = buildCalendarDays(calendarYear, calendarMonth);
-  const calendarStudent = students.find((s) => s.id === calendarStudentId);
-
-  const shiftCalendarMonth = (delta: number) => {
-    let m = calendarMonth + delta;
-    let y = calendarYear;
-    if (m < 1) { m = 12; y -= 1; }
-    if (m > 12) { m = 1; y += 1; }
-    setCalendarMonth(m);
-    setCalendarYear(y);
   };
 
   return (
@@ -449,7 +373,7 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
                           title={cfg.fullLabel}
                           className={cn(
                             "w-10 h-10 rounded-xl font-bold text-xs transition-all duration-150 ring-2 ring-transparent",
-                            isActive ? cfg.color + " ring-offset-1 scale-105" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                            isActive ? cfg.btn + " ring-offset-1 scale-105" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
                           )}
                         >
                           {cfg.label}
@@ -529,110 +453,27 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
         </div>
       )}
 
-      {!loading && students.length > 0 && activeTab === "calendar" && (
-        <div className="dash-card overflow-hidden">
-          <div className="p-5 border-b border-border flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-            <div className="flex-1 w-full sm:w-auto">
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Select Student</label>
-              <select
-                value={calendarStudentId}
-                onChange={(e) => setCalendarStudentId(e.target.value)}
-                className="form-input w-full sm:w-72"
-              >
-                {students.map((s) => (
-                  <option key={s.id} value={s.id}>{s.fullName} ({s.studentId})</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => shiftCalendarMonth(-1)} className="p-2 rounded-lg border hover:bg-gray-50">
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="font-semibold text-gray-900 min-w-[140px] text-center">
-                {new Date(calendarYear, calendarMonth - 1).toLocaleDateString("en-PK", { month: "long", year: "numeric" })}
-              </span>
-              <button type="button" onClick={() => shiftCalendarMonth(1)} className="p-2 rounded-lg border hover:bg-gray-50">
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
-          {calendarStudent && (
-            <div className="px-5 py-3 bg-primary-50/50 border-b border-primary-100 flex items-center gap-3">
-              <StudentAvatar name={calendarStudent.fullName} gender={calendarStudent.gender} photo={calendarStudent.photo} size="sm" rounded="full" />
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{calendarStudent.fullName}</p>
-                <p className="text-xs text-gray-500">{programLabel(calendarStudent.programType)} · Monthly attendance calendar</p>
-              </div>
-            </div>
-          )}
-
-          {calendarLoading ? (
-            <div className="flex items-center justify-center py-16 text-gray-400">
-              <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading calendar...
-            </div>
-          ) : (
-            <div className="p-5">
-              <div className="grid grid-cols-7 gap-1 mb-2">
-                {WEEKDAYS.map((d) => (
-                  <div key={d} className="text-center text-[10px] font-bold text-gray-400 uppercase py-1">{d}</div>
-                ))}
-              </div>
-              <div className="grid grid-cols-7 gap-1">
-                {calendarDays.map((cell, idx) => {
-                  if (!cell.inMonth) {
-                    return <div key={`empty-${idx}`} className="aspect-square" />;
+      {!loading && students.length > 0 && activeTab === "calendar" && calendarStudentId && (
+        <StudentAttendanceCalendar
+          key={`${calendarStudentId}-${calendarRefresh}`}
+          studentId={calendarStudentId}
+          apiScope="institute"
+          students={students}
+          selectedStudentId={calendarStudentId}
+          onStudentChange={setCalendarStudentId}
+          student={students.find((s) => s.id === calendarStudentId)}
+          readOnly={readOnly}
+          onDayClick={
+            !readOnly
+              ? (rec) => {
+                  if (rec.id) {
+                    setEditRecordId(rec.id);
+                    setEditModalOpen(true);
                   }
-                  const record = calendarRecords[cell.date];
-                  const status = record?.status;
-                  const isToday = cell.date === today;
-                  return (
-                    <div
-                      key={cell.date}
-                      title={
-                        status === "LEAVE"
-                          ? `Leave - Requested by: ${record.leaveRequestedBy || "N/A"}. Reason: ${record.leaveReason || "N/A"}`
-                          : status
-                          ? STATUS_CONFIG[status].fullLabel
-                          : "No record"
-                      }
-                      onClick={() => {
-                        if (!readOnly && record) {
-                          setEditRecordId(record.id);
-                          setEditModalOpen(true);
-                        }
-                      }}
-                      className={cn(
-                        "aspect-square rounded-xl flex flex-col items-center justify-center text-xs border transition-all",
-                        !readOnly && record && "cursor-pointer hover:ring-2 hover:ring-primary-300",
-                        status ? STATUS_CONFIG[status].cal : "bg-gray-50 text-gray-500 border-gray-100",
-                        isToday && "ring-2 ring-primary-500 ring-offset-1"
-                      )}
-                    >
-                      <span className="font-bold">{cell.day}</span>
-                      {status && (
-                        <span className="text-[9px] font-semibold mt-0.5">{STATUS_CONFIG[status].label}</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-4 mt-6 text-xs text-gray-500">
-                {(["PRESENT", "ABSENT", "LATE", "LEAVE"] as AttStatus[]).map((s) => (
-                  <span key={s} className="flex items-center gap-1.5">
-                    <span className={cn("h-3 w-3 rounded border", STATUS_CONFIG[s].cal)} />
-                    {STATUS_CONFIG[s].fullLabel}
-                  </span>
-                ))}
-                <span className="flex items-center gap-1.5">
-                  <span className="h-3 w-3 rounded bg-gray-50 border border-gray-200" />
-                  No record
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
+                }
+              : undefined
+          }
+        />
       )}
 
       {!readOnly && leaveModalOpen && (

@@ -1,9 +1,9 @@
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { CalendarView } from "@/components/common/calendar-view";
+import { StudentCalendarView } from "@/components/student/student-calendar-view";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-export const metadata = { title: "Academic Calendar - QEMS" };
+export const metadata = { title: "My Calendar - Student Portal" };
 
 export default async function StudentCalendarPage() {
   const session = await getAuthSession();
@@ -12,13 +12,13 @@ export default async function StudentCalendarPage() {
 
   return (
     <DashboardShell
-      title="Academic Calendar"
+      title="My Calendar"
       breadcrumbs={[
         { label: "Student", href: "/student/dashboard" },
         { label: "Calendar" }
       ]}
     >
-      <CalendarView />
+      <StudentCalendarView />
     </DashboardShell>
   );
 }
