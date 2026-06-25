@@ -1,40 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   BookOpen, Plus, Star, TrendingUp, CheckCircle2, Clock,
-  ChevronDown, Save, RotateCcw, Award, Play
+  ChevronDown, Save, RotateCcw, Award, Play, Loader2
 } from "lucide-react";
 import { cn, getSurahName } from "@/lib/utils";
 
-const SAMPLE_STUDENTS = [
-  { id: "3", name: "Usman Ali Siddiqui", progress: "Juz 2", qaidaCompleted: true, readingSpeed: "Medium", fluency: 7.2 },
-  { id: "8", name: "Sara Ijaz Chaudhry", progress: "Qaida Lesson 14", qaidaCompleted: false, readingSpeed: "Slow", fluency: 5.8 },
-  { id: "5", name: "Ibrahim Sheikh Rahman", progress: "Juz 5", qaidaCompleted: true, readingSpeed: "Fast", fluency: 8.5 },
-];
+type NazraStudent = {
+  id: string;
+  name: string;
+  progress: string;
+  qaidaCompleted: boolean;
+  readingSpeed: string;
+  fluency: number;
+};
+
+type NazraRecord = {
+  id: string;
+  student: string;
+  surah: string;
+  pageFrom: number;
+  pageTo: number;
+  fluency: number;
+  time: string;
+};
 
 const QAIDA_LESSONS = Array.from({ length: 17 }, (_, i) => ({
   lesson: i + 1,
-  title: `Lesson ${i + 1}: ${
-    [
-      "Alphabets", "Joint Letters", "Muqatta'at", "Harakaat",
-      "Tanween", "Standing Harakaat", "Madd & Leen", "Sukun",
-      "Tashdeed", "Revision", "Rules of Nun Sakin", "Rules of Mim Sakin",
-      "Idgham", "Qalqalah", "Rules of Laam", "Rules of Raa", "Miscellaneous"
-    ][i]
-  }`,
-  completed: i < 13,
-  active: i === 13,
+  title: `Lesson ${i + 1}`,
+  completed: false,
+  active: false,
 }));
 
-const RECENT_RECORDS = [
-  { student: "Usman Ali Siddiqui", lesson: "Juz 2", surah: "Al-Baqarah", verse: "142-150", errors: 2, fluency: "Good", time: "Today 10:15 AM" },
-  { student: "Sara Ijaz Chaudhry", lesson: "Qaida Lesson 14", surah: "Qaida", verse: "Exercise 3", errors: 4, fluency: "Needs Work", time: "Today 10:45 AM" },
-  { student: "Ibrahim Sheikh Rahman", lesson: "Juz 5", surah: "An-Nisa", verse: "24-35", errors: 1, fluency: "Excellent", time: "Yesterday" },
-];
-
 export function NazraContent() {
-  const [selectedStudent, setSelectedStudent] = useState("3");
+  const [students, setStudents] = useState<NazraStudent[]>([]);
+  const [records, setRecords] = useState<NazraRecord[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState("");
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"milestones" | "entry" | "records">("milestones");
   const [form, setForm] = useState({
     mode: "JUZ", // QAIDA or JUZ
@@ -49,12 +52,68 @@ export function NazraContent() {
   });
   const [saved, setSaved] = useState(false);
 
-  const student = SAMPLE_STUDENTS.find((s) => s.id === selectedStudent)!;
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/institute/nazra");
+      if (!res.ok) throw new Error("Failed to load");
+      const data = await res.json();
+      const list: NazraStudent[] = data.students || [];
+      setStudents(list);
+      setRecords(data.records || []);
+      if (list.length > 0 && !selectedStudent) setSelectedStudent(list[0].id);
+    } catch (err) {
+      console.error(err);
+      setStudents([]);
+      setRecords([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedStudent]);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const student = students.find((s) => s.id === selectedStudent);
+
+  const handleSave = async () => {
+    if (!selectedStudent) return;
+    const res = await fetch("/api/institute/nazra", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        studentId: selectedStudent,
+        surahNumber: form.surah,
+        pageFrom: form.ayahFrom || form.juzNumber,
+        pageTo: form.ayahTo || form.juzNumber,
+        fluency: form.fluency === "Excellent" ? 5 : form.fluency === "Good" ? 4 : 3,
+        teacherNote: form.notes,
+      }),
+    });
+    if (res.ok) {
+      setSaved(true);
+      loadData();
+      setTimeout(() => setSaved(false), 2000);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-gray-400">
+        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading nazra data...
+      </div>
+    );
+  }
+
+  if (students.length === 0) {
+    return (
+      <div className="dash-card p-12 text-center text-gray-400">
+        <BookOpen className="h-10 w-10 mx-auto mb-3 opacity-40" />
+        <p>No Nazra students enrolled yet.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -72,7 +131,7 @@ export function NazraContent() {
           className="form-input w-64"
           id="select-student"
         >
-          {SAMPLE_STUDENTS.map((s) => (
+          {students.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
             </option>
@@ -87,27 +146,27 @@ export function NazraContent() {
             <span className="text-white text-xl font-bold font-arabic">ن</span>
           </div>
           <div className="flex-1">
-            <h3 className="font-display text-xl font-bold text-gray-900">{student.name}</h3>
-            <p className="text-sm text-gray-500 mb-4">Nazra Program • Current Status: <strong>{student.progress}</strong></p>
+            <h3 className="font-display text-xl font-bold text-gray-900">{student?.name}</h3>
+            <p className="text-sm text-gray-500 mb-4">Nazra Program • Current Status: <strong>{student?.progress}</strong></p>
             <div className="flex items-center gap-6">
               <div>
                 <p className="text-xs text-gray-400">Qaida Status</p>
                 <span className={cn(
                   "pill text-xs mt-1 inline-block",
-                  student.qaidaCompleted ? "pill-success" : "pill-warning"
+                  student?.qaidaCompleted ? "pill-success" : "pill-warning"
                 )}>
-                  {student.qaidaCompleted ? "Completed" : "In Progress"}
+                  {student?.qaidaCompleted ? "Completed" : "In Progress"}
                 </span>
               </div>
               <div>
                 <p className="text-xs text-gray-400">Reading Speed</p>
-                <p className="font-bold text-gray-900 mt-1">{student.readingSpeed}</p>
+                <p className="font-bold text-gray-900 mt-1">{student?.readingSpeed}</p>
               </div>
               <div>
                 <p className="text-xs text-gray-400">Fluency Score</p>
                 <div className="flex items-center gap-1 mt-1">
                   <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
-                  <span className="font-bold text-gray-900">{student.fluency} / 10</span>
+                  <span className="font-bold text-gray-900">{student?.fluency?.toFixed(1) ?? "—"} / 10</span>
                 </div>
               </div>
             </div>
@@ -141,7 +200,7 @@ export function NazraContent() {
       {/* ── Milestones Map ── */}
       {activeTab === "milestones" && (
         <div className="dash-card p-6">
-          {!student.qaidaCompleted ? (
+          {!student?.qaidaCompleted ? (
             <div>
               <h3 className="font-semibold text-gray-900 mb-2">Norani Qaida Progress Map</h3>
               <p className="text-sm text-gray-400 mb-6">Foundational reading lesson tracking</p>
@@ -372,24 +431,24 @@ export function NazraContent() {
               </tr>
             </thead>
             <tbody>
-              {RECENT_RECORDS.map((r, i) => (
-                <tr key={i}>
+              {records.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-8 text-gray-400">No records yet.</td>
+                </tr>
+              ) : records.map((r) => (
+                <tr key={r.id}>
                   <td className="font-medium text-gray-900">{r.student}</td>
                   <td>
-                    <span className="pill pill-info">{r.lesson}</span>
+                    <span className="pill pill-info">Pages {r.pageFrom}-{r.pageTo}</span>
                   </td>
                   <td>
                     <p className="text-gray-700 font-semibold">{r.surah}</p>
-                    <p className="text-xs text-gray-400">{r.verse}</p>
                   </td>
-                  <td className="font-semibold text-red-600">{r.errors}</td>
+                  <td className="font-semibold text-red-600">—</td>
                   <td>
-                    <span className={cn(
-                      "pill text-[10px]",
-                      r.fluency === "Excellent" ? "pill-success" : r.fluency === "Good" ? "pill-info" : "pill-warning"
-                    )}>{r.fluency}</span>
+                    <span className="pill pill-info text-[10px]">{r.fluency}/5</span>
                   </td>
-                  <td className="text-gray-450 text-xs">{r.time}</td>
+                  <td className="text-gray-400 text-xs">{r.time}</td>
                 </tr>
               ))}
             </tbody>

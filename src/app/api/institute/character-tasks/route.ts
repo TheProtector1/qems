@@ -4,6 +4,13 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+function authorizeInstitute(session: Awaited<ReturnType<typeof getAuthSession>>) {
+  if (!session?.user?.instituteId) return null;
+  const allowed = ["INSTITUTE_OWNER", "SUPER_ADMIN", "BRANCH_MANAGER"];
+  if (!allowed.includes(session.user.role)) return null;
+  return session.user.instituteId;
+}
+
 const taskInclude = {
   assignments: {
     include: {
@@ -24,13 +31,8 @@ const taskInclude = {
 
 export async function GET() {
   try {
-    const session = await getAuthSession();
-    if (!session || session.user.role !== "INSTITUTE_OWNER") {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
-
-    const instituteId = session.user.instituteId;
-    if (!instituteId) return new NextResponse("Institute Not Found", { status: 400 });
+    const instituteId = authorizeInstitute(await getAuthSession());
+    if (!instituteId) return new NextResponse("Unauthorized", { status: 401 });
 
     const [tasks, students, teachers] = await Promise.all([
       prisma.characterTask.findMany({
@@ -44,12 +46,16 @@ export async function GET() {
         orderBy: { fullName: "asc" },
       }),
       prisma.teacher.findMany({
-        where: { instituteId, isActive: true },
+        where: {
+          instituteId,
+          isActive: true,
+          user: { isActive: true },
+        },
         include: {
           user: { select: { id: true, name: true, image: true } },
           _count: { select: { students: true } },
         },
-        orderBy: { user: { name: "asc" } },
+        orderBy: { createdAt: "desc" },
       }),
     ]);
 
@@ -62,13 +68,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getAuthSession();
-    if (!session || session.user.role !== "INSTITUTE_OWNER") {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
-
-    const instituteId = session.user.instituteId;
-    if (!instituteId) return new NextResponse("Institute Not Found", { status: 400 });
+    const instituteId = authorizeInstitute(await getAuthSession());
+    if (!instituteId) return new NextResponse("Unauthorized", { status: 401 });
 
     const body = await req.json();
     const { title, description, dueDate, category, priority, teacherIds } = body;

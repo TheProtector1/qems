@@ -95,7 +95,9 @@ export function StudentDashboardContent({ initialStudent }: { initialStudent: an
         <div className="space-y-4">
           <div className="dash-card p-6">
             <h3 className="font-semibold text-gray-900 mb-1">30-Juz Progress</h3>
-            <p className="text-xs text-gray-400 mb-4">40% completed</p>
+            <p className="text-xs text-gray-400 mb-4">
+              {initialStudent ? Math.round(((initialStudent.currentJuz - 1) / 30) * 100) : 0}% completed
+            </p>
             <div className="grid grid-cols-6 gap-2 mb-4">
               {JUZ_DATA.map((j) => (
                 <div

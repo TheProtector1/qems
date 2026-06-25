@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Search, Plus, Download, Eye, Edit, Trash2,
@@ -38,8 +38,6 @@ type Student = {
   address: string;
 };
 
-const ALL_CLASSES = ["All Classes", "Hifz A", "Hifz B", "Hifz C", "Nazra 1", "Nazra 2", "Tajweed Adv", "Tajweed Basic"];
-const ALL_SECTIONS = ["All Sections", "Section 1", "Section 2", "Section 3"];
 const ALL_PROGRAMS = ["All Programs", "Hifz", "Nazra", "Tajweed"];
 
 const statusMeta: Record<string, { pill: string; icon: React.ElementType; color: string }> = {
@@ -413,6 +411,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
   const searchParams = useSearchParams();
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
+  const [classOptions, setClassOptions] = useState<string[]>(["All Classes"]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -429,6 +428,11 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
   const [page, setPage] = useState(1);
 
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+
+  const sectionOptions = useMemo(() => {
+    const sections = new Set(students.map((s) => s.section).filter(Boolean));
+    return ["All Sections", ...Array.from(sections).sort()];
+  }, [students]);
 
   const fetchStudentsAndTeachers = async () => {
     setLoading(true);
@@ -473,6 +477,13 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
       });
 
       setStudents(mapped);
+
+      const resCls = await fetch("/api/institute/classes");
+      if (resCls.ok) {
+        const dataCls = await resCls.json();
+        const names = (dataCls.classes || []).map((c: { name: string }) => c.name);
+        setClassOptions(["All Classes", ...names]);
+      }
 
       // 2. Fetch Teachers for dropdown select
       const resTe = await fetch("/api/institute/teachers");
@@ -645,7 +656,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
               className="form-input w-auto text-xs py-1.5"
               id="select-class-filter"
             >
-              {ALL_CLASSES.map(c => <option key={c}>{c}</option>)}
+              {classOptions.map(c => <option key={c}>{c}</option>)}
             </select>
             <select
               value={sectionFilter}
@@ -653,7 +664,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
               className="form-input w-auto text-xs py-1.5"
               id="select-section-filter"
             >
-              {ALL_SECTIONS.map(s => <option key={s}>{s}</option>)}
+              {sectionOptions.map(s => <option key={s}>{s}</option>)}
             </select>
             {/* Status filter pills */}
             <div className="flex gap-1.5 ml-1 flex-wrap">

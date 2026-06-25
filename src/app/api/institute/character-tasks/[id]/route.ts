@@ -20,18 +20,24 @@ const taskInclude = {
   },
 } as const;
 
+function authorizeInstitute(session: Awaited<ReturnType<typeof getAuthSession>>) {
+  if (!session?.user?.instituteId) return null;
+  const allowed = ["INSTITUTE_OWNER", "SUPER_ADMIN", "BRANCH_MANAGER"];
+  if (!allowed.includes(session.user.role)) return null;
+  return session.user.instituteId;
+}
+
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
     const session = await getAuthSession();
-    if (!session || session.user.role !== "INSTITUTE_OWNER") {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const instituteId = authorizeInstitute(session);
+    if (!instituteId) return new NextResponse("Unauthorized", { status: 401 });
 
     const body = await req.json();
     const { title, description, dueDate, isActive, category, priority, teacherIds } = body;
 
     const existing = await prisma.characterTask.findFirst({
-      where: { id: params.id, instituteId: session.user.instituteId! },
+      where: { id: params.id, instituteId },
     });
     if (!existing) return new NextResponse("Not Found", { status: 404 });
 
@@ -73,13 +79,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   try {
-    const session = await getAuthSession();
-    if (!session || session.user.role !== "INSTITUTE_OWNER") {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const instituteId = authorizeInstitute(await getAuthSession());
+    if (!instituteId) return new NextResponse("Unauthorized", { status: 401 });
 
     const task = await prisma.characterTask.delete({
-      where: { id: params.id, instituteId: session.user.instituteId! },
+      where: { id: params.id, instituteId },
     });
 
     return NextResponse.json(task);

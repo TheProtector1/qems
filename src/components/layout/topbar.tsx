@@ -18,6 +18,9 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<
+    { id: string; icon: string; msg: string; time: string; unread: boolean }[]
+  >([]);
 
   useEffect(() => {
     if (session?.user?.image) {
@@ -31,6 +34,19 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
         .catch(console.error);
     }
   }, [session]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    fetch("/api/notifications")
+      .then((res) => res.ok ? res.json() : { notifications: [] })
+      .then((data) => setNotifications(data.notifications || []))
+      .catch(console.error);
+  }, [session]);
+
+  const markAllRead = async () => {
+    await fetch("/api/notifications", { method: "PATCH" });
+    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+  };
 
   const roleLabel: Record<string, string> = {
     SUPER_ADMIN: "Super Admin",
@@ -102,16 +118,13 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
             <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-card-hover border border-border overflow-hidden z-50">
               <div className="p-4 border-b border-border flex items-center justify-between">
                 <h3 className="font-semibold text-sm">Notifications</h3>
-                <button className="text-xs text-primary-700 font-medium">Mark all read</button>
+                <button className="text-xs text-primary-700 font-medium" onClick={markAllRead}>Mark all read</button>
               </div>
               <div className="divide-y divide-border max-h-80 overflow-y-auto">
-                {[
-                  { icon: "📚", msg: "Ahmad scored 9.2 on today's Sabaq", time: "5m ago", unread: true },
-                  { icon: "⚠️", msg: "3 students absent from Class A today", time: "1h ago", unread: true },
-                  { icon: "💰", msg: "Fee payment received from Usman Khan", time: "2h ago", unread: false },
-                  { icon: "🏆", msg: "Fatima earned 'First Juz Complete' badge", time: "3h ago", unread: false },
-                ].map((n, i) => (
-                  <div key={i} className={cn("flex gap-3 p-4 hover:bg-gray-50 cursor-pointer", n.unread && "bg-primary-50/40")}>
+                {notifications.length === 0 ? (
+                  <p className="text-center text-sm text-gray-400 py-8">No notifications yet.</p>
+                ) : notifications.map((n) => (
+                  <div key={n.id} className={cn("flex gap-3 p-4 hover:bg-gray-50 cursor-pointer", n.unread && "bg-primary-50/40")}>
                     <span className="text-xl">{n.icon}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-700 leading-snug">{n.msg}</p>

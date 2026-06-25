@@ -1,41 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { ClipboardList, Award, Plus, CheckCircle2, Clock, Calendar, BarChart3, Star } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ClipboardList, Award, Plus, CheckCircle2, Clock, Calendar, BarChart3, Star, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 
-const SAMPLE_EXAMS = [
-  { id: "e1", name: "Monthly Hifz Assessment", date: "June 25, 2025", type: "HIFZ", status: "UPCOMING", examiner: "Qari Hamid" },
-  { id: "e2", name: "Quarterly Tajweed Rules Practical", date: "June 20, 2025", type: "TAJWEED", status: "UPCOMING", examiner: "Qari Saheb" },
-  { id: "e3", name: "First Term Quran Reading Test", date: "May 15, 2025", type: "NAZRA", status: "COMPLETED", examiner: "Qari Saheb" },
-];
-
-const STUDENTS = [
-  { id: "1", name: "Ahmad Raza Khan", class: "Hifz A" },
-  { id: "2", name: "Fatima Noor", class: "Hifz A" },
-  { id: "3", name: "Usman Ali", class: "Nazra B" },
-  { id: "4", name: "Zainab Hassan", class: "Hifz A" },
-];
-
-const HISTORICAL_GRADES = [
-  { id: "g1", student: "Zainab Hassan", exam: "First Term Quran Reading Test", type: "HIFZ", grade: "A+", score: "96%", examiner: "Qari Saheb", date: "May 15, 2025" },
-  { id: "g2", student: "Ahmad Raza Khan", exam: "First Term Quran Reading Test", type: "HIFZ", grade: "A", score: "92%", examiner: "Qari Saheb", date: "May 15, 2025" },
-  { id: "g3", student: "Fatima Noor", exam: "First Term Quran Reading Test", type: "HIFZ", grade: "B+", score: "88%", examiner: "Qari Saheb", date: "May 15, 2025" },
-  { id: "g4", student: "Usman Ali", exam: "First Term Quran Reading Test", type: "NAZRA", grade: "C", score: "74%", examiner: "Qari Saheb", date: "May 15, 2025" },
-];
-
-const CHART_DATA = [
-  { student: "Zainab", score: 96 },
-  { student: "Ahmad", score: 92 },
-  { student: "Fatima", score: 88 },
-  { student: "Usman", score: 74 },
-];
+type Exam = { id: string; name: string; date: string; type: string; status: string; examiner: string };
+type Student = { id: string; name: string; class: string };
+type Grade = { id: string; student: string; exam: string; type: string; grade: string; score: string; examiner: string; date: string };
 
 export function AssessmentsContent() {
   const [activeTab, setActiveTab] = useState<"upcoming" | "grade" | "history">("upcoming");
-  const [grades, setGrades] = useState(HISTORICAL_GRADES);
-  const [exams, setExams] = useState(SAMPLE_EXAMS);
+  const [grades, setGrades] = useState<Grade[]>([]);
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [chartData, setChartData] = useState<{ student: string; score: number }[]>([]);
+  const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
 
   // Grade Form State
@@ -48,55 +28,62 @@ export function AssessmentsContent() {
     remarks: "",
   });
 
-  const handleGradeSubmit = (e: React.FormEvent) => {
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/institute/assessments");
+      if (!res.ok) throw new Error("Failed to load");
+      const data = await res.json();
+      setExams(data.exams || []);
+      setGrades(data.grades || []);
+      setStudents(data.students || []);
+      setChartData(data.chartData || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleGradeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.studentId || !form.examId) return;
 
-    const student = STUDENTS.find((s) => s.id === form.studentId);
-    const exam = exams.find((ex) => ex.id === form.examId);
-    if (!student || !exam) return;
+    const res = await fetch("/api/institute/assessments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        studentId: form.studentId,
+        assessmentId: form.examId,
+        mistakeCount: form.mistakes,
+        fluency: form.fluency,
+        tajweed: form.tajweed,
+        remarks: form.remarks,
+      }),
+    });
 
-    // Auto-calculate score and grade
-    const totalDeductions = Number(form.mistakes) * 2;
-    const finalScoreVal = Math.max(0, 100 - totalDeductions);
-    const calculatedScore = `${finalScoreVal}%`;
-
-    let grade = "F";
-    if (finalScoreVal >= 95) grade = "A+";
-    else if (finalScoreVal >= 90) grade = "A";
-    else if (finalScoreVal >= 85) grade = "B+";
-    else if (finalScoreVal >= 80) grade = "B";
-    else if (finalScoreVal >= 70) grade = "C";
-    else if (finalScoreVal >= 60) grade = "D";
-
-    const newGrade = {
-      id: `g-${Date.now()}`,
-      student: student.name,
-      exam: exam.name,
-      type: exam.type,
-      grade,
-      score: calculatedScore,
-      examiner: "Qari Saheb",
-      date: new Date().toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" }),
-    };
-
-    setGrades([newGrade, ...grades]);
-    setSaved(true);
-
-    setTimeout(() => {
-      setSaved(false);
-      // Reset form
-      setForm({
-        studentId: "",
-        examId: "",
-        mistakes: 0,
-        fluency: 9,
-        tajweed: 8,
-        remarks: "",
-      });
-      setActiveTab("history");
-    }, 1200);
+    if (res.ok) {
+      setSaved(true);
+      await loadData();
+      setTimeout(() => {
+        setSaved(false);
+        setForm({ studentId: "", examId: "", mistakes: 0, fluency: 9, tajweed: 8, remarks: "" });
+        setActiveTab("history");
+      }, 1200);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-gray-400">
+        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading assessments...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -152,7 +139,7 @@ export function AssessmentsContent() {
               <h3 className="font-semibold text-gray-900 mb-1">Grade Distribution</h3>
               <p className="text-xs text-gray-400 mb-4">Latest test scores %</p>
               <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={CHART_DATA}>
+                <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="student" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
@@ -183,7 +170,7 @@ export function AssessmentsContent() {
                   required
                 >
                   <option value="">-- Choose Student --</option>
-                  {STUDENTS.map((s) => (
+                  {students.map((s) => (
                     <option key={s.id} value={s.id}>{s.name} ({s.class})</option>
                   ))}
                 </select>

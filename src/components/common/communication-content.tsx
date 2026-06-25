@@ -1,120 +1,164 @@
 "use client";
 
-import { useState } from "react";
-import { MessageSquare, Bell, Send, User, Sparkles, Check, Paperclip, Search, PlusCircle } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { MessageSquare, Bell, Send, Sparkles, Check, Paperclip, Search, PlusCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const INITIAL_THREADS = [
-  { id: "t1", name: "Qari Hamid", role: "Teacher", lastMsg: "Ahmad read Juz 13 excellently today.", time: "09:45 AM", unread: true, avatar: "QH" },
-  { id: "t2", name: "Sufyan Ahmed (Ahmad's Parent)", role: "Parent", lastMsg: "Assalamu Alaikum, is there class tomorrow?", time: "Yesterday", unread: false, avatar: "SA" },
-  { id: "t3", name: "Mufti Asim (Admin)", role: "Administrator", lastMsg: "Monthly feedback reports are due by Saturday.", time: "2 days ago", unread: false, avatar: "MA" },
-  { id: "t4", name: "Fatima Noor (Parent)", role: "Parent", lastMsg: "Thank you for the guidance.", time: "3 days ago", unread: false, avatar: "FN" },
-];
-
-const INITIAL_MESSAGES: Record<string, any[]> = {
-  t1: [
-    { sender: "QH", name: "Qari Hamid", text: "Assalamu Alaikum. I wanted to update you on Ahmad's lessons.", time: "09:30 AM", self: false },
-    { sender: "self", name: "You", text: "Wa Alaikum Assalam. Sure, how is he progressing with Tajweed rules?", time: "09:35 AM", self: true },
-    { sender: "QH", name: "Qari Hamid", text: "Ahmad read Juz 13 excellently today. His makharij are perfect now. Keep practicing Sabaq at home.", time: "09:45 AM", self: false },
-  ],
-  t2: [
-    { sender: "SA", name: "Sufyan Ahmed", text: "Assalamu Alaikum, Qari Saheb. Is there a revision class tomorrow morning?", time: "Yesterday", self: false },
-    { sender: "self", name: "You", text: "Wa Alaikum Assalam. Yes, the morning session is on as scheduled.", time: "Yesterday", self: true },
-  ],
-  t3: [
-    { sender: "MA", name: "Mufti Asim", text: "Assalamu Alaikum teachers. Monthly feedback reports are due by Saturday.", time: "2 days ago", self: false },
-  ],
-  t4: [
-    { sender: "FN", name: "Fatima Noor", text: "Assalamu Alaikum. Thank you for the guidance.", time: "3 days ago", self: false },
-  ],
+type Thread = {
+  id: string;
+  name: string;
+  role: string;
+  lastMsg: string;
+  time: string;
+  unread: boolean;
+  avatar: string;
 };
 
-const INITIAL_ANNOUNCEMENTS = [
-  { id: "a1", title: "Eid-ul-Adha Holidays Notice", target: "All", content: "The institute will remain closed from June 16 to June 20, 2025. Classes will resume regularly on June 21.", date: "Today 10:00 AM", author: "Administration" },
-  { id: "a2", title: "Quarterly Assessment Schedule", target: "Parents & Students", content: "The assessments will begin on June 22. Detailed syllabus and slots are shared on the student board.", date: "2 days ago", author: "Academic Board" },
-  { id: "a3", title: "New Hifz Standard Guidelines", target: "Teachers", content: "Please read the updated Sabaq, Sabqi, and Manzil marking rubric in the settings folder.", date: "5 days ago", author: "QEMS Support" },
-];
+type ChatMessage = {
+  id?: string;
+  sender: string;
+  name: string;
+  text: string;
+  time: string;
+  self: boolean;
+};
+
+type Announcement = {
+  id: string;
+  title: string;
+  target: string;
+  content: string;
+  date: string;
+  author: string;
+};
 
 export function CommunicationContent() {
   const [activeMode, setActiveMode] = useState<"chat" | "announcements">("chat");
-  const [threads, setThreads] = useState(INITIAL_THREADS);
-  const [selectedThreadId, setSelectedThreadId] = useState("t1");
-  const [chatMessages, setChatMessages] = useState(INITIAL_MESSAGES);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [inputMsg, setInputMsg] = useState("");
-  const [announcements, setAnnouncements] = useState(INITIAL_ANNOUNCEMENTS);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(false);
 
-  // Announcement Form State
   const [annTitle, setAnnTitle] = useState("");
   const [annTarget, setAnnTarget] = useState("All");
   const [annContent, setAnnContent] = useState("");
   const [annSaved, setAnnSaved] = useState(false);
 
-  const activeThread = threads.find((t) => t.id === selectedThreadId)!;
-  const currentMessages = chatMessages[selectedThreadId] || [];
+  const loadThreads = useCallback(async () => {
+    try {
+      const res = await fetch("/api/institute/messages");
+      if (!res.ok) return;
+      const data = await res.json();
+      const list: Thread[] = data.threads || [];
+      setThreads(list);
+      if (list.length > 0 && !selectedThreadId) {
+        setSelectedThreadId(list[0].id);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, [selectedThreadId]);
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const loadAnnouncements = useCallback(async () => {
+    try {
+      const res = await fetch("/api/institute/announcements");
+      if (!res.ok) return;
+      const data = await res.json();
+      setAnnouncements(data.announcements || []);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  const loadMessages = useCallback(async (partnerId: string) => {
+    setMessagesLoading(true);
+    try {
+      const res = await fetch(`/api/institute/messages?partnerId=${partnerId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setChatMessages(data.messages || []);
+    } catch (err) {
+      console.error(err);
+      setChatMessages([]);
+    } finally {
+      setMessagesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([loadThreads(), loadAnnouncements()]).finally(() => setLoading(false));
+  }, [loadThreads, loadAnnouncements]);
+
+  useEffect(() => {
+    if (selectedThreadId) loadMessages(selectedThreadId);
+  }, [selectedThreadId, loadMessages]);
+
+  const activeThread = threads.find((t) => t.id === selectedThreadId);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMsg.trim()) return;
+    if (!inputMsg.trim() || !selectedThreadId) return;
 
-    const newMsg = {
-      sender: "self",
-      name: "You",
-      text: inputMsg,
-      time: "Just now",
-      self: true,
-    };
+    const res = await fetch("/api/institute/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ receiverId: selectedThreadId, content: inputMsg }),
+    });
 
-    const updatedMessages = {
-      ...chatMessages,
-      [selectedThreadId]: [...currentMessages, newMsg],
-    };
-
-    setChatMessages(updatedMessages);
-
-    // Update last message in threads list
-    setThreads(
-      threads.map((t) =>
-        t.id === selectedThreadId
-          ? { ...t, lastMsg: inputMsg, time: "Just now", unread: false }
-          : t
-      )
-    );
-
-    setInputMsg("");
+    if (res.ok) {
+      const data = await res.json();
+      setChatMessages((prev) => [...prev, data.message]);
+      setThreads((prev) =>
+        prev.map((t) =>
+          t.id === selectedThreadId
+            ? { ...t, lastMsg: inputMsg, time: "Just now", unread: false }
+            : t
+        )
+      );
+      setInputMsg("");
+    }
   };
 
-  const handleCreateAnnouncement = (e: React.FormEvent) => {
+  const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!annTitle || !annContent) return;
 
-    const newAnn = {
-      id: `a-${Date.now()}`,
-      title: annTitle,
-      target: annTarget,
-      content: annContent,
-      date: "Just now",
-      author: "You",
-    };
+    const res = await fetch("/api/institute/announcements", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: annTitle, content: annContent, target: annTarget }),
+    });
 
-    setAnnouncements([newAnn, ...announcements]);
-    setAnnSaved(true);
-
-    setTimeout(() => {
-      setAnnSaved(false);
-      setAnnTitle("");
-      setAnnContent("");
-    }, 1200);
+    if (res.ok) {
+      setAnnSaved(true);
+      await loadAnnouncements();
+      setTimeout(() => {
+        setAnnSaved(false);
+        setAnnTitle("");
+        setAnnContent("");
+      }, 1200);
+    }
   };
 
   const selectThread = (id: string) => {
     setSelectedThreadId(id);
-    // Mark as read
-    setThreads(threads.map((t) => (t.id === id ? { ...t, unread: false } : t)));
+    setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, unread: false } : t)));
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-gray-400">
+        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading communication hub...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* ── Mode Switcher ── */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         <button
           onClick={() => setActiveMode("chat")}
@@ -138,20 +182,17 @@ export function CommunicationContent() {
 
       {activeMode === "chat" && (
         <div className="grid lg:grid-cols-3 gap-6 h-[600px] border border-border rounded-2xl bg-white overflow-hidden shadow-sm">
-          {/* Threads Sidebar */}
           <div className="border-r border-border flex flex-col h-full bg-gray-50/55">
             <div className="p-4 border-b border-border bg-white">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search chats..."
-                  className="form-input pl-9 h-9 text-xs"
-                />
+                <input type="text" placeholder="Search chats..." className="form-input pl-9 h-9 text-xs" />
               </div>
             </div>
             <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
-              {threads.map((t) => (
+              {threads.length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-12 px-4">No conversations yet.</p>
+              ) : threads.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => selectThread(t.id)}
@@ -169,99 +210,104 @@ export function CommunicationContent() {
                       <span className="text-[10px] text-gray-400">{t.time}</span>
                     </div>
                     <p className="text-xs text-gray-500 truncate mt-0.5">{t.lastMsg}</p>
-                    <span className="inline-block text-[9px] text-primary-600 font-semibold mt-1">
-                      {t.role}
-                    </span>
+                    <span className="inline-block text-[9px] text-primary-600 font-semibold mt-1">{t.role}</span>
                   </div>
-                  {t.unread && (
-                    <div className="h-2 w-2 rounded-full bg-primary-600 flex-shrink-0" />
-                  )}
+                  {t.unread && <div className="h-2 w-2 rounded-full bg-primary-600 flex-shrink-0" />}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Messages Panel */}
           <div className="lg:col-span-2 flex flex-col h-full">
-            {/* Header */}
-            <div className="p-4 border-b border-border flex items-center justify-between bg-white">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-gradient-primary flex items-center justify-center text-white font-bold text-sm">
-                  {activeThread.avatar}
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900 text-sm">{activeThread.name}</p>
-                  <p className="text-[10px] text-primary-600 font-medium">{activeThread.role}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Chat list */}
-            <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50/30">
-              {currentMessages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={cn("flex flex-col max-w-[75%]", msg.self ? "ml-auto items-end" : "mr-auto items-start")}
-                >
-                  <div className={cn(
-                    "rounded-2xl px-4 py-2.5 text-sm",
-                    msg.self
-                      ? "bg-gradient-primary text-white rounded-br-none shadow-sm"
-                      : "bg-white text-gray-800 border border-gray-100 rounded-bl-none shadow-sm"
-                  )}>
-                    <p className="leading-relaxed">{msg.text}</p>
+            {activeThread ? (
+              <>
+                <div className="p-4 border-b border-border flex items-center justify-between bg-white">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-gradient-primary flex items-center justify-center text-white font-bold text-sm">
+                      {activeThread.avatar}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900 text-sm">{activeThread.name}</p>
+                      <p className="text-[10px] text-primary-600 font-medium">{activeThread.role}</p>
+                    </div>
                   </div>
-                  <span className="text-[9px] text-gray-400 mt-1 px-1">{msg.time}</span>
                 </div>
-              ))}
-            </div>
 
-            {/* Input bar */}
-            <form onSubmit={handleSendMessage} className="p-4 border-t border-border bg-white flex items-center gap-2">
-              <button type="button" className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
-                <Paperclip className="h-5 w-5" />
-              </button>
-              <input
-                type="text"
-                placeholder="Type your message here..."
-                value={inputMsg}
-                onChange={(e) => setInputMsg(e.target.value)}
-                className="form-input flex-1 h-10 text-xs"
-              />
-              <button
-                type="submit"
-                className="btn-primary p-2.5 h-10 w-10 flex items-center justify-center rounded-xl"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </form>
+                <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50/30">
+                  {messagesLoading ? (
+                    <div className="flex justify-center py-8 text-gray-400">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    </div>
+                  ) : chatMessages.length === 0 ? (
+                    <p className="text-center text-sm text-gray-400 py-8">No messages yet. Start the conversation.</p>
+                  ) : chatMessages.map((msg, i) => (
+                    <div
+                      key={msg.id || i}
+                      className={cn("flex flex-col max-w-[75%]", msg.self ? "ml-auto items-end" : "mr-auto items-start")}
+                    >
+                      <div className={cn(
+                        "rounded-2xl px-4 py-2.5 text-sm",
+                        msg.self
+                          ? "bg-gradient-primary text-white rounded-br-none shadow-sm"
+                          : "bg-white text-gray-800 border border-gray-100 rounded-bl-none shadow-sm"
+                      )}>
+                        <p className="leading-relaxed">{msg.text}</p>
+                      </div>
+                      <span className="text-[9px] text-gray-400 mt-1 px-1">{msg.time}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <form onSubmit={handleSendMessage} className="p-4 border-t border-border bg-white flex items-center gap-2">
+                  <button type="button" className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
+                    <Paperclip className="h-5 w-5" />
+                  </button>
+                  <input
+                    type="text"
+                    placeholder="Type your message here..."
+                    value={inputMsg}
+                    onChange={(e) => setInputMsg(e.target.value)}
+                    className="form-input flex-1 h-10 text-xs"
+                  />
+                  <button type="submit" className="btn-primary p-2.5 h-10 w-10 flex items-center justify-center rounded-xl">
+                    <Send className="h-4 w-4" />
+                  </button>
+                </form>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+                Select a conversation to start messaging.
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {activeMode === "announcements" && (
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Announcements Feed */}
           <div className="lg:col-span-2 space-y-4">
             <h3 className="font-semibold text-gray-900">Broadcast History</h3>
-            <div className="space-y-3">
-              {announcements.map((ann) => (
-                <div key={ann.id} className="dash-card p-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-bold text-gray-900 text-base">{ann.title}</h4>
-                    <span className="pill pill-primary text-[10px] py-0.5 px-2">Target: {ann.target}</span>
+            {announcements.length === 0 ? (
+              <p className="text-sm text-gray-400 py-8 text-center">No announcements published yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {announcements.map((ann) => (
+                  <div key={ann.id} className="dash-card p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-bold text-gray-900 text-base">{ann.title}</h4>
+                      <span className="pill pill-primary text-[10px] py-0.5 px-2">Target: {ann.target}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 leading-relaxed mb-4">{ann.content}</p>
+                    <div className="flex items-center justify-between text-xs text-gray-400 border-t border-gray-100 pt-3">
+                      <span>By: {ann.author}</span>
+                      <span>{ann.date}</span>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-600 leading-relaxed mb-4">{ann.content}</p>
-                  <div className="flex items-center justify-between text-xs text-gray-400 border-t border-gray-100 pt-3">
-                    <span>By: {ann.author}</span>
-                    <span>{ann.date}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Publish announcement form */}
           <div>
             <div className="dash-card p-6 bg-white border border-border">
               <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-1.5">
@@ -279,21 +325,16 @@ export function CommunicationContent() {
                     required
                   />
                 </div>
-
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1.5">Target Audience</label>
-                  <select
-                    value={annTarget}
-                    onChange={(e) => setAnnTarget(e.target.value)}
-                    className="form-input text-xs"
-                  >
+                  <select value={annTarget} onChange={(e) => setAnnTarget(e.target.value)} className="form-input text-xs">
                     <option value="All">All Portal Users</option>
                     <option value="Parents & Students">Parents & Students</option>
                     <option value="Teachers">Teachers</option>
-                    <option value="Administration">Administration</option>
+                    <option value="Parents">Parents</option>
+                    <option value="Students">Students</option>
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1.5">Notice Content</label>
                   <textarea
@@ -304,13 +345,12 @@ export function CommunicationContent() {
                     required
                   />
                 </div>
-
-                <button
-                  type="submit"
-                  className="btn-primary w-full justify-center text-xs py-2.5 mt-2"
-                  disabled={annSaved}
-                >
-                  {annSaved ? "Publishing Notice..." : "Publish Announcement"}
+                <button type="submit" className="btn-primary w-full justify-center text-xs py-2.5 mt-2" disabled={annSaved}>
+                  {annSaved ? (
+                    <><Check className="h-4 w-4" /> Published</>
+                  ) : (
+                    <><Sparkles className="h-4 w-4" /> Publish Announcement</>
+                  )}
                 </button>
               </form>
             </div>

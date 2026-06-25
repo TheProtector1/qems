@@ -1,25 +1,59 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { HeartHandshake, Plus, Award, Sparkles } from "lucide-react";
-import { cn, formatCurrency } from "@/lib/utils";
+import { useCallback, useEffect, useState } from "react";
+import { HeartHandshake, Plus, Award, Sparkles, Loader2 } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
-const INITIAL_SCHOLARSHIPS = [
-  { id: "s1", studentName: "Maryam Tariq Butt", studentId: "STU-2024-0006", type: "Full (100%)", program: "Hifz", originalFee: 3500, discountFee: 0, reason: "Orphan Support Program" },
-  { id: "s2", studentName: "Zainab Hassan Malik", studentId: "STU-2024-0004", type: "Partial (30%)", program: "Hifz", originalFee: 3500, discountFee: 2450, reason: "Academic Excellence Discount" },
-  { id: "s3", studentName: "Ibrahim Sheikh Rahman", studentId: "STU-2024-0005", type: "Partial (50%)", program: "Tajweed", originalFee: 2000, discountFee: 1000, reason: "Siblings Discount" },
-];
+type ScholarshipRow = {
+  id: string;
+  studentName: string;
+  studentId: string;
+  type: string;
+  program: string;
+  originalFee: number;
+  discountFee: number;
+  reason: string;
+};
 
 export function ScholarshipsPageContent() {
-  const [scholarships, setScholarships] = useState(INITIAL_SCHOLARSHIPS);
+  const [scholarships, setScholarships] = useState<ScholarshipRow[]>([]);
+  const [summary, setSummary] = useState({ monthlySubsidy: 0, scholarshipRatio: 0, activeCount: 0 });
+  const [loading, setLoading] = useState(true);
 
-  const handleRevoke = (id: string) => {
+  const loadScholarships = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/institute/scholarships");
+      if (!res.ok) throw new Error("Failed to load");
+      const data = await res.json();
+      setScholarships(data.scholarships || []);
+      setSummary(data.summary || { monthlySubsidy: 0, scholarshipRatio: 0, activeCount: 0 });
+    } catch (err) {
+      console.error(err);
+      setScholarships([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadScholarships();
+  }, [loadScholarships]);
+
+  const handleRevoke = async (id: string) => {
     if (!confirm("Revoke this scholarship grant?")) return;
-    setScholarships((prev) => prev.filter((s) => s.id !== id));
+    const res = await fetch(`/api/institute/scholarships/${id}`, { method: "PATCH" });
+    if (res.ok) loadScholarships();
   };
 
-  const monthlySubsidy = scholarships.reduce((sum, s) => sum + (s.originalFee - s.discountFee), 0);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-gray-400">
+        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading scholarships...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -39,7 +73,7 @@ export function ScholarshipsPageContent() {
             <HeartHandshake className="h-5 w-5" />
           </div>
           <div>
-            <p className="font-display text-2xl font-bold text-gray-900">{scholarships.length}</p>
+            <p className="font-display text-2xl font-bold text-gray-900">{summary.activeCount}</p>
             <p className="text-xs text-gray-500">Active Scholarships</p>
           </div>
         </div>
@@ -49,7 +83,7 @@ export function ScholarshipsPageContent() {
             <Sparkles className="h-5 w-5" />
           </div>
           <div>
-            <p className="font-display text-2xl font-bold text-gray-900">{formatCurrency(monthlySubsidy)}</p>
+            <p className="font-display text-2xl font-bold text-gray-900">{formatCurrency(summary.monthlySubsidy)}</p>
             <p className="text-xs text-gray-500">Monthly Subsidy Granted</p>
           </div>
         </div>
@@ -59,7 +93,7 @@ export function ScholarshipsPageContent() {
             <Award className="h-5 w-5" />
           </div>
           <div>
-            <p className="font-display text-2xl font-bold text-gray-900">12.5%</p>
+            <p className="font-display text-2xl font-bold text-gray-900">{summary.scholarshipRatio}%</p>
             <p className="text-xs text-gray-500">Institution Scholarship Ratio</p>
           </div>
         </div>

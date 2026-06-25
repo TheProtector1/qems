@@ -1,5 +1,5 @@
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { AttendanceContent } from "@/components/institute/attendance-content";
+import { StudentAttendanceView } from "@/components/student/student-attendance-view";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
@@ -11,10 +11,10 @@ export default async function StudentAttendancePage() {
 
   return (
     <DashboardShell
-      title="My Attendance History"
+      title="My Attendance"
       breadcrumbs={[{ label: "Student Portal" }, { label: "My Attendance" }]}
     >
-      <AttendanceContent readOnly />
+      <StudentAttendanceView />
     </DashboardShell>
   );
 }

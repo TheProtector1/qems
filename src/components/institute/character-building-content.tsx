@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
 import {
   Plus, Edit2, Trash2, CalendarDays, X, Users, Sparkles, Target,
   Loader2, Search, ChevronRight,
@@ -94,6 +95,40 @@ export function CharacterBuildingContent() {
   const [priority, setPriority] = useState("NORMAL");
   const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [teachersError, setTeachersError] = useState<string | null>(null);
+
+  const loadTeachers = useCallback(async () => {
+    try {
+      setTeachersError(null);
+      const res = await fetch("/api/institute/teachers");
+      if (!res.ok) {
+        setTeachersError("Could not load teachers. Try refreshing the page.");
+        return;
+      }
+      const data = await res.json();
+      const rows: TeacherOption[] = (data.teachers || [])
+        .filter((t: { isActive?: boolean; user?: { isActive?: boolean; name?: string } }) =>
+          t.isActive !== false && t.user?.isActive !== false
+        )
+        .map((t: {
+          id: string;
+          userId: string;
+          user?: { id?: string; name?: string; image?: string | null };
+          _count?: { students: number };
+        }) => ({
+          id: t.id,
+          user: {
+            id: t.user?.id || t.userId,
+            name: t.user?.name || "Teacher",
+            image: t.user?.image || null,
+          },
+          _count: { students: t._count?.students ?? 0 },
+        }));
+      setTeachers(rows);
+    } catch {
+      setTeachersError("Could not load teachers.");
+    }
+  }, []);
 
   const fetchTasks = async () => {
     try {
@@ -103,7 +138,9 @@ export function CharacterBuildingContent() {
         const data = await res.json();
         setTasks(data.tasks || []);
         setStudents(data.students || []);
-        setTeachers(data.teachers || []);
+        if (Array.isArray(data.teachers) && data.teachers.length > 0) {
+          setTeachers(data.teachers);
+        }
       }
     } catch (error) {
       console.error(error);
@@ -112,7 +149,10 @@ export function CharacterBuildingContent() {
     }
   };
 
-  useEffect(() => { fetchTasks(); }, []);
+  useEffect(() => {
+    fetchTasks();
+    loadTeachers();
+  }, [loadTeachers]);
 
   const filteredTasks = useMemo(
     () => tasks.filter((t) => categoryFilter === "ALL" || t.category === categoryFilter),
@@ -141,6 +181,7 @@ export function CharacterBuildingContent() {
 
   const openNewModal = () => {
     resetForm();
+    loadTeachers();
     setIsModalOpen(true);
   };
 
@@ -152,6 +193,7 @@ export function CharacterBuildingContent() {
     setCategory(task.category || "AKHLAAQ");
     setPriority(task.priority || "NORMAL");
     setSelectedTeacherIds(task.assignments.map((a) => a.teacherId));
+    loadTeachers();
     setIsModalOpen(true);
   };
 
@@ -425,7 +467,13 @@ export function CharacterBuildingContent() {
                 <p className="text-xs text-gray-400 mb-2">Only assigned teachers will see and mark progress for this task.</p>
                 <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-3 rounded-xl border border-gray-200 bg-gray-50">
                   {teachers.length === 0 ? (
-                    <p className="text-sm text-gray-500">No teachers found. Add teachers first.</p>
+                    <div className="text-sm text-gray-500 w-full">
+                      <p>No teachers found.</p>
+                      {teachersError && <p className="text-amber-600 text-xs mt-1">{teachersError}</p>}
+                      <Link href="/institute/teachers" className="text-primary-700 font-semibold text-xs hover:underline mt-1 inline-block">
+                        Add teachers in Staff → Teachers
+                      </Link>
+                    </div>
                   ) : (
                     teachers.map((t) => (
                       <button

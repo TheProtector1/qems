@@ -1,46 +1,69 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   DollarSign, CheckCircle2, Clock, AlertCircle, TrendingUp,
-  Download, Plus, Search, CreditCard, Filter,
+  Download, Plus, Search, CreditCard, Loader2,
 } from "lucide-react";
 import { cn, formatCurrency, getInitials, downloadCsv } from "@/lib/utils";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
-const FEES = [
-  { id: "1", student: "Ahmad Raza Khan", studentId: "STU-2024-0001", program: "Hifz", month: "June 2025", amount: 3500, status: "PAID", paidAt: "2025-06-02", method: "Online" },
-  { id: "2", student: "Fatima Noor Hussain", studentId: "STU-2024-0002", program: "Hifz", month: "June 2025", amount: 3500, status: "PAID", paidAt: "2025-06-01", method: "Cash" },
-  { id: "3", student: "Usman Ali Siddiqui", studentId: "STU-2024-0003", program: "Nazra", month: "June 2025", amount: 2500, status: "OVERDUE", paidAt: null, method: null },
-  { id: "4", student: "Zainab Hassan Malik", studentId: "STU-2024-0004", program: "Hifz", month: "June 2025", amount: 3500, status: "PAID", paidAt: "2025-06-05", method: "JazzCash" },
-  { id: "5", student: "Ibrahim Sheikh Rahman", studentId: "STU-2024-0005", program: "Tajweed", month: "June 2025", amount: 2000, status: "PENDING", paidAt: null, method: null },
-  { id: "6", student: "Maryam Tariq Butt", studentId: "STU-2024-0006", program: "Hifz", month: "June 2025", amount: 0, status: "PAID", paidAt: "2025-06-03", method: "Scholarship" },
-  { id: "7", student: "Hamza Khalid Ansari", studentId: "STU-2024-0007", program: "Hifz", month: "June 2025", amount: 3500, status: "PAID", paidAt: "2025-06-04", method: "Bank Transfer" },
-  { id: "8", student: "Sara Ijaz Chaudhry", studentId: "STU-2024-0008", program: "Nazra", month: "June 2025", amount: 2500, status: "OVERDUE", paidAt: null, method: null },
-];
-
-const revenueData = [
-  { month: "Jan", collected: 380000, outstanding: 45000 },
-  { month: "Feb", collected: 395000, outstanding: 38000 },
-  { month: "Mar", collected: 420000, outstanding: 52000 },
-  { month: "Apr", collected: 410000, outstanding: 41000 },
-  { month: "May", collected: 455000, outstanding: 33000 },
-  { month: "Jun", collected: 380000, outstanding: 120000 },
-];
+type FeeRow = {
+  id: string;
+  student: string;
+  studentId: string;
+  program: string;
+  month: string;
+  amount: number;
+  status: string;
+  paidAt: string | null;
+  method: string | null;
+};
 
 const statusConfig: Record<string, { label: string; pill: string; icon: React.ElementType }> = {
   PAID: { label: "Paid", pill: "pill-success", icon: CheckCircle2 },
   PENDING: { label: "Pending", pill: "pill-warning", icon: Clock },
   OVERDUE: { label: "Overdue", pill: "pill-danger", icon: AlertCircle },
+  PARTIAL: { label: "Partial", pill: "pill-warning", icon: Clock },
+  WAIVED: { label: "Waived", pill: "pill-info", icon: CheckCircle2 },
 };
 
 export function FinanceContent() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [fees, setFees] = useState(FEES);
+  const [fees, setFees] = useState<FeeRow[]>([]);
+  const [summary, setSummary] = useState<{
+    totalCollected: number;
+    totalOutstanding: number;
+    collectionRate: number;
+    scholarshipCount: number;
+    revenueData: { month: string; collected: number; outstanding: number }[];
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+
+  const loadFees = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/institute/fees?summary=true");
+      if (!res.ok) throw new Error("Failed to load fees");
+      const data = await res.json();
+      setFees(data.fees || []);
+      setSummary(data.summary || null);
+    } catch (err) {
+      console.error(err);
+      setFees([]);
+      setSummary(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFees();
+  }, [loadFees]);
 
   const filtered = fees.filter((f) => {
     const matchSearch =
@@ -50,9 +73,11 @@ export function FinanceContent() {
     return matchSearch && matchStatus;
   });
 
-  const totalCollected = fees.filter((f) => f.status === "PAID").reduce((s, f) => s + f.amount, 0);
-  const totalOutstanding = fees.filter((f) => f.status !== "PAID").reduce((s, f) => s + f.amount, 0);
-  const collectionRate = Math.round((fees.filter((f) => f.status === "PAID").length / fees.length) * 100);
+  const totalCollected = summary?.totalCollected ?? 0;
+  const totalOutstanding = summary?.totalOutstanding ?? 0;
+  const collectionRate = summary?.collectionRate ?? 0;
+  const revenueData = summary?.revenueData ?? [];
+  const scholarshipCount = summary?.scholarshipCount ?? 0;
 
   const handleExport = () => {
     downloadCsv(
@@ -62,14 +87,13 @@ export function FinanceContent() {
     );
   };
 
-  const handleCollect = (id: string) => {
-    setFees((prev) =>
-      prev.map((f) =>
-        f.id === id
-          ? { ...f, status: "PAID", paidAt: new Date().toISOString().split("T")[0], method: "Cash" }
-          : f
-      )
-    );
+  const handleCollect = async (id: string) => {
+    const res = await fetch(`/api/institute/fees/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentMethod: "CASH" }),
+    });
+    if (res.ok) loadFees();
   };
 
   const handleRecordPayment = () => {
@@ -79,16 +103,23 @@ export function FinanceContent() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-gray-400">
+        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading fee records...
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="section-heading">Fee Management</h2>
-          <p className="text-sm text-gray-500 mt-0.5">June 2025 — {fees.length} students</p>
+          <p className="text-sm text-gray-500 mt-0.5">{fees.length} fee record{fees.length !== 1 ? "s" : ""}</p>
         </div>
         <div className="flex gap-3">
-          <button className="btn-ghost text-sm py-2" onClick={handleExport}>
+          <button className="btn-ghost text-sm py-2" onClick={handleExport} disabled={filtered.length === 0}>
             <Download className="h-4 w-4" />
             Export
           </button>
@@ -99,13 +130,12 @@ export function FinanceContent() {
         </div>
       </div>
 
-      {/* ── KPI Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: "Total Collected", value: formatCurrency(totalCollected), icon: DollarSign, color: "bg-green-50 text-green-700" },
           { label: "Outstanding", value: formatCurrency(totalOutstanding), icon: AlertCircle, color: "bg-red-50 text-red-700" },
           { label: "Collection Rate", value: `${collectionRate}%`, icon: TrendingUp, color: "bg-blue-50 text-blue-700" },
-          { label: "Scholarships", value: "1 student", icon: CreditCard, color: "bg-purple-50 text-purple-700" },
+          { label: "Scholarships", value: `${scholarshipCount} student${scholarshipCount !== 1 ? "s" : ""}`, icon: CreditCard, color: "bg-purple-50 text-purple-700" },
         ].map((c) => {
           const Icon = c.icon;
           return (
@@ -122,27 +152,27 @@ export function FinanceContent() {
         })}
       </div>
 
-      {/* ── Revenue Chart ── */}
-      <div className="dash-card p-6">
-        <h3 className="font-semibold text-gray-900 mb-1">Revenue Trend</h3>
-        <p className="text-xs text-gray-400 mb-6">Monthly fee collection vs outstanding</p>
-        <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={revenueData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false}
-              tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-            <Tooltip
-              formatter={(v: number) => formatCurrency(v)}
-              contentStyle={{ borderRadius: "12px", border: "1px solid #e5e7eb", fontSize: "12px" }}
-            />
-            <Line type="monotone" dataKey="collected" stroke="#1B5E20" strokeWidth={2.5} dot={{ fill: "#1B5E20", r: 4 }} name="Collected" />
-            <Line type="monotone" dataKey="outstanding" stroke="#EF4444" strokeWidth={2} strokeDasharray="4 2" dot={{ fill: "#EF4444", r: 4 }} name="Outstanding" />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+      {revenueData.length > 0 && (
+        <div className="dash-card p-6">
+          <h3 className="font-semibold text-gray-900 mb-1">Revenue Trend</h3>
+          <p className="text-xs text-gray-400 mb-6">Monthly fee collection vs outstanding</p>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={revenueData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false}
+                tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip
+                formatter={(v: number) => formatCurrency(v)}
+                contentStyle={{ borderRadius: "12px", border: "1px solid #e5e7eb", fontSize: "12px" }}
+              />
+              <Line type="monotone" dataKey="collected" stroke="#1B5E20" strokeWidth={2.5} dot={{ fill: "#1B5E20", r: 4 }} name="Collected" />
+              <Line type="monotone" dataKey="outstanding" stroke="#EF4444" strokeWidth={2} strokeDasharray="4 2" dot={{ fill: "#EF4444", r: 4 }} name="Outstanding" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
-      {/* ── Fee Table ── */}
       <div className="dash-card overflow-hidden">
         <div className="p-5 border-b border-border flex gap-3">
           <div className="relative flex-1">
@@ -182,8 +212,12 @@ export function FinanceContent() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((f) => {
-                const cfg = statusConfig[f.status];
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-10 text-gray-400">No fee records found.</td>
+                </tr>
+              ) : filtered.map((f) => {
+                const cfg = statusConfig[f.status] || statusConfig.PENDING;
                 const Icon = cfg.icon;
                 return (
                   <tr key={f.id}>
@@ -214,7 +248,7 @@ export function FinanceContent() {
                     <td><span className="text-sm text-gray-500">{f.method || "—"}</span></td>
                     <td><span className="text-sm text-gray-500">{f.paidAt || "—"}</span></td>
                     <td>
-                      {f.status !== "PAID" && (
+                      {f.status !== "PAID" && f.status !== "WAIVED" && (
                         <button
                           className="btn-ghost text-xs py-1.5 px-3"
                           id={`btn-collect-${f.id}`}

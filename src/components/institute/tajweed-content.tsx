@@ -1,32 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  Award, CheckCircle2, Star, Save, RotateCcw, AlertCircle, Sparkles, BookOpen
+  Award, CheckCircle2, Star, Save, RotateCcw, AlertCircle, Sparkles, BookOpen, Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const SAMPLE_STUDENTS = [
-  { id: "5", name: "Ibrahim Sheikh Rahman", level: "Advanced", makharijScore: 9.0, sifaatScore: 8.5, certificationStatus: "Eligible" },
-  { id: "3", name: "Usman Ali Siddiqui", level: "Intermediate", makharijScore: 7.5, sifaatScore: 7.0, certificationStatus: "In Progress" },
-];
+type TajweedStudent = {
+  id: string;
+  name: string;
+  progress: string;
+  masteredCount: number;
+  totalRules: number;
+  masteryPct: number;
+};
 
-const TAJWEED_RULES = [
-  { id: "r1", rule: "Makharij al-Huroof", category: "Articulation Points", desc: "Correct pronunciation of Arabic letters from their proper source.", weight: "30%" },
-  { id: "r2", rule: "Ghunnah (Nasalization)", category: "Rules of Nun & Mim", desc: "Nasal sound produced on Noon and Meem with Tashdeed.", weight: "15%" },
-  { id: "r3", rule: "Madd (Prolongation)", category: "Rules of Madd", desc: "Lengthening of vowel sounds under specific conditions.", weight: "20%" },
-  { id: "r4", rule: "Qalqalah (Echoing)", category: "Letter Characteristics", desc: "Echoing sound produced on specific letters when Sakin.", weight: "15%" },
-  { id: "r5", rule: "Ahkam ar-Raa", category: "Letter Characteristics", desc: "Rules governing the thickness or thinness of the letter Raa.", weight: "10%" },
-  { id: "r6", rule: "Waqf (Rules of Stopping)", category: "Recitation Etiquette", desc: "Knowing when and how to pause during recitation.", weight: "10%" },
-];
+type TajweedRule = {
+  id: string;
+  ruleName: string;
+  category: string;
+  description: string | null;
+};
 
-const EVALUATIONS = [
-  { student: "Ibrahim Sheikh Rahman", rule: "Madd (Prolongation)", score: 9.5, evaluator: "Qari Hamid", date: "June 14, 2025" },
-  { student: "Usman Ali Siddiqui", rule: "Ghunnah (Nasalization)", score: 8.0, evaluator: "Qari Hamid", date: "June 13, 2025" },
-];
+type Evaluation = {
+  id: string;
+  studentId: string;
+  ruleId: string;
+  ruleName: string;
+  practiceScore: number | null;
+  isMastered: boolean;
+};
 
 export function TajweedContent() {
-  const [selectedStudent, setSelectedStudent] = useState("5");
+  const [students, setStudents] = useState<TajweedStudent[]>([]);
+  const [rules, setRules] = useState<TajweedRule[]>([]);
+  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState("");
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"rules" | "evaluation" | "records">("rules");
   const [form, setForm] = useState({
     ruleId: "r1",
@@ -35,12 +45,69 @@ export function TajweedContent() {
   });
   const [saved, setSaved] = useState(false);
 
-  const student = SAMPLE_STUDENTS.find((s) => s.id === selectedStudent)!;
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/institute/tajweed");
+      if (!res.ok) throw new Error("Failed to load");
+      const data = await res.json();
+      const list: TajweedStudent[] = data.students || [];
+      setStudents(list);
+      setRules(data.rules || []);
+      setEvaluations(data.evaluations || []);
+      if (list.length > 0 && !selectedStudent) setSelectedStudent(list[0].id);
+      if ((data.rules || []).length > 0) {
+        setForm((f) => ({ ...f, ruleId: data.rules[0].id }));
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedStudent]);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const student = students.find((s) => s.id === selectedStudent);
+
+  const handleSave = async () => {
+    if (!selectedStudent || !form.ruleId) return;
+    const res = await fetch("/api/institute/tajweed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        studentId: selectedStudent,
+        ruleId: form.ruleId,
+        isMastered: form.score >= 8,
+        practiceScore: form.score,
+        notes: form.comments,
+      }),
+    });
+    if (res.ok) {
+      setSaved(true);
+      loadData();
+      setTimeout(() => setSaved(false), 2000);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-gray-400">
+        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading tajweed data...
+      </div>
+    );
+  }
+
+  if (students.length === 0) {
+    return (
+      <div className="dash-card p-12 text-center text-gray-400">
+        <BookOpen className="h-10 w-10 mx-auto mb-3 opacity-40" />
+        <p>No Tajweed students enrolled yet.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -58,7 +125,7 @@ export function TajweedContent() {
           className="form-input w-64"
           id="select-student"
         >
-          {SAMPLE_STUDENTS.map((s) => (
+          {students.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
             </option>
@@ -73,30 +140,30 @@ export function TajweedContent() {
             <span className="text-white text-xl font-bold font-arabic">ت</span>
           </div>
           <div className="flex-1">
-            <h3 className="font-display text-xl font-bold text-gray-900">{student.name}</h3>
-            <p className="text-sm text-gray-500 mb-4">Tajweed Level: <strong>{student.level}</strong></p>
+            <h3 className="font-display text-xl font-bold text-gray-900">{student?.name}</h3>
+            <p className="text-sm text-gray-500 mb-4">Progress: <strong>{student?.progress}</strong></p>
             <div className="flex items-center gap-6">
               <div>
-                <p className="text-xs text-gray-400">Makharij Score</p>
+                <p className="text-xs text-gray-400">Rules Mastered</p>
                 <div className="flex items-center gap-1 mt-1 font-semibold text-violet-800">
                   <Sparkles className="h-4 w-4 text-violet-500" />
-                  {student.makharijScore} / 10
+                  {student?.masteredCount ?? 0} / {student?.totalRules ?? 0}
                 </div>
               </div>
               <div>
-                <p className="text-xs text-gray-400">Sifaat Score</p>
+                <p className="text-xs text-gray-400">Mastery</p>
                 <div className="flex items-center gap-1 mt-1 font-semibold text-fuchsia-800">
                   <Star className="h-4 w-4 text-fuchsia-500 fill-fuchsia-500" />
-                  {student.sifaatScore} / 10
+                  {student?.masteryPct ?? 0}%
                 </div>
               </div>
               <div>
                 <p className="text-xs text-gray-400">Certification</p>
                 <span className={cn(
                   "pill text-xs mt-1 inline-block",
-                  student.certificationStatus === "Eligible" ? "pill-success" : "pill-info"
+                  (student?.masteryPct ?? 0) >= 80 ? "pill-success" : "pill-info"
                 )}>
-                  {student.certificationStatus}
+                  {(student?.masteryPct ?? 0) >= 80 ? "Eligible" : "In Progress"}
                 </span>
               </div>
             </div>
@@ -133,14 +200,15 @@ export function TajweedContent() {
           <h3 className="font-semibold text-gray-900 mb-1">Standard Tajweed Curriculum Rules</h3>
           <p className="text-sm text-gray-400 mb-6">Foundational recitation rubrics and grading weightage</p>
           <div className="grid md:grid-cols-2 gap-4">
-            {TAJWEED_RULES.map((r) => (
+            {rules.length === 0 ? (
+              <p className="text-sm text-gray-400 py-6 text-center">No tajweed rules in database yet.</p>
+            ) : rules.map((r) => (
               <div key={r.id} className="p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-white hover:shadow-md transition-all duration-200">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold text-violet-700 bg-violet-50 px-2.5 py-0.5 rounded-full">{r.category}</span>
-                  <span className="text-xs font-bold text-gray-500">Weight: {r.weight}</span>
                 </div>
-                <h4 className="font-bold text-gray-900 mb-1">{r.rule}</h4>
-                <p className="text-xs text-gray-500 leading-relaxed">{r.desc}</p>
+                <h4 className="font-bold text-gray-900 mb-1">{r.ruleName}</h4>
+                <p className="text-xs text-gray-500 leading-relaxed">{r.description || "—"}</p>
               </div>
             ))}
           </div>
@@ -159,8 +227,8 @@ export function TajweedContent() {
                 onChange={(e) => setForm({ ...form, ruleId: e.target.value })}
                 className="form-input"
               >
-                {TAJWEED_RULES.map((r) => (
-                  <option key={r.id} value={r.id}>{r.rule} ({r.category})</option>
+                {rules.map((r) => (
+                  <option key={r.id} value={r.id}>{r.ruleName} ({r.category})</option>
                 ))}
               </select>
             </div>
@@ -243,17 +311,26 @@ export function TajweedContent() {
               </tr>
             </thead>
             <tbody>
-              {EVALUATIONS.map((e, idx) => (
-                <tr key={idx}>
-                  <td className="font-semibold text-gray-900">{e.student}</td>
-                  <td>
-                    <span className="font-medium text-gray-700">{e.rule}</span>
-                  </td>
-                  <td className="font-bold text-violet-700">{e.score} / 10</td>
-                  <td className="text-gray-600">{e.evaluator}</td>
-                  <td className="text-gray-400 text-xs">{e.date}</td>
+              {evaluations.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="text-center py-8 text-gray-400">No evaluations yet.</td>
                 </tr>
-              ))}
+              ) : evaluations
+                .filter((e) => !selectedStudent || e.studentId === selectedStudent)
+                .map((e) => {
+                  const s = students.find((st) => st.id === e.studentId);
+                  return (
+                    <tr key={e.id}>
+                      <td className="font-semibold text-gray-900">{s?.name || "—"}</td>
+                      <td>
+                        <span className="font-medium text-gray-700">{e.ruleName}</span>
+                      </td>
+                      <td className="font-bold text-violet-700">{e.practiceScore ?? "—"} / 10</td>
+                      <td className="text-gray-600">{e.isMastered ? "Mastered" : "In progress"}</td>
+                      <td className="text-gray-400 text-xs">—</td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>

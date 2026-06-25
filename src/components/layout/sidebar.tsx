@@ -10,7 +10,7 @@ import {
   ClipboardList, DollarSign, MessageSquare, BarChart3, Settings,
   Building2, Shield, Bell, LogOut, ChevronRight, Star, Menu, X,
   Award, UserCheck, GitBranch, HeartHandshake, CreditCard, FileText,
-  Sparkles, Calendar,
+  Sparkles, Calendar, Gift,
 } from "lucide-react";
 
 interface NavItem {
@@ -53,6 +53,7 @@ const instituteNav: NavItem[] = [
     children: [
       { label: "Fee Management", href: "/institute/finance/fees", icon: DollarSign },
       { label: "Scholarships", href: "/institute/finance/scholarships", icon: HeartHandshake },
+      { label: "Sponsors & Donations", href: "/institute/finance/sponsors", icon: Gift },
       { label: "Reports", href: "/institute/finance/reports", icon: BarChart3 },
     ],
   },
