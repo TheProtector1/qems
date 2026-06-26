@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { Bell, Search, Sun, Moon, ChevronDown } from "lucide-react";
+import { Bell, Search, Sun, Moon, ChevronDown, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
 import { getInitials } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -11,9 +11,10 @@ import { LanguageToggle } from "@/components/common/language-toggle";
 interface TopbarProps {
   title: string;
   breadcrumbs?: { label: string; href?: string }[];
+  onMenuClick?: () => void;
 }
 
-export function Topbar({ title, breadcrumbs }: TopbarProps) {
+export function Topbar({ title, breadcrumbs, onMenuClick }: TopbarProps) {
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
   const [notifOpen, setNotifOpen] = useState(false);
@@ -39,7 +40,7 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
   useEffect(() => {
     if (!session?.user) return;
     fetch("/api/notifications")
-      .then((res) => res.ok ? res.json() : { notifications: [] })
+      .then((res) => (res.ok ? res.json() : { notifications: [] }))
       .then((data) => setNotifications(data.notifications || []))
       .catch(console.error);
   }, [session]);
@@ -59,35 +60,50 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-border px-6 flex items-center gap-4 sticky top-0 z-40">
-      {/* Page Title / Breadcrumbs */}
-      <div className="flex-1">
+    <header className="h-14 sm:h-16 bg-white border-b border-border px-3 sm:px-4 lg:px-6 flex items-center gap-2 sm:gap-4 sticky top-0 z-30 shrink-0">
+      <button
+        type="button"
+        onClick={onMenuClick}
+        className="p-2 -ml-1 rounded-xl text-gray-600 hover:text-primary-700 hover:bg-primary-50 transition-colors lg:hidden"
+        aria-label="Open navigation menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      <div className="flex-1 min-w-0">
         {breadcrumbs ? (
-          <nav className="flex items-center gap-1.5 text-sm">
+          <nav className="flex items-center gap-1 text-xs sm:text-sm overflow-x-auto no-scrollbar">
             {breadcrumbs.map((b, i) => (
-              <span key={i} className="flex items-center gap-1.5">
+              <span key={i} className="flex items-center gap-1 shrink-0">
                 {i > 0 && <span className="text-gray-300">/</span>}
                 {b.href ? (
-                  <a href={b.href} className="text-gray-500 hover:text-primary-700 transition-colors">
+                  <a href={b.href} className="text-gray-500 hover:text-primary-700 transition-colors truncate max-w-[8rem] sm:max-w-none">
                     {b.label}
                   </a>
                 ) : (
-                  <span className="font-semibold text-gray-900">{b.label}</span>
+                  <span className="font-semibold text-gray-900 truncate">{b.label}</span>
                 )}
               </span>
             ))}
           </nav>
         ) : (
-          <h1 className="font-semibold text-gray-900 text-lg">{title}</h1>
+          <h1 className="font-semibold text-gray-900 text-base sm:text-lg truncate">{title}</h1>
         )}
       </div>
 
-      {/* Right actions */}
-      <div className="flex items-center gap-2">
-        {/* Search */}
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        {searchOpen && (
+          <input
+            type="search"
+            placeholder="Search..."
+            className="form-input h-9 w-32 sm:w-48 text-xs absolute right-14 top-2 sm:static sm:w-40"
+            autoFocus
+            onBlur={() => setSearchOpen(false)}
+          />
+        )}
         <button
           onClick={() => setSearchOpen(!searchOpen)}
-          className="p-2 rounded-xl text-gray-500 hover:text-primary-700 hover:bg-primary-50 transition-colors"
+          className="p-2 rounded-xl text-gray-500 hover:text-primary-700 hover:bg-primary-50 transition-colors hidden sm:flex"
           title="Search"
           id="btn-search"
         >
@@ -96,17 +112,15 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
 
         <LanguageToggle />
 
-        {/* Theme toggle */}
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          className="p-2 rounded-xl text-gray-500 hover:text-primary-700 hover:bg-primary-50 transition-colors"
+          className="p-2 rounded-xl text-gray-500 hover:text-primary-700 hover:bg-primary-50 transition-colors hidden sm:flex"
           title="Toggle theme"
           id="btn-theme-toggle"
         >
           {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
 
-        {/* Notifications */}
         <div className="relative">
           <button
             onClick={() => setNotifOpen(!notifOpen)}
@@ -118,24 +132,36 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
             <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
           </button>
           {notifOpen && (
-            <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-card-hover border border-border overflow-hidden z-50">
+            <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-1.5rem))] bg-white rounded-2xl shadow-card-hover border border-border overflow-hidden z-50">
               <div className="p-4 border-b border-border flex items-center justify-between">
                 <h3 className="font-semibold text-sm">Notifications</h3>
-                <button className="text-xs text-primary-700 font-medium" onClick={markAllRead}>Mark all read</button>
+                <button className="text-xs text-primary-700 font-medium" onClick={markAllRead}>
+                  Mark all read
+                </button>
               </div>
               <div className="divide-y divide-border max-h-80 overflow-y-auto">
                 {notifications.length === 0 ? (
                   <p className="text-center text-sm text-gray-400 py-8">No notifications yet.</p>
-                ) : notifications.map((n) => (
-                  <div key={n.id} className={cn("flex gap-3 p-4 hover:bg-gray-50 cursor-pointer", n.unread && "bg-primary-50/40")}>
-                    <span className="text-xl">{n.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-700 leading-snug">{n.msg}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{n.time}</p>
+                ) : (
+                  notifications.map((n) => (
+                    <div
+                      key={n.id}
+                      className={cn(
+                        "flex gap-3 p-4 hover:bg-gray-50 cursor-pointer",
+                        n.unread && "bg-primary-50/40"
+                      )}
+                    >
+                      <span className="text-xl">{n.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-700 leading-snug">{n.msg}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{n.time}</p>
+                      </div>
+                      {n.unread && (
+                        <span className="h-2 w-2 rounded-full bg-primary-600 flex-shrink-0 mt-1.5" />
+                      )}
                     </div>
-                    {n.unread && <span className="h-2 w-2 rounded-full bg-primary-600 flex-shrink-0 mt-1.5" />}
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
               <div className="p-3 border-t border-border">
                 <button className="w-full text-center text-xs text-primary-700 font-semibold hover:text-primary-900">
@@ -146,10 +172,13 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
           )}
         </div>
 
-        {/* User avatar */}
-        <div className="flex items-center gap-2 pl-2 border-l border-border cursor-pointer hover:bg-gray-50 rounded-xl px-3 py-1.5 transition-colors">
+        <div className="flex items-center gap-1.5 sm:gap-2 pl-1 sm:pl-2 border-l border-border cursor-pointer hover:bg-gray-50 rounded-xl px-2 sm:px-3 py-1.5 transition-colors">
           {profileImage ? (
-            <img src={profileImage} alt="User Avatar" className="h-8 w-8 rounded-full object-cover ring-1 ring-gray-200" />
+            <img
+              src={profileImage}
+              alt="User Avatar"
+              className="h-8 w-8 rounded-full object-cover ring-1 ring-gray-200"
+            />
           ) : (
             <div className="h-8 w-8 rounded-full bg-gradient-primary flex items-center justify-center">
               <span className="text-white text-xs font-bold">
@@ -157,7 +186,7 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
               </span>
             </div>
           )}
-          <div className="hidden sm:block text-left">
+          <div className="hidden md:block text-left">
             <p className="text-xs font-semibold text-gray-900 leading-tight">
               {session?.user?.name?.split(" ")[0]}
             </p>
@@ -165,7 +194,7 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
               {session?.user?.role ? roleLabel[session.user.role] : ""}
             </p>
           </div>
-          <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+          <ChevronDown className="h-3.5 w-3.5 text-gray-400 hidden sm:block" />
         </div>
       </div>
     </header>

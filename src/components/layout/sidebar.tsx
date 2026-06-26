@@ -123,16 +123,20 @@ const studentNav: NavItem[] = [
 interface SidebarProps {
   collapsed: boolean;
   onCollapse: (v: boolean) => void;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
 function NavItemRow({
   item,
   collapsed,
   depth = 0,
+  onNavigate,
 }: {
   item: NavItem;
   collapsed: boolean;
   depth?: number;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(
@@ -163,7 +167,13 @@ function NavItemRow({
         {open && (
           <div className="ml-2 mt-1 space-y-0.5 border-l border-primary-100 pl-3">
             {item.children.map((child) => (
-              <NavItemRow key={child.href} item={child} collapsed={collapsed} depth={depth + 1} />
+              <NavItemRow
+                key={child.href}
+                item={child}
+                collapsed={collapsed}
+                depth={depth + 1}
+                onNavigate={onNavigate}
+              />
             ))}
           </div>
         )}
@@ -174,6 +184,7 @@ function NavItemRow({
   return (
     <Link
       href={item.href}
+      onClick={onNavigate}
       className={cn(
         "nav-item",
         isActive ? "nav-item-active" : "nav-item-inactive",
@@ -190,10 +201,17 @@ function NavItemRow({
   );
 }
 
-export function Sidebar({ collapsed, onCollapse }: SidebarProps) {
+export function Sidebar({ collapsed, onCollapse, mobileOpen = false, onMobileClose }: SidebarProps) {
   const { data: session } = useSession();
+  const pathname = usePathname();
   const role = session?.user?.role;
   const [profileImage, setProfileImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    onMobileClose?.();
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleNavigate = () => onMobileClose?.();
 
   useEffect(() => {
     if (session?.user?.image) {
@@ -220,28 +238,36 @@ export function Sidebar({ collapsed, onCollapse }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "flex flex-col h-full bg-white border-r border-border transition-all duration-300",
-        collapsed ? "w-16" : "w-64"
+        "flex flex-col h-full bg-white border-r border-border transition-transform duration-300 z-50",
+        "fixed inset-y-0 left-0 w-72 max-w-[85vw] lg:static lg:max-w-none lg:translate-x-0",
+        mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+        collapsed ? "lg:w-16" : "lg:w-64"
       )}
     >
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-border">
+      <div className="flex items-center gap-3 px-4 h-14 sm:h-16 border-b border-border">
         <div className="flex-shrink-0 h-8 w-8 rounded-xl bg-gradient-primary flex items-center justify-center shadow-md">
           <span className="text-white text-sm font-bold font-arabic">ق</span>
         </div>
-        {!collapsed && (
+        {(!collapsed || mobileOpen) && (
           <span className="font-display font-bold text-primary-900 text-lg">QEMS</span>
         )}
         <button
+          onClick={() => onMobileClose?.()}
+          className="ml-auto p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors lg:hidden"
+          aria-label="Close menu"
+        >
+          <X className="h-4 w-4" />
+        </button>
+        <button
           onClick={() => onCollapse(!collapsed)}
-          className="ml-auto p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          className="ml-auto p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors hidden lg:block"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
         </button>
       </div>
 
-      {/* Institute name */}
-      {!collapsed && session?.user?.instituteName && (
+      {(!collapsed || mobileOpen) && session?.user?.instituteName && (
         <div className="mx-3 mt-3 rounded-xl bg-primary-50 border border-primary-100 px-3 py-2">
           <p className="text-[10px] text-primary-500 font-medium uppercase tracking-wide">Institute</p>
           <p className="text-primary-900 font-semibold text-sm truncate">
@@ -250,16 +276,19 @@ export function Sidebar({ collapsed, onCollapse }: SidebarProps) {
         </div>
       )}
 
-      {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5 no-scrollbar">
         {currentNav.map((item) => (
-          <NavItemRow key={item.href} item={item} collapsed={collapsed} />
+          <NavItemRow
+            key={item.href}
+            item={item}
+            collapsed={collapsed && !mobileOpen}
+            onNavigate={handleNavigate}
+          />
         ))}
       </nav>
 
-      {/* User section */}
       <div className="border-t border-border p-3">
-        {!collapsed ? (
+        {(!collapsed || mobileOpen) ? (
           <div className="flex items-center gap-3">
             {profileImage ? (
               <img src={profileImage} alt="User Avatar" className="h-9 w-9 rounded-full object-cover ring-1 ring-gray-200 flex-shrink-0" />

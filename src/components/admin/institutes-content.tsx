@@ -303,14 +303,14 @@ export function AdminInstitutesContent() {
 
       <div className="space-y-6 max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="page-header-row">
           <div>
-            <h2 className="section-heading font-display text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <Building2 className="h-6 w-6 text-primary-700" /> Platform Tenants
+            <h2 className="section-heading font-display font-bold text-gray-900 flex items-center gap-2">
+              <Building2 className="h-6 w-6 text-primary-700 shrink-0" /> Platform Tenants
             </h2>
             <p className="text-sm text-gray-500 mt-0.5">Manage all registered Quran institutes on the platform</p>
           </div>
-          <div className="flex gap-3">
+          <div className="page-header-actions">
             <button className="btn-ghost text-sm py-2" onClick={fetchInstitutes} disabled={loading}>
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /> Refresh
             </button>

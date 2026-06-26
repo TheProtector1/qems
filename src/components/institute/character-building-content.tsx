@@ -580,7 +580,7 @@ export function CharacterBuildingContent() {
               </button>
             </div>
 
-            <div className="grid grid-cols-4 gap-3 p-6 pb-0">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 sm:p-6 pb-0">
               {CHARACTER_STATUSES.map((st) => {
                 const count = st.value === "PENDING"
                   ? (viewingProgressTask.stats?.pending ?? 0)

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MessageSquare, Bell, Send, Sparkles, Check, Paperclip, Search, PlusCircle, Loader2 } from "lucide-react";
+import { MessageSquare, Bell, Send, Sparkles, Check, Paperclip, Search, PlusCircle, Loader2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Thread = {
@@ -46,6 +46,7 @@ export function CommunicationContent() {
   const [annTarget, setAnnTarget] = useState("All");
   const [annContent, setAnnContent] = useState("");
   const [annSaved, setAnnSaved] = useState(false);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
   const loadThreads = useCallback(async () => {
     try {
@@ -146,6 +147,7 @@ export function CommunicationContent() {
 
   const selectThread = (id: string) => {
     setSelectedThreadId(id);
+    setMobileChatOpen(true);
     setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, unread: false } : t)));
   };
 
@@ -159,7 +161,7 @@ export function CommunicationContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-full sm:w-fit overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveMode("chat")}
           className={cn(
@@ -181,8 +183,14 @@ export function CommunicationContent() {
       </div>
 
       {activeMode === "chat" && (
-        <div className="grid lg:grid-cols-3 gap-6 h-[600px] border border-border rounded-2xl bg-white overflow-hidden shadow-sm">
-          <div className="border-r border-border flex flex-col h-full bg-gray-50/55">
+        <div className="border border-border rounded-2xl bg-white overflow-hidden shadow-sm min-h-[min(70dvh,600px)] lg:min-h-[600px] flex flex-col lg:grid lg:grid-cols-3 lg:gap-0">
+          <div
+            className={cn(
+              "border-b lg:border-b-0 lg:border-r border-border flex flex-col bg-gray-50/55 min-h-0",
+              "lg:col-span-1",
+              mobileChatOpen && selectedThreadId ? "hidden lg:flex" : "flex flex-1 lg:flex-none"
+            )}
+          >
             <div className="p-4 border-b border-border bg-white">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -218,22 +226,35 @@ export function CommunicationContent() {
             </div>
           </div>
 
-          <div className="lg:col-span-2 flex flex-col h-full">
+          <div
+            className={cn(
+              "lg:col-span-2 flex flex-col min-h-0 flex-1",
+              mobileChatOpen && selectedThreadId ? "flex" : "hidden lg:flex"
+            )}
+          >
             {activeThread ? (
               <>
-                <div className="p-4 border-b border-border flex items-center justify-between bg-white">
-                  <div className="flex items-center gap-3">
+                <div className="p-3 sm:p-4 border-b border-border flex items-center gap-3 bg-white">
+                  <button
+                    type="button"
+                    onClick={() => setMobileChatOpen(false)}
+                    className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 lg:hidden"
+                    aria-label="Back to conversations"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className="h-9 w-9 rounded-full bg-gradient-primary flex items-center justify-center text-white font-bold text-sm">
                       {activeThread.avatar}
                     </div>
-                    <div>
-                      <p className="font-semibold text-gray-900 text-sm">{activeThread.name}</p>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 text-sm truncate">{activeThread.name}</p>
                       <p className="text-[10px] text-primary-600 font-medium">{activeThread.role}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50/30">
+                <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 bg-gray-50/30 min-h-0">
                   {messagesLoading ? (
                     <div className="flex justify-center py-8 text-gray-400">
                       <Loader2 className="h-5 w-5 animate-spin" />
@@ -243,7 +264,7 @@ export function CommunicationContent() {
                   ) : chatMessages.map((msg, i) => (
                     <div
                       key={msg.id || i}
-                      className={cn("flex flex-col max-w-[75%]", msg.self ? "ml-auto items-end" : "mr-auto items-start")}
+                      className={cn("flex flex-col max-w-[85%] sm:max-w-[75%]", msg.self ? "ml-auto items-end" : "mr-auto items-start")}
                     >
                       <div className={cn(
                         "rounded-2xl px-4 py-2.5 text-sm",
@@ -258,7 +279,7 @@ export function CommunicationContent() {
                   ))}
                 </div>
 
-                <form onSubmit={handleSendMessage} className="p-4 border-t border-border bg-white flex items-center gap-2">
+                <form onSubmit={handleSendMessage} className="p-3 sm:p-4 border-t border-border bg-white flex items-center gap-2 shrink-0">
                   <button type="button" className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
                     <Paperclip className="h-5 w-5" />
                   </button>
@@ -293,7 +314,7 @@ export function CommunicationContent() {
               <div className="space-y-3">
                 {announcements.map((ann) => (
                   <div key={ann.id} className="dash-card p-5">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
                       <h4 className="font-bold text-gray-900 text-base">{ann.title}</h4>
                       <span className="pill pill-primary text-[10px] py-0.5 px-2">Target: {ann.target}</span>
                     </div>

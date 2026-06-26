@@ -195,7 +195,7 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="page-header-row">
         <div>
           <h2 className="section-heading">Attendance</h2>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -203,7 +203,7 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
           </p>
         </div>
         {!readOnly && (
-          <div className="flex gap-3">
+          <div className="page-header-actions">
             <button className="btn-ghost text-sm py-2" onClick={loadAttendance} disabled={loading}>
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
               Refresh

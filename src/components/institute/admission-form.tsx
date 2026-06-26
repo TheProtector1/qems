@@ -326,7 +326,8 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* ── Step Indicator ── */}
-      <div className="flex items-center justify-between">
+      <div className="overflow-x-auto no-scrollbar -mx-1 px-1">
+      <div className="flex items-center justify-between min-w-[20rem] sm:min-w-0">
         {STEPS.map((s, idx) => {
           const Icon = s.icon;
           const isActive = step === s.id;
@@ -348,11 +349,12 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                 </div>
                 <span
                   className={cn(
-                    "text-[11px] font-semibold whitespace-nowrap",
+                    "text-[10px] sm:text-[11px] font-semibold whitespace-nowrap",
                     isActive ? "text-primary-800" : isDone ? "text-green-600" : "text-gray-400"
                   )}
                 >
-                  {s.label}
+                  <span className="hidden sm:inline">{s.label}</span>
+                  <span className="sm:hidden">Step {s.id}</span>
                 </span>
               </div>
               {idx < STEPS.length - 1 && (
@@ -367,9 +369,10 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
           );
         })}
       </div>
+      </div>
 
       {/* ── Form Card ── */}
-      <div className="dash-card p-8 bg-white">
+      <div className="dash-card p-4 sm:p-6 lg:p-8 bg-white">
         {error && (
           <div className="mb-5 p-3.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-semibold">
             {error}

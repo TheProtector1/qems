@@ -122,7 +122,7 @@ export function TajweedContent() {
         <select
           value={selectedStudent}
           onChange={(e) => setSelectedStudent(e.target.value)}
-          className="form-input w-64"
+          className="form-input w-full sm:w-64 max-w-md"
           id="select-student"
         >
           {students.map((s) => (

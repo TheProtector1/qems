@@ -266,7 +266,7 @@ export function AdminUsersContent() {
         </div>
 
         {/* Role Summary */}
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           {(["ALL", "INSTITUTE_OWNER", "TEACHER", "PARENT", "STUDENT", "BRANCH_MANAGER"] as const).map((r) => {
             const count = r === "ALL" ? users.length : users.filter((u) => u.role === r).length;
             const label = r === "ALL" ? "All" : r.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());

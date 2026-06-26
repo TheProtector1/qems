@@ -70,7 +70,7 @@ export function ParentQuranProgress({ childrenData }: ParentQuranProgressProps) 
           <select
             value={selectedChildIndex}
             onChange={(e) => setSelectedChildIndex(parseInt(e.target.value))}
-            className="form-input w-64 h-9 py-1 text-xs"
+            className="form-input w-full sm:w-64 max-w-md h-9 py-1 text-xs"
             id="select-parent-child"
           >
             {childrenData.map((c, idx) => (

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LandingNav } from "@/components/marketing/landing-nav";
 import {
   BookOpen, Users, BarChart3, Shield, Star, Check, ChevronRight,
   GraduationCap, Heart, Globe, Award, TrendingUp, Bell, CreditCard, ArrowRight,
@@ -149,33 +150,7 @@ const testimonials = [
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-white">
-      {/* ── Navbar ── */}
-      <nav className="sticky top-0 z-50 glass border-b border-white/30">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-primary shadow-glow-green">
-                <span className="text-white text-sm font-bold font-arabic">ق</span>
-              </div>
-              <span className="font-display text-xl font-bold text-primary-900">QEMS</span>
-            </div>
-            <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
-              <a href="#features" className="hover:text-primary-700 transition-colors">Features</a>
-              <a href="#pricing" className="hover:text-primary-700 transition-colors">Pricing</a>
-              <a href="#testimonials" className="hover:text-primary-700 transition-colors">Testimonials</a>
-              <Link href="/about" className="hover:text-primary-700 transition-colors">About</Link>
-            </div>
-            <div className="flex items-center gap-3">
-              <Link href="/auth/login" className="btn-ghost text-sm py-2 px-4">
-                Sign In
-              </Link>
-              <Link href="/auth/register" className="btn-primary text-sm py-2 px-4">
-                Get Started
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <LandingNav />
 
       {/* ── Hero ── */}
       <section className="relative overflow-hidden bg-gradient-hero pattern-overlay">
@@ -315,7 +290,7 @@ export default function HomePage() {
                   <GraduationCap className="h-5 w-5 text-primary-700" />
                   Ahmad Al-Rashid — Hifz Progress
                 </h4>
-                <div className="grid grid-cols-6 gap-2 mb-4">
+                <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 mb-4">
                   {Array.from({ length: 30 }, (_, i) => {
                     const juz = i + 1;
                     const done = juz <= 12;

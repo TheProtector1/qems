@@ -111,7 +111,7 @@ export function TeacherWorshipContent({ students }: TeacherWorshipContentProps) 
             <select
               value={selectedStudentId}
               onChange={(e) => setSelectedStudentId(e.target.value)}
-              className="form-input w-64 h-9 py-1 text-xs"
+              className="form-input w-full sm:w-64 max-w-md h-9 py-1 text-xs"
             >
               {students.map((student) => (
                 <option key={student.id} value={student.id}>

@@ -526,14 +526,14 @@ export function TeachersContent() {
 
       <div className="space-y-6 max-w-5xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="page-header-row">
           <div>
-            <h2 className="section-heading font-display text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <UserCheck className="h-6 w-6 text-primary-700" /> Staff Management
+            <h2 className="section-heading font-display font-bold text-gray-900 flex items-center gap-2">
+              <UserCheck className="h-6 w-6 text-primary-700 shrink-0" /> Staff Management
             </h2>
             <p className="text-sm text-gray-500 mt-0.5">Manage teachers and other institute staff</p>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="page-header-actions">
             <button className="btn-ghost text-xs py-2" onClick={fetchData} disabled={loading}>
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /> Refresh
             </button>

@@ -73,7 +73,7 @@ export function ParentDashboardContent({ childrenData }: ParentDashboardContentP
           <select
             value={selectedChildIndex}
             onChange={(e) => setSelectedChildIndex(parseInt(e.target.value))}
-            className="form-input w-64 h-9 py-1 text-xs"
+            className="form-input w-full sm:w-64 max-w-md h-9 py-1 text-xs"
             id="select-dashboard-child"
           >
             {childrenData.map((c, idx) => (
@@ -170,7 +170,7 @@ export function ParentDashboardContent({ childrenData }: ParentDashboardContentP
           <div className="dash-card p-6">
             <h3 className="font-semibold text-gray-900 mb-1">Memorization Progress</h3>
             <p className="text-xs text-gray-400 mb-4">30 Juz completion map</p>
-            <div className="grid grid-cols-6 gap-1.5 mb-4">
+            <div className="grid grid-cols-5 sm:grid-cols-6 gap-1.5 mb-4">
               {Array.from({ length: 30 }, (_, i) => {
                 const juz = i + 1;
                 const done = juz < child.currentJuz;

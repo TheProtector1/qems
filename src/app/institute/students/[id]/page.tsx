@@ -208,7 +208,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
               <h3 className="font-display font-bold text-gray-900">Hifz Map — 30 Juz</h3>
               <span className="pill pill-success">{completionPct}% Complete</span>
             </div>
-            <div className="grid grid-cols-10 gap-1.5">
+            <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
               {Array.from({ length: 30 }, (_, i) => i + 1).map((juz) => (
                 <div
                   key={juz}

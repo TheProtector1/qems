@@ -272,7 +272,7 @@ export function TeacherCharacterBuildingContent() {
   return (
     <div className="space-y-6">
       {toast && (
-        <div className="fixed top-6 right-6 z-50 bg-green-800 text-white px-4 py-2 rounded-xl shadow-lg text-sm font-medium">
+        <div className="fixed top-20 sm:top-6 left-4 right-4 sm:left-auto sm:right-6 z-50 bg-green-800 text-white px-4 py-2 rounded-xl shadow-lg text-sm font-medium text-center sm:text-left">
           {toast}
         </div>
       )}

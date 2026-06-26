@@ -125,9 +125,8 @@ function EditStudentModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="bg-gradient-to-br from-primary-700 to-primary-900 p-6 text-white flex items-center justify-between">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[95dvh] flex flex-col">
+        <div className="bg-gradient-to-br from-primary-700 to-primary-900 p-4 sm:p-6 text-white flex items-center justify-between shrink-0">
           <div>
             <h2 className="font-display text-lg font-bold">Edit Student Profile</h2>
             <p className="text-primary-200 text-xs mt-0.5">ID: {student.studentId}</p>
@@ -137,8 +136,7 @@ function EditStudentModal({
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-semibold">
               {error}
@@ -610,12 +608,12 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
 
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="page-header-row">
           <div>
             <h2 className="section-heading">Students</h2>
             <p className="text-sm text-gray-500 mt-0.5">{students.length} total students enrolled</p>
           </div>
-          <div className="flex gap-3">
+          <div className="page-header-actions">
             <button className="btn-ghost text-sm py-2" onClick={fetchStudentsAndTeachers} disabled={loading}>
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /> Refresh
             </button>

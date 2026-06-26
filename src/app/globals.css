@@ -245,12 +245,30 @@
 
   /* Section heading */
   .section-heading {
-    @apply font-display text-2xl font-bold text-foreground;
+    @apply font-display text-xl sm:text-2xl font-bold text-foreground;
   }
 
   /* Page header */
   .page-header {
-    @apply mb-8 flex flex-col gap-1;
+    @apply mb-6 sm:mb-8 flex flex-col gap-1;
+  }
+
+  .page-header-row {
+    @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
+  }
+
+  .page-header-actions {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  /* Horizontal scroll for wide tables */
+  .table-scroll {
+    @apply overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0;
+  }
+
+  .dash-card:has(> .data-table),
+  .dash-card:has(.table-scroll) {
+    @apply overflow-x-auto;
   }
 
   /* KPI Card */
@@ -283,7 +301,7 @@
 
   /* Table */
   .data-table {
-    @apply w-full text-sm;
+    @apply w-full text-sm min-w-[36rem];
   }
   .data-table thead tr {
     @apply border-b border-border bg-muted/50;

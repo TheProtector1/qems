@@ -97,16 +97,16 @@ export function InstituteDashboardContent({
   return (
     <div className="space-y-6">
       {/* ── Greeting ── */}
-      <div className="flex items-center justify-between">
+      <div className="page-header-row">
         <div>
-          <h2 className="font-display text-2xl font-bold text-gray-900">
+          <h2 className="font-display text-xl sm:text-2xl font-bold text-gray-900">
             السَّلَامُ عَلَيْكُمْ 👋
           </h2>
           <p className="text-gray-500 text-sm mt-0.5">
             Here's what's happening at your institute today
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="page-header-actions">
           <Link href="/institute/students/admissions/new" className="btn-ghost text-sm py-2">
             <Plus className="h-4 w-4" />
             New Admission
