@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getTeacherAccessibleClasses } from "@/lib/teacher-classes";
+import { getTeacherAccessibleClassIds } from "@/lib/teacher-classes";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
-    const allowedClassIds = await getTeacherAccessibleClasses(teacher.id, teacher.instituteId);
+    const allowedClassIds = await getTeacherAccessibleClassIds(teacher.id, teacher.instituteId);
     if (!allowedClassIds.has(classId)) {
       return NextResponse.json({ error: "Class not assigned to you" }, { status: 403 });
     }

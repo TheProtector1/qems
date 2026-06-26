@@ -15,6 +15,7 @@ import {
   getPriorityMeta,
   getStatusMeta,
 } from "@/lib/character-building";
+import { ROLLUP_LABELS, type TaskRollupStatus } from "@/lib/character-task-stats";
 
 type TeacherOption = {
   id: string;
@@ -28,15 +29,23 @@ type Assignment = {
   teacher: TeacherOption;
 };
 
-type Progress = {
+type ClassProgress = {
   id: string;
-  studentId: string;
+  classId: string;
   status: string;
   notes: string | null;
-  completedAt: string | null;
   taughtAt: string | null;
-  student: { id: string; fullName: string; studentId: string };
+  completedAt: string | null;
+  class: { id: string; name: string; programType: string };
   teacher?: { user: { name: string } } | null;
+};
+
+type TaskStats = {
+  completed: number;
+  taught: number;
+  pending: number;
+  total: number;
+  percent: number;
 };
 
 type Task = {
@@ -47,11 +56,21 @@ type Task = {
   priority: string;
   dueDate: string;
   isActive: boolean;
-  progress: Progress[];
+  classProgress: ClassProgress[];
   assignments: Assignment[];
+  stats: TaskStats;
+  overdue: boolean;
+  rollup: TaskRollupStatus;
+  expectedClassCount: number;
 };
 
-type Student = { id: string; fullName: string; studentId: string };
+type ApiSummary = {
+  activeTasks: number;
+  overdueTasks: number;
+  fullyComplete: number;
+  teachersInvolved: number;
+  classCompletionRate: number;
+};
 
 function ProgressRing({ percent, size = 48 }: { percent: number; size?: number }) {
   const r = (size - 6) / 2;
@@ -78,10 +97,11 @@ function ProgressRing({ percent, size = 48 }: { percent: number; size?: number }
 
 export function CharacterBuildingContent() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
+  const [apiSummary, setApiSummary] = useState<ApiSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "OVERDUE" | "DONE">("ALL");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -137,7 +157,7 @@ export function CharacterBuildingContent() {
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks || []);
-        setStudents(data.students || []);
+        setApiSummary(data.summary || null);
         if (Array.isArray(data.teachers) && data.teachers.length > 0) {
           setTeachers(data.teachers);
         }
@@ -154,20 +174,25 @@ export function CharacterBuildingContent() {
     loadTeachers();
   }, [loadTeachers]);
 
-  const filteredTasks = useMemo(
-    () => tasks.filter((t) => categoryFilter === "ALL" || t.category === categoryFilter),
-    [tasks, categoryFilter]
-  );
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((t) => {
+      const catOk = categoryFilter === "ALL" || t.category === categoryFilter;
+      const statusOk =
+        statusFilter === "ALL" ||
+        (statusFilter === "ACTIVE" && t.isActive) ||
+        (statusFilter === "OVERDUE" && t.overdue && t.isActive) ||
+        (statusFilter === "DONE" && t.rollup === "DONE");
+      return catOk && statusOk;
+    });
+  }, [tasks, categoryFilter, statusFilter]);
 
-  const stats = useMemo(() => {
-    const active = tasks.filter((t) => t.isActive).length;
-    const assignedTeachers = new Set(tasks.flatMap((t) => t.assignments.map((a) => a.teacherId))).size;
-    const completed = tasks.reduce((acc, t) => acc + t.progress.filter((p) => p.status === "COMPLETED").length, 0);
-    const taught = tasks.reduce((acc, t) => acc + t.progress.filter((p) => p.status === "TAUGHT").length, 0);
-    const totalSlots = tasks.reduce((acc, t) => acc + students.length, 0);
-    const rate = totalSlots ? Math.round(((completed + taught * 0.5) / totalSlots) * 100) : 0;
-    return { active, assignedTeachers, completed, taught, rate };
-  }, [tasks, students.length]);
+  const stats = apiSummary || {
+    activeTasks: tasks.filter((t) => t.isActive).length,
+    overdueTasks: tasks.filter((t) => t.overdue).length,
+    fullyComplete: tasks.filter((t) => t.rollup === "DONE").length,
+    teachersInvolved: new Set(tasks.flatMap((t) => t.assignments.map((a) => a.teacherId))).size,
+    classCompletionRate: 0,
+  };
 
   const resetForm = () => {
     setTitle("");
@@ -201,6 +226,10 @@ export function CharacterBuildingContent() {
     setSelectedTeacherIds((prev) =>
       prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
     );
+  };
+
+  const assignAllTeachers = () => {
+    setSelectedTeacherIds(teachers.map((t) => t.id));
   };
 
   const saveTask = async (e: React.FormEvent) => {
@@ -268,7 +297,7 @@ export function CharacterBuildingContent() {
             </div>
             <h2 className="font-display text-2xl md:text-3xl font-bold">Build Akhlaaq, Assign Teachers</h2>
             <p className="text-emerald-100/90 text-sm mt-2 max-w-xl">
-              Create virtue-based tasks, assign them to teachers, and track how each student is taught and progresses.
+              Create virtue-based tasks, assign teachers, and track class-level completion across your institute.
             </p>
           </div>
           <button onClick={openNewModal} className="btn-primary bg-white text-green-800 hover:bg-emerald-50 flex items-center gap-2 self-start md:self-auto">
@@ -277,10 +306,10 @@ export function CharacterBuildingContent() {
         </div>
         <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-3 mt-8">
           {[
-            { label: "Active Tasks", value: stats.active, icon: Target },
-            { label: "Teachers Involved", value: stats.assignedTeachers, icon: Users },
-            { label: "Students Taught", value: stats.taught, icon: Sparkles },
-            { label: "Completion Rate", value: `${stats.rate}%`, icon: ChevronRight },
+            { label: "Active Tasks", value: stats.activeTasks, icon: Target },
+            { label: "Teachers Involved", value: stats.teachersInvolved, icon: Users },
+            { label: "Overdue", value: stats.overdueTasks, icon: Sparkles },
+            { label: "Class Completion", value: `${stats.classCompletionRate}%`, icon: ChevronRight },
           ].map((s) => (
             <div key={s.label} className="rounded-xl bg-white/10 backdrop-blur border border-white/15 p-4">
               <s.icon className="h-4 w-4 text-emerald-200 mb-2" />
@@ -291,13 +320,13 @@ export function CharacterBuildingContent() {
         </div>
       </div>
 
-      {/* Category filter */}
-      <div className="flex flex-wrap gap-2">
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2 items-center">
         <button
           onClick={() => setCategoryFilter("ALL")}
           className={cn("pill text-xs", categoryFilter === "ALL" ? "pill-primary" : "bg-gray-100 text-gray-600")}
         >
-          All
+          All categories
         </button>
         {CHARACTER_CATEGORIES.map((cat) => (
           <button
@@ -311,6 +340,19 @@ export function CharacterBuildingContent() {
             {cat.icon} {cat.label}
           </button>
         ))}
+        <span className="w-px h-6 bg-gray-200 mx-1 hidden sm:block" />
+        {(["ALL", "ACTIVE", "OVERDUE", "DONE"] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setStatusFilter(s)}
+            className={cn(
+              "pill text-xs",
+              statusFilter === s ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600"
+            )}
+          >
+            {s === "ALL" ? "All status" : s.charAt(0) + s.slice(1).toLowerCase()}
+          </button>
+        ))}
       </div>
 
       {/* Task grid */}
@@ -318,17 +360,19 @@ export function CharacterBuildingContent() {
         {filteredTasks.map((task) => {
           const cat = getCategoryMeta(task.category);
           const pri = getPriorityMeta(task.priority);
-          const completed = task.progress.filter((p) => p.status === "COMPLETED").length;
-          const taught = task.progress.filter((p) => p.status === "TAUGHT").length;
-          const pct = students.length ? Math.round(((completed + taught * 0.5) / students.length) * 100) : 0;
-          const isOverdue = new Date(task.dueDate) < new Date() && task.isActive;
+          const pct = task.stats?.percent ?? 0;
+          const rollup = ROLLUP_LABELS[task.rollup] || ROLLUP_LABELS.PENDING;
+          const completed = task.stats?.completed ?? 0;
+          const taught = task.stats?.taught ?? 0;
+          const pending = task.stats?.pending ?? 0;
 
           return (
             <div
               key={task.id}
               className={cn(
                 "dash-card overflow-hidden flex flex-col transition-all hover:shadow-md",
-                !task.isActive && "opacity-60"
+                !task.isActive && "opacity-60",
+                task.overdue && task.isActive && "border-red-200"
               )}
             >
               <div className={cn("h-1.5 bg-gradient-to-r", cat.color)} />
@@ -355,7 +399,8 @@ export function CharacterBuildingContent() {
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className={cn("pill text-[10px] py-0", pri.pill)}>{pri.label}</span>
-                    <span className={cn("flex items-center gap-1 text-gray-500", isOverdue && "text-red-600 font-semibold")}>
+                    <span className={cn("pill text-[10px] py-0", rollup.pill)}>{rollup.label}</span>
+                    <span className={cn("flex items-center gap-1 text-gray-500", task.overdue && "text-red-600 font-semibold")}>
                       <CalendarDays className="h-3.5 w-3.5" />
                       Due {new Date(task.dueDate).toLocaleDateString("en-PK", { day: "numeric", month: "short" })}
                     </span>
@@ -380,9 +425,10 @@ export function CharacterBuildingContent() {
                   </div>
 
                   <div className="flex items-center gap-3 text-xs text-gray-500 pt-2 border-t border-gray-100">
-                    <span><strong className="text-green-700">{completed}</strong> done</span>
+                    <span><strong className="text-green-700">{completed}</strong> classes done</span>
                     <span><strong className="text-blue-700">{taught}</strong> taught</span>
-                    <span><strong className="text-gray-700">{students.length - completed - taught}</strong> pending</span>
+                    <span><strong className="text-gray-700">{pending}</strong> pending</span>
+                    <span className="text-gray-400">/ {task.stats?.total ?? task.expectedClassCount} classes</span>
                   </div>
                 </div>
               </div>
@@ -466,8 +512,15 @@ export function CharacterBuildingContent() {
                 <input type="date" required value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="form-input" />
               </div>
               <div>
-                <label className="form-label">Assign Teachers <span className="text-red-500">*</span></label>
-                <p className="text-xs text-gray-400 mb-2">Only assigned teachers will see and mark progress for this task.</p>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="form-label mb-0">Assign Teachers <span className="text-red-500">*</span></label>
+                  {teachers.length > 0 && (
+                    <button type="button" onClick={assignAllTeachers} className="text-xs font-semibold text-primary-700 hover:underline">
+                      Select all
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mb-2">Assigned teachers mark this task once per class.</p>
                 <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-3 rounded-xl border border-gray-200 bg-gray-50">
                   {teachers.length === 0 ? (
                     <div className="text-sm text-gray-500 w-full">
@@ -530,8 +583,10 @@ export function CharacterBuildingContent() {
             <div className="grid grid-cols-4 gap-3 p-6 pb-0">
               {CHARACTER_STATUSES.map((st) => {
                 const count = st.value === "PENDING"
-                  ? students.length - viewingProgressTask.progress.filter((p) => p.status !== "PENDING").length
-                  : viewingProgressTask.progress.filter((p) => p.status === st.value).length;
+                  ? (viewingProgressTask.stats?.pending ?? 0)
+                  : st.value === "COMPLETED"
+                    ? (viewingProgressTask.stats?.completed ?? 0)
+                    : (viewingProgressTask.stats?.taught ?? 0);
                 return (
                   <div key={st.value} className="rounded-xl border border-gray-100 p-3 text-center">
                     <p className="text-lg">{st.icon}</p>
@@ -541,40 +596,55 @@ export function CharacterBuildingContent() {
                 );
               })}
               <div className="rounded-xl border border-gray-100 p-3 text-center">
-                <p className="text-lg">👥</p>
-                <p className="text-xl font-bold text-gray-900">{students.length}</p>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Students</p>
+                <p className="text-lg">🏫</p>
+                <p className="text-xl font-bold text-gray-900">{viewingProgressTask.stats?.total ?? 0}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Classes</p>
               </div>
             </div>
 
             <div className="p-6 pt-4">
               <div className="relative mb-4">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input type="text" placeholder="Search students…" value={progressSearch} onChange={(e) => setProgressSearch(e.target.value)} className="form-input pl-9 text-sm" />
+                <input type="text" placeholder="Search classes or teachers…" value={progressSearch} onChange={(e) => setProgressSearch(e.target.value)} className="form-input pl-9 text-sm" />
               </div>
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {students
-                  .filter((s) => s.fullName.toLowerCase().includes(progressSearch.toLowerCase()))
-                  .map((student) => {
-                    const prog = viewingProgressTask.progress.find((p) => p.studentId === student.id);
-                    const status = prog?.status || "PENDING";
-                    const meta = getStatusMeta(status);
-                    return (
-                      <div key={student.id} className={cn("p-3 rounded-xl border flex items-start justify-between gap-3", meta.pill.includes("success") ? "border-green-200 bg-green-50/30" : "border-gray-200")}>
-                        <div>
-                          <p className="font-semibold text-sm text-gray-900">{student.fullName}</p>
-                          <p className="text-[10px] text-gray-400">{student.studentId}</p>
-                          {prog?.notes && <p className="text-xs text-gray-600 italic mt-1">&ldquo;{prog.notes}&rdquo;</p>}
+                {(viewingProgressTask.classProgress || []).length === 0 ? (
+                  <p className="text-center text-sm text-gray-400 py-8">
+                    No class progress recorded yet. Teachers will mark tasks per class from their portal.
+                  </p>
+                ) : (
+                  (viewingProgressTask.classProgress || [])
+                    .filter((p) => {
+                      const q = progressSearch.toLowerCase();
+                      return (
+                        p.class.name.toLowerCase().includes(q) ||
+                        (p.teacher?.user.name || "").toLowerCase().includes(q)
+                      );
+                    })
+                    .map((prog) => {
+                      const meta = getStatusMeta(prog.status);
+                      return (
+                        <div key={prog.id} className={cn("p-3 rounded-xl border flex items-start justify-between gap-3", prog.status === "COMPLETED" ? "border-green-200 bg-green-50/30" : "border-gray-200")}>
+                          <div>
+                            <p className="font-semibold text-sm text-gray-900">{prog.class.name}</p>
+                            <p className="text-[10px] text-gray-400">{prog.class.programType}</p>
+                            {prog.notes && <p className="text-xs text-gray-600 italic mt-1">&ldquo;{prog.notes}&rdquo;</p>}
+                            {prog.completedAt && (
+                              <p className="text-[10px] text-gray-400 mt-1">
+                                Completed {new Date(prog.completedAt).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <span className={cn("pill text-[9px] py-0", meta.pill)}>{meta.icon} {meta.label}</span>
+                            {prog.teacher && (
+                              <p className="text-[10px] text-gray-400 mt-1">by {prog.teacher.user.name}</p>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <span className={cn("pill text-[9px] py-0", meta.pill)}>{meta.icon} {meta.label}</span>
-                          {prog?.teacher && (
-                            <p className="text-[10px] text-gray-400 mt-1">by {prog.teacher.user.name}</p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                )}
               </div>
             </div>
           </div>

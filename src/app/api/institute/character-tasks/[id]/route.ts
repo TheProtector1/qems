@@ -12,9 +12,9 @@ const taskInclude = {
       },
     },
   },
-  progress: {
+  classProgress: {
     include: {
-      student: { select: { id: true, fullName: true, studentId: true } },
+      class: { select: { id: true, name: true, programType: true } },
       teacher: { include: { user: { select: { name: true } } } },
     },
   },

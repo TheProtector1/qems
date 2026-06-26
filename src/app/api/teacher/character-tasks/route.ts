@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTeacherAccessibleClasses } from "@/lib/teacher-classes";
+import {
+  computeClassProgressStats,
+  getTaskRollupStatus,
+  isTaskOverdue,
+} from "@/lib/character-task-stats";
 
 export const dynamic = "force-dynamic";
 
@@ -17,63 +22,14 @@ export async function GET() {
 
     const teacher = await prisma.teacher.findUnique({
       where: { userId: session.user.id },
-      include: {
-        user: { select: { name: true } },
-      },
+      include: { user: { select: { name: true } } },
     });
 
     if (!teacher) {
       return NextResponse.json({ error: "Teacher profile not found" }, { status: 404 });
     }
 
-    // Direct classes assigned to this teacher
-    const directClasses = await prisma.class.findMany({
-      where: {
-        teacherId: teacher.id,
-        instituteId: teacher.instituteId,
-        isActive: true,
-      },
-      include: {
-        _count: { select: { enrollments: { where: { isActive: true } } } },
-      },
-      orderBy: { name: "asc" },
-    });
-
-    // Also include classes where this teacher's students are enrolled
-    const teacherStudentIds = await prisma.student.findMany({
-      where: {
-        teacherId: teacher.id,
-        instituteId: teacher.instituteId,
-        isActive: true,
-      },
-      select: { id: true },
-    });
-
-    let enrollmentClasses: typeof directClasses = [];
-    if (teacherStudentIds.length > 0) {
-      enrollmentClasses = await prisma.class.findMany({
-        where: {
-          instituteId: teacher.instituteId,
-          isActive: true,
-          enrollments: {
-            some: {
-              studentId: { in: teacherStudentIds.map((s) => s.id) },
-              isActive: true,
-            },
-          },
-        },
-        include: {
-          _count: { select: { enrollments: { where: { isActive: true } } } },
-        },
-        orderBy: { name: "asc" },
-      });
-    }
-
-    const classMap = new Map<string, (typeof directClasses)[number]>();
-    for (const cls of [...directClasses, ...enrollmentClasses]) {
-      classMap.set(cls.id, cls);
-    }
-    const teacherClasses = Array.from(classMap.values());
+    const teacherClasses = await getTeacherAccessibleClasses(teacher.id, teacher.instituteId);
     const classIds = teacherClasses.map((c) => c.id);
 
     const tasks = await prisma.characterTask.findMany({
@@ -86,11 +42,11 @@ export async function GET() {
       include: {
         assignments: {
           where: { teacherId: teacher.id },
-          select: { id: true, teacherId: true },
+          select: { id: true, assignedAt: true },
         },
         classProgress: classIds.length
           ? {
-              where: { classId: { in: classIds } },
+              where: { classId: { in: classIds }, teacherId: teacher.id },
               include: {
                 class: { select: { id: true, name: true, programType: true } },
               },
@@ -99,24 +55,34 @@ export async function GET() {
       },
     });
 
-    const stats = {
-      totalTasks: tasks.length,
+    const enrichedTasks = tasks.map((task) => {
+      const progress = task.classProgress || [];
+      const stats = computeClassProgressStats(classIds, progress);
+      const overdue = isTaskOverdue(task.dueDate, task.isActive);
+      const rollup = getTaskRollupStatus(stats, task.dueDate, task.isActive);
+      return {
+        ...task,
+        classProgress: progress,
+        stats,
+        overdue,
+        rollup,
+      };
+    });
+
+    const summary = {
+      totalTasks: enrichedTasks.length,
       classesCount: teacherClasses.length,
-      completedClasses: tasks.reduce(
-        (acc, t) => acc + (t.classProgress || []).filter((p) => p.status === "COMPLETED").length,
-        0
-      ),
+      overdueTasks: enrichedTasks.filter((t) => t.rollup === "OVERDUE").length,
+      completedTasks: enrichedTasks.filter((t) => t.rollup === "DONE").length,
+      pendingTasks: enrichedTasks.filter((t) => t.rollup === "PENDING" || t.rollup === "IN_PROGRESS").length,
+      classSlotsCompleted: enrichedTasks.reduce((s, t) => s + t.stats.completed, 0),
+      classSlotsTotal: enrichedTasks.reduce((s, t) => s + t.stats.total, 0),
     };
 
     return NextResponse.json({
-      tasks,
-      classes: teacherClasses.map((c) => ({
-        id: c.id,
-        name: c.name,
-        programType: c.programType,
-        studentsCount: c._count.enrollments,
-      })),
-      stats,
+      tasks: enrichedTasks,
+      classes: teacherClasses,
+      summary,
       teacherName: teacher.user.name,
     });
   } catch (error) {
