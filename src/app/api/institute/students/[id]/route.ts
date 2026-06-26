@@ -3,6 +3,7 @@ import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Gender, ProgramType } from "@prisma/client";
 import { createAuditLog, diffFields } from "@/lib/audit";
+import { resolveInstituteClassIds, syncStudentClassEnrollments } from "@/lib/student-enrollments";
 
 const TRACKED_FIELDS = [
   "fullName",
@@ -40,6 +41,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       currentJuz,
       isActive,
       photo,
+      classIds,
     } = body;
 
     const student = await prisma.student.findFirst({
@@ -114,6 +116,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
             data: parentUserData,
           });
         }
+      }
+
+      if (classIds !== undefined) {
+        const validClassIds = await resolveInstituteClassIds(
+          tx,
+          session.user.instituteId,
+          classIds
+        );
+        await syncStudentClassEnrollments(tx, id, validClassIds);
       }
 
       return updatedStudent;

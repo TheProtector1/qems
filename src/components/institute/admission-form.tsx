@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StudentPhotoUpload } from "@/components/common/student-photo-upload";
+import { ClassAssignmentField, classNamesFromIds, type InstituteClassOption } from "@/components/institute/class-assignment-field";
 
 // ── Types ────────────────────────────────────────────────────
 type FormData = {
@@ -28,7 +29,7 @@ type FormData = {
   parentCnic: string;
   // Step 3: Program Info
   program: string;
-  class: string;
+  classIds: string[];
   teacher: string;
   feeAmount: string;
   scholarshipPct: string;
@@ -57,7 +58,7 @@ const INITIAL: FormData = {
   parentEmail: "",
   parentCnic: "",
   program: "Hifz",
-  class: "Hifz A",
+  classIds: [],
   teacher: "",
   feeAmount: "3500",
   scholarshipPct: "0",
@@ -77,12 +78,6 @@ const STEPS = [
   { id: 3, label: "Program & Fees", icon: BookOpen },
   { id: 4, label: "Confirmation", icon: CheckCircle2 },
 ];
-
-const CLASS_OPTIONS: Record<string, string[]> = {
-  Hifz: ["Hifz A", "Hifz B", "Hifz C", "Hifz Girls"],
-  Nazra: ["Nazra 1", "Nazra 2", "Nazra 3", "Nazra Girls"],
-  Tajweed: ["Tajweed Beginners", "Tajweed Intermediate", "Tajweed Advanced"],
-};
 
 const FEE_DEFAULTS: Record<string, string> = {
   Hifz: "3500",
@@ -108,25 +103,45 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
     studentPassword?: string;
   } | null>(null);
   const [teachers, setTeachers] = useState<any[]>([]);
+  const [classes, setClasses] = useState<InstituteClassOption[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/institute/teachers")
-      .then((res) => res.json())
-      .then((data) => {
-        setTeachers(data.teachers || []);
+    Promise.all([
+      fetch("/api/institute/teachers").then((res) => res.json()),
+      fetch("/api/institute/classes").then((res) => res.json()),
+    ])
+      .then(([teacherData, classData]) => {
+        setTeachers(teacherData.teachers || []);
+        setClasses(classData.classes || []);
       })
       .catch((err) => console.error(err));
   }, []);
 
-  const set = (key: keyof FormData, value: string) => {
+  const set = (key: keyof FormData, value: string | string[]) => {
     setForm((prev) => {
       const next = { ...prev, [key]: value };
-      // Auto-update class/teacher/fee when program changes
-      if (key === "program") {
-        next.class = CLASS_OPTIONS[value]?.[0] || "";
+      if (key === "program" && typeof value === "string") {
+        const programType = value.toUpperCase();
+        next.classIds = prev.classIds.filter(
+          (id) => classes.find((c) => c.id === id)?.programType === programType
+        );
         next.feeAmount = FEE_DEFAULTS[value] || "3500";
         next.teacher = "";
+      }
+      return next;
+    });
+  };
+
+  const setClassIds = (classIds: string[]) => {
+    setForm((prev) => {
+      const next = { ...prev, classIds };
+      if (!next.teacher && classIds.length >= 1) {
+        const cls = classes.find((c) => c.id === classIds[0]);
+        const teacherId = cls?.teacherId || cls?.teacher?.id;
+        if (teacherId && teachers.some((t) => t.id === teacherId)) {
+          next.teacher = teacherId;
+        }
       }
       return next;
     });
@@ -135,7 +150,7 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
   const canProceed = () => {
     if (step === 1) return form.fullName.trim() && form.dateOfBirth && form.gender;
     if (step === 2) return form.fatherName.trim() && form.parentPhone.trim();
-    if (step === 3) return form.program && form.class && form.startDate;
+    if (step === 3) return form.program && form.startDate;
     return true;
   };
 
@@ -182,6 +197,7 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                   parentEmail: form.parentEmail,
                   program: form.program,
                   teacherId: validTeacherId,
+                  classIds: form.classIds,
                   feeAmount: form.feeAmount,
                   scholarshipPct: form.scholarshipPct,
                   photo: form.photo || null,
@@ -598,20 +614,19 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                 </div>
               </div>
 
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Class / Section <span className="text-red-500">*</span>
+                  Assign to Class(es)
                 </label>
-                <select
-                  value={form.class}
-                  onChange={(e) => set("class", e.target.value)}
-                  className="form-input"
-                  id="select-class"
-                >
-                  {(CLASS_OPTIONS[form.program] || []).map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                <ClassAssignmentField
+                  classes={classes}
+                  program={form.program}
+                  selectedIds={form.classIds}
+                  onChange={setClassIds}
+                />
+                <p className="text-[10px] text-gray-400 mt-1.5">
+                  Select one or more institute classes. Students appear in attendance and character-building for those classes.
+                </p>
               </div>
 
               <div>
@@ -838,8 +853,10 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                     <p className="font-bold text-primary-900">{form.program}</p>
                   </div>
                   <div>
-                    <p className="text-primary-500 text-xs">Class</p>
-                    <p className="font-bold text-primary-900">{form.class}</p>
+                    <p className="text-primary-500 text-xs">Class(es)</p>
+                    <p className="font-bold text-primary-900">
+                      {classNamesFromIds(classes, form.classIds)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-primary-500 text-xs">Assigned Teacher</p>

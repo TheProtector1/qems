@@ -8,6 +8,7 @@ import { generateInvoiceNo } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
 import { resolveInitialProgress } from "@/lib/student-progress";
 import { sendParentWelcomeEmail } from "@/lib/email";
+import { resolveInstituteClassIds, syncStudentClassEnrollments } from "@/lib/student-enrollments";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,12 @@ export async function GET() {
         user: {
           select: {
             isActive: true,
+          },
+        },
+        enrollments: {
+          where: { isActive: true },
+          include: {
+            class: { select: { id: true, name: true, programType: true } },
           },
         },
       },
@@ -136,6 +143,7 @@ export async function POST(req: Request) {
       currentPara,
       currentSurah,
       currentPage,
+      classIds,
     } = body;
 
     if (!fullName || !gender || !dateOfBirth || !fatherName || !parentPhone || !program) {
@@ -267,7 +275,13 @@ export async function POST(req: Request) {
         },
       });
 
-      // 4. Create initial fee payment row if feeAmount is present
+      // 4. Class enrollments
+      const validClassIds = await resolveInstituteClassIds(tx, instituteId, classIds);
+      if (validClassIds.length) {
+        await syncStudentClassEnrollments(tx, student.id, validClassIds);
+      }
+
+      // 5. Create initial fee payment row if feeAmount is present
       if (feeAmount) {
         const fee = parseFloat(feeAmount);
         const discountPct = scholarshipPct ? parseFloat(scholarshipPct) : 0;

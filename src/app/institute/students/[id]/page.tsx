@@ -59,6 +59,10 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
     include: {
       parent: { include: { user: true } },
       teacher: { include: { user: true } },
+      enrollments: {
+        where: { isActive: true },
+        include: { class: { select: { id: true, name: true } } },
+      },
       hifzRecords: { orderBy: { date: "desc" }, take: 5 },
       user: { select: { isActive: true } },
     },
@@ -84,6 +88,9 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
 
   const program = programLabel(student.programType);
   const teacherName = student.teacher?.user?.name || "Unassigned";
+  const classLabel = student.enrollments?.length
+    ? student.enrollments.map((e) => e.class.name).join(", ")
+    : "Unassigned";
   const parentName = student.parent?.user?.name || "Parent";
   const parentEmail = student.parent?.user?.email || null;
   const status = student.user?.isActive ? "On Track" : "Needs Attention";
@@ -150,8 +157,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
               {[
                 { label: "Program", value: program, icon: BookOpen },
                 { label: "Progress", value: progressSummaryLabel(student.programType, student), icon: BookOpen },
-                { label: "Class", value: `${program} Class`, icon: GraduationCap },
-                { label: "Section", value: "Section 1", icon: GraduationCap },
+                { label: "Class(es)", value: classLabel, icon: GraduationCap },
                 { label: "Teacher", value: teacherName, icon: User },
                 { label: "Date of Birth", value: formatDate(student.dateOfBirth), icon: Clock },
                 { label: "Blood Group", value: student.bloodGroup || "—", icon: Heart },

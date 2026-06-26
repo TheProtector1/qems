@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { StudentAvatar } from "@/components/common/student-avatar";
 import { StudentPhotoUpload } from "@/components/common/student-photo-upload";
 import { StudentAuditPanel } from "@/components/institute/student-audit-panel";
+import { ClassAssignmentField, type InstituteClassOption } from "@/components/institute/class-assignment-field";
 
 type Student = {
   id: string;
@@ -21,6 +22,7 @@ type Student = {
   gender: "MALE" | "FEMALE";
   program: string;
   class: string;
+  classIds: string[];
   section: string;
   teacher: string;
   teacherId: string;
@@ -57,11 +59,13 @@ const programColors: Record<string, string> = {
 function EditStudentModal({
   student,
   teachers,
+  classes,
   onClose,
   onSave,
 }: {
   student: Student;
   teachers: any[];
+  classes: InstituteClassOption[];
   onClose: () => void;
   onSave: () => void;
 }) {
@@ -72,6 +76,7 @@ function EditStudentModal({
   const [city, setCity] = useState(student.city || "");
   const [program, setProgram] = useState(student.program);
   const [teacherId, setTeacherId] = useState(student.teacherId || "");
+  const [classIds, setClassIds] = useState<string[]>(student.classIds || []);
   const [currentJuz, setCurrentJuz] = useState(student.currentJuz?.toString() || "");
   const [fatherName, setFatherName] = useState(student.parentName);
   const [parentEmail, setParentEmail] = useState(student.parentEmail || "");
@@ -95,6 +100,7 @@ function EditStudentModal({
           city,
           program,
           teacherId: teacherId || null,
+          classIds,
           currentJuz: program === "Hifz" ? currentJuz : null,
           fatherName,
           parentEmail,
@@ -186,7 +192,14 @@ function EditStudentModal({
               <label className="block text-xs font-semibold text-gray-700 mb-1">Program Specialty</label>
               <select
                 value={program}
-                onChange={(e) => setProgram(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setProgram(next);
+                  const pt = next.toUpperCase();
+                  setClassIds((ids) =>
+                    ids.filter((id) => classes.find((c) => c.id === id)?.programType === pt)
+                  );
+                }}
                 className="form-input text-xs"
               >
                 <option value="Hifz">Hifz</option>
@@ -208,6 +221,24 @@ function EditStudentModal({
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Class Assignment</label>
+            <ClassAssignmentField
+              classes={classes}
+              program={program}
+              selectedIds={classIds}
+              onChange={(ids) => {
+                setClassIds(ids);
+                if (!teacherId && ids.length >= 1) {
+                  const cls = classes.find((c) => c.id === ids[0]);
+                  const tid = cls?.teacherId || cls?.teacher?.id;
+                  if (tid && teachers.some((t) => t.id === tid)) setTeacherId(tid);
+                }
+              }}
+              compact
+            />
           </div>
 
           {program === "Hifz" && (
@@ -411,6 +442,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
   const searchParams = useSearchParams();
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
+  const [instituteClasses, setInstituteClasses] = useState<InstituteClassOption[]>([]);
   const [classOptions, setClassOptions] = useState<string[]>(["All Classes"]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -449,13 +481,19 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
         if (s.programType === "NAZRA") prog = "Nazra";
         if (s.programType === "TAJWEED") prog = "Tajweed";
 
+        const enrollmentNames = (s.enrollments || [])
+          .map((e: { class?: { name?: string } }) => e.class?.name)
+          .filter(Boolean);
+        const enrollmentIds = (s.enrollments || []).map((e: { classId: string }) => e.classId);
+
         return {
           id: s.id,
           studentId: s.studentId,
           name: s.fullName,
           gender: s.gender,
           program: prog,
-          class: prog + " Class", // Display label
+          class: enrollmentNames.length ? enrollmentNames.join(", ") : "Unassigned",
+          classIds: enrollmentIds,
           section: "Section 1",
           teacher: s.teacher?.user?.name || "Unassigned",
           teacherId: s.teacherId || "",
@@ -481,7 +519,9 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
       const resCls = await fetch("/api/institute/classes");
       if (resCls.ok) {
         const dataCls = await resCls.json();
-        const names = (dataCls.classes || []).map((c: { name: string }) => c.name);
+        const clsList: InstituteClassOption[] = dataCls.classes || [];
+        setInstituteClasses(clsList);
+        const names = clsList.map((c) => c.name);
         setClassOptions(["All Classes", ...names]);
       }
 
@@ -538,7 +578,9 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
       s.studentId.toLowerCase().includes(q) ||
       s.parentName.toLowerCase().includes(q);
     const matchProgram = programFilter === "All Programs" || s.program === programFilter;
-    const matchClass = classFilter === "All Classes" || s.class === classFilter;
+    const matchClass =
+      classFilter === "All Classes" ||
+      s.class.split(", ").some((name) => name.trim() === classFilter);
     const matchSection = sectionFilter === "All Sections" || s.section === sectionFilter;
     const matchStatus = statusFilter === "ALL" || s.status === statusFilter;
     return matchSearch && matchProgram && matchClass && matchSection && matchStatus;
@@ -560,6 +602,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
         <EditStudentModal
           student={editingStudent}
           teachers={teachers}
+          classes={instituteClasses}
           onClose={() => setEditingStudent(null)}
           onSave={fetchStudentsAndTeachers}
         />
