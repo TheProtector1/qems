@@ -14,10 +14,10 @@ export async function GET() {
     const teacher = await prisma.teacher.findUnique({
       where: { userId: session.user.id },
       include: {
-        students: {
+        classes: {
           where: { isActive: true },
-          select: { id: true, fullName: true, studentId: true, photo: true, gender: true },
-          orderBy: { fullName: "asc" },
+          include: { _count: { select: { enrollments: true } } },
+          orderBy: { name: "asc" },
         },
         user: { select: { name: true } },
       },
@@ -25,7 +25,7 @@ export async function GET() {
 
     if (!teacher) return new NextResponse("Teacher Not Found", { status: 404 });
 
-    const studentIds = teacher.students.map((s) => s.id);
+    const classIds = teacher.classes.map((c) => c.id);
 
     const tasks = await prisma.characterTask.findMany({
       where: {
@@ -35,18 +35,10 @@ export async function GET() {
       },
       orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
       include: {
-        assignments: {
-          where: { teacherId: teacher.id },
+        classProgress: {
+          where: { classId: { in: classIds } },
           include: {
-            teacher: {
-              include: { user: { select: { name: true } } },
-            },
-          },
-        },
-        progress: {
-          where: { studentId: { in: studentIds } },
-          include: {
-            student: { select: { id: true, fullName: true, studentId: true } },
+            class: { select: { id: true, name: true, programType: true } },
           },
         },
       },
@@ -54,17 +46,24 @@ export async function GET() {
 
     const stats = {
       totalTasks: tasks.length,
-      pendingStudents: tasks.reduce((acc, t) => {
-        const done = t.progress.filter((p) => p.status === "COMPLETED" || p.status === "TAUGHT").length;
-        return acc + (studentIds.length - done);
-      }, 0),
-      completedMarks: tasks.reduce(
-        (acc, t) => acc + t.progress.filter((p) => p.status === "COMPLETED").length,
+      classesCount: teacher.classes.length,
+      completedClasses: tasks.reduce(
+        (acc, t) => acc + t.classProgress.filter((p) => p.status === "COMPLETED").length,
         0
       ),
     };
 
-    return NextResponse.json({ tasks, students: teacher.students, stats, teacherName: teacher.user.name });
+    return NextResponse.json({
+      tasks,
+      classes: teacher.classes.map((c) => ({
+        id: c.id,
+        name: c.name,
+        programType: c.programType,
+        studentsCount: c._count.enrollments,
+      })),
+      stats,
+      teacherName: teacher.user.name,
+    });
   } catch (error) {
     console.error("[TEACHER_CHARACTER_TASKS_GET]", error);
     return new NextResponse("Internal Error", { status: 500 });

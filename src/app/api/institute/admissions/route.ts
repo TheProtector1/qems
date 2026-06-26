@@ -41,6 +41,7 @@ export async function POST(req: Request) {
       parentEmail,
       address,
       city,
+      country,
       program,
       notes,
     } = body;
@@ -68,6 +69,8 @@ export async function POST(req: Request) {
         parentPhone,
         parentEmail: parentEmail || null,
         address: address || null,
+        city: city || null,
+        country: country || "PK",
         programType: programType,
         status: AdmissionStatus.APPLIED,
         interviewNotes: notes || null,

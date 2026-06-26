@@ -6,13 +6,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, BookOpen, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
+import { useI18n } from "@/lib/i18n/context";
+import { LanguageToggle } from "@/components/common/language-toggle";
+import { looksLikeEmail } from "@/lib/phone";
 
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  const { t } = useI18n();
 
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState({ identifier: "", password: "" });
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,14 +24,14 @@ function LoginContent() {
   const [resendStatus, setResendStatus] = useState<{ success: boolean; message: string } | null>(null);
 
   const handleResendVerification = async () => {
-    if (!form.email) return;
+    if (!form.identifier || !looksLikeEmail(form.identifier)) return;
     setResending(true);
     setResendStatus(null);
     try {
       const res = await fetch("/api/auth/resend-verification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: form.email }),
+        body: JSON.stringify({ email: form.identifier }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -50,7 +54,9 @@ function LoginContent() {
 
     try {
       const result = await signIn("credentials", {
-        email: form.email.toLowerCase(),
+        email: looksLikeEmail(form.identifier)
+          ? form.identifier.toLowerCase()
+          : form.identifier,
         password: form.password,
         redirect: false,
       });
@@ -133,7 +139,10 @@ function LoginContent() {
       </div>
 
       {/* ── Right Panel (Form) ── */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-gray-50">
+      <div className="flex-1 flex items-center justify-center p-6 bg-gray-50 relative">
+        <div className="absolute top-4 right-4">
+          <LanguageToggle />
+        </div>
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2 mb-8">
@@ -146,10 +155,10 @@ function LoginContent() {
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
             <div className="mb-8">
               <h1 className="font-display text-3xl font-bold text-gray-900 mb-2">
-                Welcome back
+                {t.auth.welcomeBack}
               </h1>
               <p className="text-gray-500 text-sm">
-                Sign in to your QEMS account to continue
+                {t.auth.signInSubtitle}
               </p>
             </div>
 
@@ -181,31 +190,32 @@ function LoginContent() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Email Address
+                <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  {t.auth.emailOrPhone}
                 </label>
                 <input
-                  id="email"
-                  type="email"
+                  id="identifier"
+                  type="text"
                   required
-                  autoComplete="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  placeholder="admin@institute.com"
+                  autoComplete="username"
+                  value={form.identifier}
+                  onChange={(e) => setForm({ ...form, identifier: e.target.value })}
+                  placeholder={t.auth.emailOrPhonePlaceholder}
                   className="form-input"
                 />
+                <p className="text-[11px] text-gray-400 mt-1">{t.auth.parentHint}</p>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                    Password
+                    {t.auth.password}
                   </label>
                   <Link
                     href="/auth/forgot-password"
                     className="text-xs text-primary-700 hover:text-primary-900 font-medium"
                   >
-                    Forgot password?
+                    {t.auth.forgotPassword}
                   </Link>
                 </div>
                 <div className="relative">
@@ -241,7 +251,7 @@ function LoginContent() {
                     Signing in...
                   </>
                 ) : (
-                  "Sign In to QEMS"
+                  t.common.signIn
                 )}
               </button>
             </form>

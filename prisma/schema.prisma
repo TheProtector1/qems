@@ -255,6 +255,8 @@ model Institute {
   notifications     Notification[]
   auditLogs         AuditLog[]
   characterTasks    CharacterTask[]
+  salaryPayments    SalaryPayment[]
+  profileChangeRequests ProfileChangeRequest[]
   calendarEvents    CalendarEvent[]
   sponsors          Sponsor[]
   donations         Donation[]
@@ -320,6 +322,10 @@ model User {
   staffRole       String?   // e.g. "Accountant", "Receptionist", "Cleaner"
   phone           String?
   salary          Decimal?  @db.Decimal(10, 2)
+  bankName        String?
+  accountTitle    String?
+  accountNumber   String?
+  iban            String?
   instituteId     String?
   institute       Institute? @relation(fields: [instituteId], references: [id], onDelete: SetNull)
   branchId        String?
@@ -338,7 +344,12 @@ model User {
   notifications   Notification[]
   auditLogs       AuditLog[]
 
+  staffSalaryPayments SalaryPayment[] @relation("StaffSalaryPayments")
+  profileChangeRequests ProfileChangeRequest[] @relation("ProfileChangeRequests")
+  profileChangeReviews  ProfileChangeRequest[] @relation("ProfileChangeReviews")
+
   @@index([email])
+  @@index([phone])
   @@index([role])
   @@index([instituteId])
 }
@@ -404,6 +415,10 @@ model Teacher {
   experience      Int?      // years
   joinDate        DateTime
   salary          Decimal?  @db.Decimal(10, 2)
+  bankName        String?
+  accountTitle    String?
+  accountNumber   String?
+  iban            String?
   isActive        Boolean   @default(true)
   userId          String    @unique
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -416,6 +431,7 @@ model Teacher {
 
   // Relations
   classes         Class[]
+  salaryPayments  SalaryPayment[] @relation("TeacherSalaryPayments")
   students        Student[]
   hifzRecords     HifzRecord[]
   nazraRecords    NazraRecord[]
@@ -425,6 +441,7 @@ model Teacher {
   feedbacks       TeacherFeedback[]
   characterTaskProgress CharacterTaskProgress[]
   characterTaskAssignments CharacterTaskAssignment[]
+  characterTaskClassProgress CharacterTaskClassProgress[]
 
   @@index([instituteId])
   @@index([branchId])
@@ -482,6 +499,7 @@ model Student {
   medicalNotes    String?
   address         String?
   city            String?
+  country         String?       @default("PK")
   emergencyContact String?
   emergencyPhone  String?
   previousEducation String?
@@ -542,6 +560,8 @@ model AdmissionApplication {
   parentPhone     String
   parentEmail     String?
   address         String?
+  city            String?
+  country         String?       @default("PK")
   programType     ProgramType
   previousEducation String?
   status          AdmissionStatus @default(APPLIED)
@@ -587,6 +607,7 @@ model Class {
   enrollments ClassEnrollment[]
   attendance  Attendance[]
   assessments Assessment[]
+  characterTaskClassProgress CharacterTaskClassProgress[]
 
   @@index([instituteId])
   @@index([branchId])
@@ -1121,10 +1142,32 @@ model CharacterTask {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  progress    CharacterTaskProgress[]
-  assignments CharacterTaskAssignment[]
+  progress      CharacterTaskProgress[]
+  classProgress CharacterTaskClassProgress[]
+  assignments   CharacterTaskAssignment[]
 
   @@index([instituteId])
+}
+
+model CharacterTaskClassProgress {
+  id          String   @id @default(cuid())
+  status      String   @default("PENDING") // PENDING, TAUGHT, COMPLETED
+  notes       String?
+  taughtAt    DateTime?
+  completedAt DateTime?
+  taskId      String
+  task        CharacterTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  classId     String
+  class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacherId   String
+  teacher     Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([taskId, classId])
+  @@index([taskId])
+  @@index([classId])
+  @@index([teacherId])
 }
 
 model CharacterTaskAssignment {
@@ -1162,6 +1205,78 @@ model CharacterTaskProgress {
   @@unique([taskId, studentId])
   @@index([taskId])
   @@index([studentId])
+}
+
+// ─────────────────────────────────────────────
+// PAYROLL
+// ─────────────────────────────────────────────
+
+enum SalaryPayeeType {
+  TEACHER
+  STAFF
+}
+
+model SalaryPayment {
+  id           String          @id @default(cuid())
+  periodMonth  String          // "2025-01"
+  grossAmount  Decimal         @db.Decimal(10, 2)
+  deductions   Decimal         @db.Decimal(10, 2) @default(0)
+  netAmount    Decimal         @db.Decimal(10, 2)
+  status       PaymentStatus   @default(PENDING)
+  paidAt       DateTime?
+  notes        String?
+  payeeType    SalaryPayeeType
+  payeeId      String
+  teacherId    String?
+  teacher      Teacher?        @relation("TeacherSalaryPayments", fields: [teacherId], references: [id], onDelete: SetNull)
+  staffUserId  String?
+  staffUser    User?           @relation("StaffSalaryPayments", fields: [staffUserId], references: [id], onDelete: SetNull)
+  instituteId  String
+  institute    Institute       @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([periodMonth, payeeType, payeeId])
+  @@index([instituteId])
+  @@index([periodMonth])
+}
+
+// ─────────────────────────────────────────────
+// PROFILE CHANGE REQUESTS
+// ─────────────────────────────────────────────
+
+enum ProfileChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ProfileApproverType {
+  INSTITUTE_OWNER
+  SUPER_ADMIN
+}
+
+model ProfileChangeRequest {
+  id               String              @id @default(cuid())
+  requestedChanges Json
+  previousValues   Json
+  status           ProfileChangeStatus @default(PENDING)
+  approverType     ProfileApproverType
+  reviewNote       String?
+  reviewedAt       DateTime?
+  userId           String
+  user             User                @relation("ProfileChangeRequests", fields: [userId], references: [id], onDelete: Cascade)
+  instituteId      String?
+  institute        Institute?          @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  reviewedById     String?
+  reviewedBy       User?               @relation("ProfileChangeReviews", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([userId])
+  @@index([instituteId])
+  @@index([status])
+  @@index([approverType])
 }
 
 // ─────────────────────────────────────────────

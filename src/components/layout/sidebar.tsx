@@ -52,6 +52,7 @@ const instituteNav: NavItem[] = [
     icon: DollarSign,
     children: [
       { label: "Fee Management", href: "/institute/finance/fees", icon: DollarSign },
+      { label: "Salaries", href: "/institute/finance/salaries", icon: CreditCard },
       { label: "Scholarships", href: "/institute/finance/scholarships", icon: HeartHandshake },
       { label: "Sponsors & Donations", href: "/institute/finance/sponsors", icon: Gift },
       { label: "Reports", href: "/institute/finance/reports", icon: BarChart3 },
@@ -63,7 +64,9 @@ const instituteNav: NavItem[] = [
   { label: "Character Building", href: "/institute/character-building", icon: HeartHandshake },
   { label: "Calendar", href: "/institute/calendar", icon: Calendar },
   { label: "Analytics", href: "/institute/analytics", icon: BarChart3 },
+  { label: "My Profile", href: "/profile", icon: Settings },
   { label: "Safeguarding", href: "/institute/safeguarding", icon: Shield },
+  { label: "Profile Approvals", href: "/institute/profile-requests", icon: UserCheck },
   { label: "Settings", href: "/institute/settings", icon: Settings },
 ];
 
@@ -72,10 +75,12 @@ const superAdminNav: NavItem[] = [
   { label: "Institutes", href: "/admin/institutes", icon: Building2 },
   { label: "Users", href: "/admin/users", icon: Users },
   { label: "Students", href: "/admin/students", icon: GraduationCap },
+  { label: "My Profile", href: "/profile", icon: Settings },
   { label: "Student Reports", href: "/admin/reports", icon: FileText },
   { label: "Subscriptions", href: "/admin/subscriptions", icon: CreditCard },
   { label: "Announcements", href: "/admin/announcements", icon: Bell },
   { label: "Support Tickets", href: "/admin/support", icon: Shield },
+  { label: "Profile Approvals", href: "/admin/profile-requests", icon: UserCheck },
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
@@ -90,6 +95,7 @@ const teacherNav: NavItem[] = [
   { label: "Character Building", href: "/teacher/character-building", icon: HeartHandshake },
   { label: "Communication", href: "/teacher/communication", icon: MessageSquare },
   { label: "Calendar", href: "/teacher/calendar", icon: Calendar },
+  { label: "My Profile", href: "/profile", icon: Settings },
   { label: "Spiritual Tracker", href: "/teacher/worship", icon: Sparkles },
 ];
 
@@ -101,6 +107,7 @@ const parentNav: NavItem[] = [
   { label: "Messaging", href: "/parent/communication", icon: MessageSquare },
   { label: "Spiritual Tracker", href: "/parent/worship", icon: Sparkles },
   { label: "Calendar", href: "/parent/calendar", icon: Calendar },
+  { label: "My Profile", href: "/profile", icon: Settings },
 ];
 
 const studentNav: NavItem[] = [
@@ -110,6 +117,7 @@ const studentNav: NavItem[] = [
   { label: "My Attendance", href: "/student/attendance", icon: CalendarCheck },
   { label: "Spiritual Tracker", href: "/student/worship", icon: Sparkles },
   { label: "Calendar", href: "/student/calendar", icon: Calendar },
+  { label: "My Profile", href: "/profile", icon: Settings },
 ];
 
 interface SidebarProps {

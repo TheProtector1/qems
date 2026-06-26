@@ -105,11 +105,12 @@ function UserModal({ user, onClose }: { user: PlatformUser; onClose: () => void 
 }
 
 // ─── User 3-Dot Dropdown ──────────────────────────────────────
-function UserActionsMenu({ user, onToggle, onClose, onView }: {
+function UserActionsMenu({ user, onToggle, onClose, onView, onDelete }: {
   user: PlatformUser;
   onToggle: () => void;
   onView: () => void;
   onClose: () => void;
+  onDelete: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -146,6 +147,14 @@ function UserActionsMenu({ user, onToggle, onClose, onView }: {
       >
         {user.isActive ? <><EyeOff className="h-3.5 w-3.5" /> Disable Account</> : <><UserCheck className="h-3.5 w-3.5" /> Enable Account</>}
       </button>
+      {user.role !== "SUPER_ADMIN" && (
+        <button
+          onClick={() => { onDelete(); onClose(); }}
+          className="w-full flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 text-xs font-medium"
+        >
+          <XCircle className="h-3.5 w-3.5" /> Delete User
+        </button>
+      )}
     </div>
   );
 }
@@ -205,6 +214,21 @@ export function AdminUsersContent() {
       }
     } catch (err: any) {
       alert(err.message || "Failed to update status");
+    }
+  };
+
+  const deleteUser = async (id: string) => {
+    if (!confirm("Permanently delete this user? This cannot be undone.")) return;
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setUsers((prev) => prev.filter((u) => u.id !== id));
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to delete user");
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to delete user");
     }
   };
 
@@ -395,6 +419,7 @@ export function AdminUsersContent() {
                                 user={u}
                                 onToggle={() => toggleActive(u.id)}
                                 onView={() => setViewingUser(u)}
+                                onDelete={() => deleteUser(u.id)}
                                 onClose={() => setOpenMenuId(null)}
                               />
                             )}

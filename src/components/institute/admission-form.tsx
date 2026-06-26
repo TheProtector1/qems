@@ -16,6 +16,8 @@ type FormData = {
   gender: string;
   dateOfBirth: string;
   nationality: string;
+  city: string;
+  country: string;
   address: string;
   photo: string;
   // Step 2: Parent Info
@@ -45,6 +47,8 @@ const INITIAL: FormData = {
   gender: "MALE",
   dateOfBirth: "",
   nationality: "Pakistani",
+  city: "",
+  country: "Pakistan",
   address: "",
   photo: "",
   fatherName: "",
@@ -160,8 +164,9 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                   parentName: form.fatherName,
                   parentPhone: form.parentPhone,
                   parentEmail: form.parentEmail,
+                  city: form.city,
+                  country: form.country,
                   address: form.address,
-                  city: form.address ? undefined : "Islamabad",
                   program: form.program,
                   notes: form.notes,
                 }
@@ -170,7 +175,8 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                   gender: form.gender,
                   dateOfBirth: form.dateOfBirth,
                   address: form.address,
-                  city: "Islamabad",
+                  city: form.city,
+                  country: form.country,
                   fatherName: form.fatherName,
                   parentPhone: form.parentPhone,
                   parentEmail: form.parentEmail,
@@ -432,6 +438,28 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">City</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Karachi"
+                  value={form.city}
+                  onChange={(e) => set("city", e.target.value)}
+                  className="form-input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Country</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Pakistan"
+                  value={form.country}
+                  onChange={(e) => set("country", e.target.value)}
+                  className="form-input"
+                />
+              </div>
+
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">Home Address</label>
                 <textarea
@@ -484,7 +512,7 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Contact Phone <span className="text-red-500">*</span>
+                  Contact Phone (portal login) <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="tel"
@@ -494,11 +522,12 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                   className="form-input"
                   id="input-parent-phone"
                 />
+                <p className="text-[10px] text-gray-400 mt-1">Parents sign in with this mobile number</p>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Email Address
+                  Email Address <span className="text-gray-400 font-normal">(optional)</span>
                 </label>
                 <input
                   type="email"
@@ -507,6 +536,7 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                   onChange={(e) => set("parentEmail", e.target.value)}
                   className="form-input"
                 />
+                <p className="text-[10px] text-gray-400 mt-1">Used for fee and attendance alerts only</p>
               </div>
 
               <div className="md:col-span-2">

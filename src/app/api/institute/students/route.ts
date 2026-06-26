@@ -3,6 +3,7 @@ import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { Gender, ProgramType } from "@prisma/client";
+import { normalizePhone, parentLoginEmail } from "@/lib/phone";
 import { generateInvoiceNo } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
 import { resolveInitialProgress } from "@/lib/student-progress";
@@ -120,6 +121,7 @@ export async function POST(req: Request) {
       dateOfBirth,
       address,
       city,
+      country,
       fatherName,
       parentPhone,
       parentEmail,
@@ -169,9 +171,15 @@ export async function POST(req: Request) {
     });
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Check or create parent account
-      const pEmail = parentEmail ? parentEmail.toLowerCase() : `parent.${studentId}@qems.io`;
-      let parentUser = await tx.user.findUnique({ where: { email: pEmail } });
+      // 1. Check or create parent account (phone-based login)
+      const normalizedPhone = normalizePhone(parentPhone);
+      const pEmail = parentLoginEmail(parentPhone, parentEmail);
+
+      let parentUser = await tx.user.findFirst({
+        where: {
+          OR: [{ phone: normalizedPhone }, { email: pEmail }],
+        },
+      });
       let parentCreatedFresh = false;
 
       if (!parentUser) {
@@ -181,6 +189,7 @@ export async function POST(req: Request) {
           data: {
             name: fatherName,
             email: pEmail,
+            phone: normalizedPhone,
             password: defaultPassword,
             role: "PARENT",
             isActive: true,
@@ -189,10 +198,18 @@ export async function POST(req: Request) {
             emailVerified: new Date(),
           },
         });
-      } else if (!parentUser.emailVerified) {
+      } else {
         parentUser = await tx.user.update({
           where: { id: parentUser.id },
-          data: { emailVerified: new Date() },
+          data: {
+            phone: parentUser.phone || normalizedPhone,
+            emailVerified: parentUser.emailVerified || new Date(),
+            ...(parentEmail?.trim() && !parentUser.email.includes("@parent.qems.local")
+              ? {}
+              : parentEmail?.trim()
+                ? { email: parentEmail.trim().toLowerCase() }
+                : {}),
+          },
         });
       }
 
@@ -233,6 +250,7 @@ export async function POST(req: Request) {
           admissionDate: new Date(),
           address: address || null,
           city: city || null,
+          country: country || "PK",
           programType,
           instituteId,
           parentId: parent.id,

@@ -3,7 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { normalizePhone, looksLikeEmail, isParentPlaceholderEmail } from "@/lib/phone";
 
 // Derive the production URL: prefer explicit NEXTAUTH_URL, then VERCEL_URL, then localhost
 const appUrl = process.env.NEXTAUTH_URL
@@ -25,22 +25,32 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: "credentials",
       credentials: {
-        email: { label: "Email", type: "email" },
+        email: { label: "Email or Phone", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Email and password are required");
+          throw new Error("Email/phone and password are required");
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email.toLowerCase() },
-          include: {
-            institute: {
-              select: { id: true, slug: true, name: true, isApproved: true },
-            },
-          },
-        });
+        const identifier = credentials.email.trim();
+        const user = looksLikeEmail(identifier)
+          ? await prisma.user.findUnique({
+              where: { email: identifier.toLowerCase() },
+              include: {
+                institute: {
+                  select: { id: true, slug: true, name: true, isApproved: true },
+                },
+              },
+            })
+          : await prisma.user.findFirst({
+              where: { phone: normalizePhone(identifier) },
+              include: {
+                institute: {
+                  select: { id: true, slug: true, name: true, isApproved: true },
+                },
+              },
+            });
 
         if (!user || !user.password) {
           throw new Error("Invalid credentials");
@@ -50,7 +60,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Your account has been deactivated. Please contact support.");
         }
 
-        if (!user.emailVerified) {
+        if (!user.emailVerified && user.role !== "PARENT" && !isParentPlaceholderEmail(user.email)) {
           throw new Error("Please verify your email address before logging in. Check your inbox.");
         }
 

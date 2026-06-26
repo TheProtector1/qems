@@ -6,6 +6,7 @@ import { Bell, Search, Sun, Moon, ChevronDown } from "lucide-react";
 import { useTheme } from "next-themes";
 import { getInitials } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { LanguageToggle } from "@/components/common/language-toggle";
 
 interface TopbarProps {
   title: string;
@@ -92,6 +93,8 @@ export function Topbar({ title, breadcrumbs }: TopbarProps) {
         >
           <Search className="h-4 w-4" />
         </button>
+
+        <LanguageToggle />
 
         {/* Theme toggle */}
         <button

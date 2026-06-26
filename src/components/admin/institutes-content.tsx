@@ -120,11 +120,12 @@ function InstituteModal({ inst, onClose }: { inst: InstituteRow; onClose: () => 
 }
 
 // ─── 3-Dot Dropdown ──────────────────────────────────────────
-function InstituteActionsMenu({ inst, onApprove, onReject, onClose: closeMenu }: {
+function InstituteActionsMenu({ inst, onApprove, onReject, onClose: closeMenu, onDelete }: {
   inst: InstituteRow;
   onApprove: () => void;
   onReject: () => void;
   onClose: () => void;
+  onDelete: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -171,6 +172,12 @@ function InstituteActionsMenu({ inst, onApprove, onReject, onClose: closeMenu }:
       >
         <ExternalLink className="h-3.5 w-3.5" /> Open Full Profile
       </Link>
+      <button
+        onClick={() => { onDelete(); closeMenu(); }}
+        className="w-full flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 text-xs font-medium"
+      >
+        <Trash2 className="h-3.5 w-3.5" /> Delete Institute
+      </button>
     </div>
   );
 }
@@ -252,6 +259,21 @@ export function AdminInstitutesContent() {
     } else {
       // Reject
       updateStatus(id, false, false);
+    }
+  };
+
+  const deleteInstitute = async (id: string) => {
+    if (!confirm("Permanently delete this institute and all related data? This cannot be undone.")) return;
+    try {
+      const res = await fetch(`/api/admin/institutes/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setInstitutes((prev) => prev.filter((i) => i.id !== id));
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to delete institute");
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to delete institute");
     }
   };
 
@@ -447,6 +469,7 @@ export function AdminInstitutesContent() {
                               inst={inst}
                               onApprove={() => handleApprove(inst.id)}
                               onReject={() => handleReject(inst.id)}
+                              onDelete={() => deleteInstitute(inst.id)}
                               onClose={() => setOpenMenuId(null)}
                             />
                           )}

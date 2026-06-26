@@ -87,9 +87,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const role = token.role as string;
-
-  // Force password change before accessing protected routes
+  // Profile page allowed only after password is changed (forced-change users go to /auth/change-password)
   if (
     token.mustChangePassword &&
     pathname !== "/auth/change-password" &&
@@ -97,6 +95,8 @@ export async function middleware(request: NextRequest) {
   ) {
     return NextResponse.redirect(new URL("/auth/change-password", request.url));
   }
+
+  const role = token.role as string;
 
   // Guard admin routes
   if (pathname.startsWith("/admin") && role !== "SUPER_ADMIN") {

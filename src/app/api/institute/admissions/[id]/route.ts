@@ -5,6 +5,7 @@ import { AdmissionStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { createAuditLog } from "@/lib/audit";
 import { sendParentWelcomeEmail } from "@/lib/email";
+import { normalizePhone, parentLoginEmail } from "@/lib/phone";
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -50,9 +51,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         });
         const studentId = `STU-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
 
-        // Create parent user account
-        const pEmail = application.parentEmail ? application.parentEmail.toLowerCase() : `parent.${studentId}@qems.io`;
-        let parentUser = await tx.user.findUnique({ where: { email: pEmail } });
+        // Create parent user account (phone-based login)
+        const normalizedPhone = normalizePhone(application.parentPhone);
+        const pEmail = parentLoginEmail(application.parentPhone, application.parentEmail);
+        let parentUser = await tx.user.findFirst({
+          where: { OR: [{ phone: normalizedPhone }, { email: pEmail }] },
+        });
         let parentCreatedFresh = false;
 
         if (!parentUser) {
@@ -62,6 +66,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
             data: {
               name: application.parentName,
               email: pEmail,
+              phone: normalizedPhone,
               password: defaultPassword,
               role: "PARENT",
               isActive: true,
@@ -73,7 +78,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         } else if (!parentUser.emailVerified) {
           parentUser = await tx.user.update({
             where: { id: parentUser.id },
-            data: { emailVerified: new Date() },
+            data: {
+              emailVerified: new Date(),
+              phone: parentUser.phone || normalizedPhone,
+            },
           });
         }
 
@@ -112,6 +120,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
             dateOfBirth: application.dateOfBirth,
             admissionDate: new Date(),
             address: application.address,
+            city: application.city,
+            country: application.country || "PK",
             programType: application.programType,
             admissionStatus: stage as any,
             instituteId: session.user.instituteId as string,
