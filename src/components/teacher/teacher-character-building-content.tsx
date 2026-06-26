@@ -27,7 +27,7 @@ type Task = {
   category: string;
   priority: string;
   dueDate: string;
-  classProgress: ClassProgress[];
+  classProgress?: ClassProgress[];
 };
 
 type TeacherClass = {
@@ -41,6 +41,7 @@ export function TeacherCharacterBuildingContent() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [classes, setClasses] = useState<TeacherClass[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedClass, setSelectedClass] = useState<TeacherClass | null>(null);
@@ -50,10 +51,20 @@ export function TeacherCharacterBuildingContent() {
   const fetchData = async (keepTaskId?: string) => {
     try {
       setLoading(true);
+      setLoadError(null);
       const res = await fetch("/api/teacher/character-tasks");
-      if (!res.ok) return;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setLoadError(data.error || `Could not load tasks (${res.status})`);
+        setTasks([]);
+        setClasses([]);
+        return;
+      }
       const data = await res.json();
-      const nextTasks: Task[] = data.tasks || [];
+      const nextTasks: Task[] = (data.tasks || []).map((t: Task) => ({
+        ...t,
+        classProgress: t.classProgress || [],
+      }));
       setTasks(nextTasks);
       setClasses(data.classes || []);
       const taskId = keepTaskId || selectedTask?.id;
@@ -61,9 +72,12 @@ export function TeacherCharacterBuildingContent() {
       if (nextTask) {
         setSelectedTask(nextTask);
         if (!selectedClass && data.classes?.[0]) setSelectedClass(data.classes[0]);
+      } else {
+        setSelectedTask(null);
       }
     } catch (error) {
       console.error(error);
+      setLoadError("Failed to load character building tasks.");
     } finally {
       setLoading(false);
     }
@@ -73,7 +87,7 @@ export function TeacherCharacterBuildingContent() {
 
   const selectedProgress = useMemo(() => {
     if (!selectedTask || !selectedClass) return null;
-    return selectedTask.classProgress.find((p) => p.classId === selectedClass.id) || null;
+    return (selectedTask.classProgress || []).find((p) => p.classId === selectedClass.id) || null;
   }, [selectedTask, selectedClass]);
 
   const markStatus = async (status: "PENDING" | "TAUGHT" | "COMPLETED") => {
@@ -114,6 +128,17 @@ export function TeacherCharacterBuildingContent() {
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="dash-card p-12 text-center max-w-lg mx-auto">
+        <p className="text-sm text-red-600 font-medium">{loadError}</p>
+        <button type="button" onClick={() => fetchData()} className="btn-primary text-sm mt-4">
+          Try again
+        </button>
+      </div>
+    );
+  }
+
   if (!tasks.length) {
     return (
       <div className="dash-card p-12 text-center max-w-lg mx-auto">
@@ -128,10 +153,29 @@ export function TeacherCharacterBuildingContent() {
 
   if (!classes.length) {
     return (
-      <div className="dash-card p-12 text-center max-w-lg mx-auto">
-        <Users className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-        <h3 className="font-display font-bold text-gray-900 mt-2">No classes assigned</h3>
-        <p className="text-sm text-gray-500 mt-2">Contact your institute to assign classes before marking tasks.</p>
+      <div className="space-y-6">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-semibold">You have {tasks.length} assigned task{tasks.length === 1 ? "" : "s"}, but no classes are linked to your account yet.</p>
+          <p className="text-xs mt-1 text-amber-800">Ask your institute owner to assign you to a class (Students → Classes) so you can mark task progress per class.</p>
+        </div>
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-1 space-y-3">
+            <h3 className="font-semibold text-gray-900 text-sm uppercase tracking-wider">Assigned Tasks</h3>
+            {tasks.map((task) => {
+              const meta = getCategoryMeta(task.category);
+              return (
+                <div key={task.id} className="dash-card p-4">
+                  <span className={cn("pill text-[10px] py-0.5", meta.pill)}>{meta.label}</span>
+                  <p className="font-semibold text-gray-900 mt-1 text-sm">{task.title}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" />
+                    Due {new Date(task.dueDate).toLocaleDateString()}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     );
   }
@@ -152,7 +196,7 @@ export function TeacherCharacterBuildingContent() {
         <div className="lg:col-span-1 space-y-3">
           <h3 className="font-semibold text-gray-900 text-sm uppercase tracking-wider">Assigned Tasks</h3>
           {tasks.map((task) => {
-            const done = task.classProgress.filter((p) => p.status === "COMPLETED").length;
+            const done = (task.classProgress || []).filter((p) => p.status === "COMPLETED").length;
             const meta = getCategoryMeta(task.category);
             return (
               <button
@@ -203,7 +247,7 @@ export function TeacherCharacterBuildingContent() {
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Your Classes</p>
                 <div className="flex flex-wrap gap-2">
                   {classes.map((cls) => {
-                    const prog = selectedTask.classProgress.find((p) => p.classId === cls.id);
+                    const prog = (selectedTask.classProgress || []).find((p) => p.classId === cls.id);
                     const sm = prog ? getStatusMeta(prog.status) : null;
                     return (
                       <button

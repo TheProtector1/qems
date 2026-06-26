@@ -79,8 +79,23 @@ export async function POST(req: Request) {
     }
 
     const validTeacherIds = Array.isArray(teacherIds)
-      ? teacherIds.filter((id: unknown): id is string => typeof id === "string")
+      ? teacherIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)
       : [];
+
+    if (validTeacherIds.length) {
+      const instituteTeachers = await prisma.teacher.findMany({
+        where: { instituteId, id: { in: validTeacherIds }, isActive: true },
+        select: { id: true },
+      });
+      const allowedIds = new Set(instituteTeachers.map((t) => t.id));
+      const rejected = validTeacherIds.filter((id) => !allowedIds.has(id));
+      if (rejected.length) {
+        return NextResponse.json(
+          { error: "One or more selected teachers are invalid for this institute" },
+          { status: 400 }
+        );
+      }
+    }
 
     const task = await prisma.characterTask.create({
       data: {

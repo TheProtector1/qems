@@ -87,11 +87,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Profile page allowed only after password is changed (forced-change users go to /auth/change-password)
+  // Force password change before accessing protected pages (API routes handle their own auth)
   if (
     token.mustChangePassword &&
-    pathname !== "/auth/change-password" &&
-    !pathname.startsWith("/api/auth/change-password")
+    !pathname.startsWith("/api/") &&
+    pathname !== "/auth/change-password"
   ) {
     return NextResponse.redirect(new URL("/auth/change-password", request.url));
   }

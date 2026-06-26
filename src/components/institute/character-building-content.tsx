@@ -224,6 +224,9 @@ export function CharacterBuildingContent() {
         fetchTasks();
         setIsModalOpen(false);
         resetForm();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Failed to save task. Make sure teachers are selected.");
       }
     } finally {
       setSaving(false);

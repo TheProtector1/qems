@@ -55,10 +55,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       });
 
       if (Array.isArray(teacherIds)) {
+        const instituteTeachers = await tx.teacher.findMany({
+          where: { instituteId, id: { in: teacherIds }, isActive: true },
+          select: { id: true },
+        });
+        const allowedIds = new Set(instituteTeachers.map((t) => t.id));
+        const validIds = teacherIds.filter((id: string) => allowedIds.has(id));
+
         await tx.characterTaskAssignment.deleteMany({ where: { taskId: params.id } });
-        if (teacherIds.length) {
+        if (validIds.length) {
           await tx.characterTaskAssignment.createMany({
-            data: teacherIds.map((teacherId: string) => ({ taskId: params.id, teacherId })),
+            data: validIds.map((teacherId: string) => ({ taskId: params.id, teacherId })),
             skipDuplicates: true,
           });
         }
