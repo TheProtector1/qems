@@ -9,6 +9,10 @@ import {
 import { cn } from "@/lib/utils";
 import { StudentPhotoUpload } from "@/components/common/student-photo-upload";
 import { ClassAssignmentField, classNamesFromIds, type InstituteClassOption } from "@/components/institute/class-assignment-field";
+import {
+  StudentDocumentsManager,
+  type PendingStudentDocument,
+} from "@/components/institute/student-documents-manager";
 
 // ── Types ────────────────────────────────────────────────────
 type FormData = {
@@ -104,6 +108,7 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
   } | null>(null);
   const [teachers, setTeachers] = useState<any[]>([]);
   const [classes, setClasses] = useState<InstituteClassOption[]>([]);
+  const [pendingDocuments, setPendingDocuments] = useState<PendingStudentDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -207,6 +212,14 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                   currentPara: form.program === "Hifz" ? form.currentPara : undefined,
                   currentSurah: form.program === "Nazra" ? form.currentSurah : undefined,
                   currentPage: form.program === "Nazra" ? form.currentPage : undefined,
+                  documents: pendingDocuments.map(({ category, label, fileName, mimeType, fileSize, fileData }) => ({
+                    category,
+                    label,
+                    fileName,
+                    mimeType,
+                    fileSize,
+                    fileData,
+                  })),
                 }
           ),
         }
@@ -568,6 +581,14 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                   value={form.parentCnic}
                   onChange={(e) => set("parentCnic", e.target.value)}
                   className="form-input"
+                />
+              </div>
+
+              <div className="md:col-span-2 border-t border-gray-100 pt-5 mt-2">
+                <StudentDocumentsManager
+                  pendingDocuments={pendingDocuments}
+                  onPendingChange={setPendingDocuments}
+                  compact
                 />
               </div>
             </div>

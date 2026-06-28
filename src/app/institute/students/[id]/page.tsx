@@ -14,6 +14,7 @@ import { StudentAvatar } from "@/components/common/student-avatar";
 import { StudentAuditPanel } from "@/components/institute/student-audit-panel";
 import { StudentAttendanceCalendar } from "@/components/institute/student-attendance-calendar";
 import { StudentReportsPanel } from "@/components/institute/student-reports-panel";
+import { StudentDocumentsManager } from "@/components/institute/student-documents-manager";
 import { progressSummaryLabel } from "@/lib/student-progress";
 
 export const metadata = { title: "Student Profile — QEMS" };
@@ -359,6 +360,13 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
           studentName={student.fullName}
           program={program}
         />
+
+        <div className="dash-card p-5 sm:p-6 bg-white">
+          <StudentDocumentsManager
+            studentId={student.id}
+            readOnly={session.user.role === "TEACHER"}
+          />
+        </div>
       </div>
     </DashboardShell>
   );

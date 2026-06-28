@@ -29,6 +29,23 @@ enum ProgressStartType {
   CONTINUING
 }
 
+enum StudentDocumentCategory {
+  PARENT_CNIC_FRONT
+  PARENT_CNIC_BACK
+  MOTHER_CNIC_FRONT
+  MOTHER_CNIC_BACK
+  GUARDIAN_CNIC_FRONT
+  GUARDIAN_CNIC_BACK
+  STUDENT_BFORM
+  STUDENT_CNIC
+  STUDENT_PASSPORT
+  PREVIOUS_CERTIFICATE
+  TRANSFER_LETTER
+  MEDICAL_REPORT
+  VACCINATION_RECORD
+  OTHER
+}
+
 enum Gender {
   MALE
   FEMALE
@@ -347,6 +364,7 @@ model User {
   staffSalaryPayments SalaryPayment[] @relation("StaffSalaryPayments")
   profileChangeRequests ProfileChangeRequest[] @relation("ProfileChangeRequests")
   profileChangeReviews  ProfileChangeRequest[] @relation("ProfileChangeReviews")
+  uploadedStudentDocuments StudentDocument[]
 
   @@index([email])
   @@index([phone])
@@ -541,11 +559,35 @@ model Student {
   admissionApplications AdmissionApplication[]
   characterTaskProgress CharacterTaskProgress[]
   dailyWorshipRecords   DailyWorshipRecord[]
+  documents             StudentDocument[]
 
   @@index([instituteId])
   @@index([branchId])
   @@index([teacherId])
   @@index([studentId])
+}
+
+// ─────────────────────────────────────────────
+// STUDENT DOCUMENTS
+// ─────────────────────────────────────────────
+
+model StudentDocument {
+  id           String                  @id @default(cuid())
+  studentId    String
+  student      Student                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  category     StudentDocumentCategory
+  label        String?
+  fileName     String
+  mimeType     String
+  fileSize     Int
+  fileData     String                  @db.Text
+  uploadedById String?
+  uploadedBy   User?                   @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  @@index([studentId])
+  @@index([category])
 }
 
 model AdmissionApplication {

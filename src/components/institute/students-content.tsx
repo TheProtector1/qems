@@ -14,6 +14,7 @@ import { StudentAvatar } from "@/components/common/student-avatar";
 import { StudentPhotoUpload } from "@/components/common/student-photo-upload";
 import { StudentAuditPanel } from "@/components/institute/student-audit-panel";
 import { ClassAssignmentField, type InstituteClassOption } from "@/components/institute/class-assignment-field";
+import { StudentDocumentsManager } from "@/components/institute/student-documents-manager";
 
 type Student = {
   id: string;
@@ -125,7 +126,7 @@ function EditStudentModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[95dvh] flex flex-col">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[95dvh] flex flex-col">
         <div className="bg-gradient-to-br from-primary-700 to-primary-900 p-4 sm:p-6 text-white flex items-center justify-between shrink-0">
           <div>
             <h2 className="font-display text-lg font-bold">Edit Student Profile</h2>
@@ -290,7 +291,11 @@ function EditStudentModal({
             </div>
           </div>
 
-          <div className="flex gap-2 pt-4 border-t border-gray-100">
+          <div className="border-t border-gray-100 pt-4">
+            <StudentDocumentsManager studentId={student.id} compact />
+          </div>
+
+          <div className="flex gap-2 pt-4 border-t border-gray-100 shrink-0">
             <button
               type="button"
               onClick={onClose}

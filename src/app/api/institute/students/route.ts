@@ -9,6 +9,7 @@ import { createAuditLog } from "@/lib/audit";
 import { resolveInitialProgress } from "@/lib/student-progress";
 import { sendParentWelcomeEmail } from "@/lib/email";
 import { resolveInstituteClassIds, syncStudentClassEnrollments } from "@/lib/student-enrollments";
+import { createStudentDocuments, type DocumentInput } from "@/lib/student-documents-server";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +145,7 @@ export async function POST(req: Request) {
       currentSurah,
       currentPage,
       classIds,
+      documents,
     } = body;
 
     if (!fullName || !gender || !dateOfBirth || !fatherName || !parentPhone || !program) {
@@ -279,6 +281,15 @@ export async function POST(req: Request) {
       const validClassIds = await resolveInstituteClassIds(tx, instituteId, classIds);
       if (validClassIds.length) {
         await syncStudentClassEnrollments(tx, student.id, validClassIds);
+      }
+
+      if (Array.isArray(documents) && documents.length) {
+        await createStudentDocuments(
+          tx,
+          student.id,
+          documents as DocumentInput[],
+          session.user.id
+        );
       }
 
       // 5. Create initial fee payment row if feeAmount is present
