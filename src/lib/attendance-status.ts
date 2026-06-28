@@ -1,6 +1,6 @@
-import { CheckCircle2, X, Clock, AlertTriangle } from "lucide-react";
+import { CheckCircle2, X, Clock, AlertTriangle, Palmtree } from "lucide-react";
 
-export type AttStatus = "PRESENT" | "ABSENT" | "LATE" | "LEAVE";
+export type AttStatus = "PRESENT" | "ABSENT" | "LATE" | "LEAVE" | "HOLIDAY";
 
 export const ATTENDANCE_STATUS: Record<
   AttStatus,
@@ -70,6 +70,19 @@ export const ATTENDANCE_STATUS: Record<
     border: "border-blue-200",
     btn: "bg-blue-500 text-white ring-blue-300",
   },
+  HOLIDAY: {
+    label: "H",
+    fullLabel: "Holiday",
+    icon: Palmtree,
+    pill: "pill-muted",
+    cal: "bg-gray-100 text-gray-600 border-gray-200",
+    dot: "bg-gray-400",
+    gradient: "from-gray-400 to-gray-500",
+    bg: "bg-gray-50",
+    text: "text-gray-600",
+    border: "border-gray-200",
+    btn: "bg-gray-400 text-white ring-gray-300",
+  },
 };
 
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -99,9 +112,10 @@ export function computeMonthStats(records: Record<string, DayRecord>) {
   const absent = values.filter((r) => r.status === "ABSENT").length;
   const late = values.filter((r) => r.status === "LATE").length;
   const leave = values.filter((r) => r.status === "LEAVE").length;
-  const marked = values.length;
+  const holiday = values.filter((r) => r.status === "HOLIDAY").length;
+  const marked = values.filter((r) => r.status !== "HOLIDAY").length;
   const rate = marked ? Math.round(((present + late) / marked) * 100) : 0;
-  return { present, absent, late, leave, marked, rate };
+  return { present, absent, late, leave, holiday, marked, rate };
 }
 
 export function programLabel(type?: string) {

@@ -67,6 +67,10 @@ const MOTIVATION: Record<AttStatus, { title: string; body: string }> = {
     title: "Approved leave",
     body: "Your leave was recorded. We hope everything is well — see you when you return.",
   },
+  HOLIDAY: {
+    title: "Institute holiday",
+    body: "No class today — enjoy the break and return refreshed for your studies.",
+  },
 };
 
 const RATE_MESSAGES = [

@@ -10,7 +10,7 @@ import {
   ClipboardList, DollarSign, MessageSquare, BarChart3, Settings,
   Building2, Shield, Bell, LogOut, ChevronRight, Star, Menu, X,
   Award, UserCheck, GitBranch, HeartHandshake, CreditCard, FileText,
-  Sparkles, Calendar, Gift,
+  Sparkles, Calendar, Gift, Palmtree,
 } from "lucide-react";
 
 interface NavItem {
@@ -44,6 +44,7 @@ const instituteNav: NavItem[] = [
     ],
   },
   { label: "Attendance", href: "/institute/attendance", icon: CalendarCheck },
+  { label: "Holidays", href: "/institute/holidays", icon: Palmtree },
   { label: "Student Reports", href: "/institute/reports", icon: FileText },
   { label: "Assessments", href: "/institute/assessments", icon: ClipboardList },
   {

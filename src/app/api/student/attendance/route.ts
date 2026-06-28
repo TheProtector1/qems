@@ -81,7 +81,8 @@ export async function GET(req: Request) {
     const absent = records.filter((r) => r.status === "ABSENT").length;
     const late = records.filter((r) => r.status === "LATE").length;
     const leave = records.filter((r) => r.status === "LEAVE").length;
-    const marked = records.length;
+    const holiday = records.filter((r) => r.status === "HOLIDAY").length;
+    const marked = records.filter((r) => r.status !== "HOLIDAY").length;
     const rate = marked ? Math.round(((present + late) / marked) * 100) : 0;
 
     const streak = computeStreak(recentPresent.map((r) => dateKey(r.date)));
@@ -91,7 +92,7 @@ export async function GET(req: Request) {
       month,
       year,
       records,
-      summary: { present, absent, late, leave, marked, rate, streak },
+      summary: { present, absent, late, leave, holiday, marked, rate, streak },
     });
   } catch (error) {
     console.error("Student attendance error:", error);

@@ -2,13 +2,15 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AttendanceStatus } from "@prisma/client";
+import {
+  fetchActiveHolidays,
+  getHolidayForDate,
+  getWeeklyOffDays,
+  parseDateOnly,
+  syncHolidayAttendanceForDate,
+} from "@/lib/institute-holidays";
 
 export const dynamic = "force-dynamic";
-
-function parseDateOnly(value: string) {
-  const [y, m, d] = value.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
-}
 
 function dateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -29,6 +31,9 @@ export async function GET(req: Request) {
     const studentId = searchParams.get("studentId");
     const program = searchParams.get("program");
     const historyDays = Math.min(parseInt(searchParams.get("days") || "14", 10), 60);
+
+    const holidays = await fetchActiveHolidays(instituteId);
+    const weeklyOffDays = getWeeklyOffDays(holidays);
 
     const programFilter =
       program && program !== "ALL"
@@ -102,7 +107,7 @@ export async function GET(req: Request) {
     for (let i = 0; i < historyDays; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
-      if (d.getDay() !== 0) dates.push(dateKey(d));
+      if (!weeklyOffDays.includes(d.getDay())) dates.push(dateKey(d));
     }
     dates.reverse();
 
@@ -126,6 +131,12 @@ export async function GET(req: Request) {
 
     if (dateParam) {
       const targetDate = parseDateOnly(dateParam);
+      const holidayInfo = getHolidayForDate(holidays, targetDate);
+
+      if (holidayInfo) {
+        await syncHolidayAttendanceForDate(instituteId, targetDate);
+      }
+
       const dayRecords = await prisma.attendance.findMany({
         where: {
           student: { instituteId },
@@ -144,14 +155,23 @@ export async function GET(req: Request) {
         attendance: attendanceByStudent,
         historyDates: dates,
         history: historyMap,
+        isHoliday: Boolean(holidayInfo),
+        holiday: holidayInfo,
       });
     }
 
     const todayStr = dateKey(today);
+    const todayDate = parseDateOnly(todayStr);
+    const todayHoliday = getHolidayForDate(holidays, todayDate);
+
+    if (todayHoliday) {
+      await syncHolidayAttendanceForDate(instituteId, todayDate);
+    }
+
     const todayRecords = await prisma.attendance.findMany({
       where: {
         student: { instituteId },
-        date: parseDateOnly(todayStr),
+        date: todayDate,
       },
     });
 
@@ -166,6 +186,8 @@ export async function GET(req: Request) {
       attendance: attendanceByStudent,
       historyDates: dates,
       history: historyMap,
+      isHoliday: Boolean(todayHoliday),
+      holiday: todayHoliday,
     });
   } catch (error) {
     console.error("Get attendance error:", error);
@@ -192,6 +214,18 @@ export async function POST(req: Request) {
     }
 
     const targetDate = parseDateOnly(date);
+    const holidays = await fetchActiveHolidays(instituteId);
+    const holidayInfo = getHolidayForDate(holidays, targetDate);
+
+    if (holidayInfo) {
+      await syncHolidayAttendanceForDate(instituteId, targetDate);
+      return NextResponse.json({
+        success: true,
+        isHoliday: true,
+        holiday: holidayInfo,
+        message: "Attendance is automatically marked as Holiday for this date.",
+      });
+    }
 
     const teacher = await prisma.teacher.findFirst({
       where: { userId: session.user.id, instituteId },

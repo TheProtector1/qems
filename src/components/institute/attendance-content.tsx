@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarCheck, Save, CheckCircle2, X, Clock,
-  AlertTriangle, Download,
+  AlertTriangle, Download, Palmtree,
   Loader2, RefreshCw, Users,
 } from "lucide-react";
 import { cn, formatDate, downloadCsv } from "@/lib/utils";
@@ -42,7 +42,7 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
   const [attendance, setAttendance] = useState<Record<string, AttStatus | null>>({});
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [historyDates, setHistoryDates] = useState<string[]>([]);
-  const [history, setHistory] = useState<Record<string, Record<string, AttStatus>>>({});
+  const [history, setHistory] = useState<Record<string, Record<string, AttStatus | "HOLIDAY">>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -61,6 +61,8 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
 
   const [calendarStudentId, setCalendarStudentId] = useState("");
   const [calendarRefresh, setCalendarRefresh] = useState(0);
+  const [isHoliday, setIsHoliday] = useState(false);
+  const [holidayInfo, setHolidayInfo] = useState<{ name: string; type: string } | null>(null);
 
   const loadAttendance = useCallback(async () => {
     setLoading(true);
@@ -76,10 +78,12 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
       setStudents(data.students || []);
       setHistoryDates(data.historyDates || []);
       setHistory(data.history || {});
+      setIsHoliday(Boolean(data.isHoliday));
+      setHolidayInfo(data.holiday || null);
 
       const initial: Record<string, AttStatus | null> = {};
       for (const s of data.students || []) {
-        initial[s.id] = data.attendance?.[s.id] || null;
+        initial[s.id] = data.attendance?.[s.id] || (data.isHoliday ? "HOLIDAY" : null);
       }
       setAttendance(initial);
 
@@ -128,11 +132,13 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
     absent: Object.values(attendance).filter((v) => v === "ABSENT").length,
     late: Object.values(attendance).filter((v) => v === "LATE").length,
     leave: Object.values(attendance).filter((v) => v === "LEAVE").length,
+    holiday: Object.values(attendance).filter((v) => v === "HOLIDAY").length,
     total: students.length,
-    marked: Object.values(attendance).filter(Boolean).length,
+    marked: Object.values(attendance).filter((v) => v && v !== "HOLIDAY").length,
   }), [attendance, students.length]);
 
   const handleSave = async () => {
+    if (isHoliday) return;
     setSaving(true);
     setError(null);
     try {
@@ -214,7 +220,7 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
             </button>
             <button
               onClick={handleSave}
-              disabled={saving || !students.length}
+              disabled={saving || !students.length || isHoliday}
               id="btn-save-attendance"
               className="btn-primary text-sm py-2"
             >
@@ -236,12 +242,26 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {isHoliday && holidayInfo && (
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex items-start gap-3">
+          <Palmtree className="h-5 w-5 text-gray-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Holiday — {holidayInfo.name}</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Attendance is automatically marked as Holiday for all students on this date.
+              Manage holidays from the Holidays page.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
           { label: "Present", count: summary.present, color: "bg-green-50 text-green-700", icon: CheckCircle2 },
           { label: "Absent", count: summary.absent, color: "bg-red-50 text-red-700", icon: X },
           { label: "Late", count: summary.late, color: "bg-amber-50 text-amber-700", icon: Clock },
           { label: "Leave", count: summary.leave, color: "bg-blue-50 text-blue-700", icon: AlertTriangle },
+          { label: "Holiday", count: summary.holiday, color: "bg-gray-50 text-gray-600", icon: Palmtree },
         ].map((c) => {
           const Icon = c.icon;
           return (
@@ -310,8 +330,10 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
               ))}
             </select>
             <div className="flex gap-2 ml-auto flex-wrap">
-              <span className="text-xs text-gray-500 self-center">Mark all:</span>
-              {(["PRESENT", "ABSENT", "LATE", "LEAVE"] as AttStatus[]).map((s) => {
+              {!isHoliday && (
+                <>
+                  <span className="text-xs text-gray-500 self-center">Mark all:</span>
+                  {(["PRESENT", "ABSENT", "LATE", "LEAVE"] as AttStatus[]).map((s) => {
                 const cfg = STATUS_CONFIG[s];
                 return (
                   <button
@@ -329,6 +351,8 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
                   </button>
                 );
               })}
+                </>
+              )}
             </div>
           </div>
 
@@ -363,25 +387,31 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
                     <p className="text-xs text-gray-400 font-mono">{student.studentId} · {programLabel(student.programType)}</p>
                   </div>
                   <div className="flex gap-2">
-                    {(["PRESENT", "ABSENT", "LATE", "LEAVE"] as const).map((status) => {
-                      const cfg = STATUS_CONFIG[status];
-                      const isActive = current === status;
-                      return (
-                        <button
-                          key={status}
-                          onClick={() => toggle(student.id, status)}
-                          title={cfg.fullLabel}
-                          className={cn(
-                            "w-10 h-10 rounded-xl font-bold text-xs transition-all duration-150 ring-2 ring-transparent",
-                            isActive ? cfg.btn + " ring-offset-1 scale-105" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                          )}
-                        >
-                          {cfg.label}
-                        </button>
-                      );
-                    })}
+                    {isHoliday ? (
+                      <span className={cn("pill text-xs", STATUS_CONFIG.HOLIDAY.pill)}>
+                        {STATUS_CONFIG.HOLIDAY.fullLabel}
+                      </span>
+                    ) : (
+                      (["PRESENT", "ABSENT", "LATE", "LEAVE"] as const).map((status) => {
+                        const cfg = STATUS_CONFIG[status];
+                        const isActive = current === status;
+                        return (
+                          <button
+                            key={status}
+                            onClick={() => toggle(student.id, status)}
+                            title={cfg.fullLabel}
+                            className={cn(
+                              "w-10 h-10 rounded-xl font-bold text-xs transition-all duration-150 ring-2 ring-transparent",
+                              isActive ? cfg.btn + " ring-offset-1 scale-105" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                            )}
+                          >
+                            {cfg.label}
+                          </button>
+                        );
+                      })
+                    )}
                   </div>
-                  {current && (
+                  {current && !isHoliday && (
                     <span className={cn("pill text-xs", STATUS_CONFIG[current].pill)}>
                       {STATUS_CONFIG[current].fullLabel}
                     </span>
@@ -411,8 +441,8 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
               <tbody>
                 {students.map((s) => {
                   const dates = historyDates.map((d) => history[s.id]?.[d] || null);
-                  const marked = dates.filter(Boolean);
-                  const presentCount = dates.filter((d) => d === "PRESENT").length;
+                  const marked = dates.filter((d) => d && d !== "HOLIDAY");
+                  const presentCount = dates.filter((d) => d === "PRESENT" || d === "LATE").length;
                   const rate = marked.length ? Math.round((presentCount / marked.length) * 100) : 0;
                   return (
                     <tr key={s.id}>

@@ -158,6 +158,31 @@ async function main() {
     },
   });
 
+  await prisma.instituteHoliday.createMany({
+    data: [
+      {
+        instituteId: institute.id,
+        type: "WEEKLY",
+        name: "Sunday (Weekly Off)",
+        dayOfWeek: 0,
+      },
+      {
+        instituteId: institute.id,
+        type: "PUBLIC",
+        name: "Pakistan Day",
+        startDate: new Date(Date.UTC(2026, 2, 23)),
+        endDate: new Date(Date.UTC(2026, 2, 23)),
+      },
+      {
+        instituteId: institute.id,
+        type: "PUBLIC",
+        name: "Independence Day",
+        startDate: new Date(Date.UTC(2026, 7, 14)),
+        endDate: new Date(Date.UTC(2026, 7, 14)),
+      },
+    ],
+  });
+
   const mainBranch = await prisma.branch.create({
     data: {
       name: "Model Town Campus",
