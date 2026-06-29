@@ -180,7 +180,15 @@ export async function POST(req: Request) {
       currentPage,
     });
 
-    const result = await prisma.$transaction(async (tx) => {
+    const [defaultParentPassword, defaultStudentPassword] = await Promise.all([
+      bcrypt.hash("parent123", 12),
+      bcrypt.hash("student123", 12),
+    ]);
+
+    const pendingDocuments = Array.isArray(documents) ? (documents as DocumentInput[]) : [];
+
+    const result = await prisma.$transaction(
+      async (tx) => {
       // 1. Check or create parent account (phone-based login)
       const normalizedPhone = normalizePhone(parentPhone);
       const pEmail = parentLoginEmail(parentPhone, parentEmail);
@@ -193,14 +201,13 @@ export async function POST(req: Request) {
       let parentCreatedFresh = false;
 
       if (!parentUser) {
-        const defaultPassword = await bcrypt.hash("parent123", 12);
         parentCreatedFresh = true;
         parentUser = await tx.user.create({
           data: {
             name: fatherName,
             email: pEmail,
             phone: normalizedPhone,
-            password: defaultPassword,
+            password: defaultParentPassword,
             role: "PARENT",
             isActive: true,
             mustChangePassword: true,
@@ -235,7 +242,6 @@ export async function POST(req: Request) {
 
       // 2. Create student user login account
       const sEmail = `student.${studentId}@qems.io`;
-      const defaultStudentPassword = await bcrypt.hash("student123", 12);
       const studentUser = await tx.user.create({
         data: {
           name: fullName,
@@ -283,15 +289,6 @@ export async function POST(req: Request) {
         await syncStudentClassEnrollments(tx, student.id, validClassIds);
       }
 
-      if (Array.isArray(documents) && documents.length) {
-        await createStudentDocuments(
-          tx,
-          student.id,
-          documents as DocumentInput[],
-          session.user.id
-        );
-      }
-
       // 5. Create initial fee payment row if feeAmount is present
       if (feeAmount) {
         const fee = parseFloat(feeAmount);
@@ -314,7 +311,18 @@ export async function POST(req: Request) {
       }
 
       return { student, pEmail, parentCreatedFresh };
-    });
+    },
+      { maxWait: 10_000, timeout: 30_000 }
+    );
+
+    if (pendingDocuments.length) {
+      await createStudentDocuments(
+        prisma,
+        result.student.id,
+        pendingDocuments,
+        session.user.id
+      );
+    }
 
     await createAuditLog({
       entityType: "STUDENT",

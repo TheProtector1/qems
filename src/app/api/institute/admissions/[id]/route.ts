@@ -26,7 +26,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: "Application not found" }, { status: 404 });
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const [defaultParentPassword, defaultStudentPassword] = await Promise.all([
+      bcrypt.hash("parent123", 12),
+      bcrypt.hash("student123", 12),
+    ]);
+
+    const result = await prisma.$transaction(
+      async (tx) => {
       const updated = await tx.admissionApplication.update({
         where: { id },
         data: {
@@ -60,14 +66,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         let parentCreatedFresh = false;
 
         if (!parentUser) {
-          const defaultPassword = await bcrypt.hash("parent123", 12);
           parentCreatedFresh = true;
           parentUser = await tx.user.create({
             data: {
               name: application.parentName,
               email: pEmail,
               phone: normalizedPhone,
-              password: defaultPassword,
+              password: defaultParentPassword,
               role: "PARENT",
               isActive: true,
               mustChangePassword: true,
@@ -97,7 +102,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
         // Create student login user
         const sEmail = `student.${studentId}@qems.io`;
-        const defaultStudentPassword = await bcrypt.hash("student123", 12);
         const studentUser = await tx.user.create({
           data: {
             name: application.applicantName,
@@ -148,7 +152,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       }
 
       return { updated, createdStudent };
-    });
+    },
+      { maxWait: 10_000, timeout: 30_000 }
+    );
 
     if (result.createdStudent) {
       await createAuditLog({
