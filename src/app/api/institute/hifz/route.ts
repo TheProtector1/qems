@@ -31,6 +31,8 @@ export async function GET(req: Request) {
         photo: true,
         gender: true,
         currentJuz: true,
+        currentPara: true,
+        hifzDirection: true,
         targetCompletionDate: true,
       },
       orderBy: { fullName: "asc" },

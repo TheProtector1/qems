@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Star, CheckCircle2, Clock, Save, RotateCcw, Loader2, RefreshCw, BookOpen,
 } from "lucide-react";
 import { cn, formatDate, getSurahName } from "@/lib/utils";
 import { StudentAvatar } from "@/components/common/student-avatar";
+import { HifzJuzGrid } from "@/components/common/hifz-juz-grid";
+import { HifzDirection } from "@prisma/client";
+import { getHifzCompletionPercent, hifzDirectionLabel } from "@/lib/hifz-progress";
 
 const SABAQ_TYPES = [
   { value: "SABAQ", label: "Sabaq (New Lesson)", color: "text-green-600 bg-green-50 border-green-200" },
@@ -20,6 +23,8 @@ type HifzStudent = {
   photo?: string | null;
   gender: string;
   currentJuz: number | null;
+  currentPara: number | null;
+  hifzDirection: HifzDirection | null;
   targetCompletionDate: string | null;
 };
 
@@ -104,18 +109,9 @@ export function HifzContent() {
   }, [loadData]);
 
   const student = students.find((s) => s.id === selectedStudent);
-  const currentJuz = student?.currentJuz ?? 0;
-
-  const juzData = useMemo(() =>
-    Array.from({ length: 30 }, (_, i) => {
-      const juz = i + 1;
-      return {
-        juz,
-        completed: currentJuz > 0 && juz < currentJuz,
-        partial: currentJuz > 0 && juz === currentJuz,
-      };
-    }),
-  [currentJuz]);
+  const currentJuz = student?.currentPara ?? student?.currentJuz ?? 0;
+  const direction = student?.hifzDirection ?? HifzDirection.REVERSE;
+  const completionPct = getHifzCompletionPercent(direction, currentJuz);
 
   const studentRecords = records.filter((r) => r.studentId === selectedStudent);
 
@@ -213,7 +209,8 @@ export function HifzContent() {
             <StudentAvatar name={student.fullName} gender={student.gender} photo={student.photo} size="lg" />
             <div className="flex-1">
               <h3 className="font-display text-xl font-bold text-gray-900">{student.fullName}</h3>
-              <p className="text-sm text-gray-500 mb-4">{student.studentId} · Juz {currentJuz || 0} / 30</p>
+              <p className="text-sm text-gray-500 mb-1">{student.studentId} · Para {currentJuz || 0} / 30</p>
+              <p className="text-xs text-gray-400 mb-4">{hifzDirectionLabel(direction)}</p>
               <div className="flex items-center gap-6 flex-wrap">
                 <div>
                   <p className="text-xs text-gray-400">Progress</p>
@@ -221,12 +218,10 @@ export function HifzContent() {
                     <div className="w-40 h-2 bg-gray-200 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-gradient-primary rounded-full transition-all duration-500"
-                        style={{ width: `${currentJuz ? ((currentJuz / 30) * 100) : 0}%` }}
+                        style={{ width: `${completionPct}%` }}
                       />
                     </div>
-                    <span className="text-sm font-semibold text-primary-700">
-                      {currentJuz ? Math.round((currentJuz / 30) * 100) : 0}%
-                    </span>
+                    <span className="text-sm font-semibold text-primary-700">{completionPct}%</span>
                   </div>
                 </div>
                 <div>
@@ -273,30 +268,11 @@ export function HifzContent() {
 
       {activeTab === "tracker" && student && (
         <div className="dash-card p-6">
-          <h3 className="font-semibold text-gray-900 mb-1">30-Juz Progress Map</h3>
-          <p className="text-sm text-gray-400 mb-6">Based on current Juz progress from student profile</p>
-          <div className="grid grid-cols-6 sm:grid-cols-10 gap-2 mb-6">
-            {juzData.map((j) => (
-              <div
-                key={j.juz}
-                title={`Juz ${j.juz}`}
-                className={cn(
-                  "relative aspect-square flex flex-col items-center justify-center rounded-xl transition-all duration-200",
-                  j.completed ? "bg-gradient-primary text-white shadow-md" :
-                  j.partial ? "bg-gradient-gold text-white shadow-md" :
-                  "bg-gray-100 text-gray-400"
-                )}
-              >
-                <span className="text-sm font-bold">{j.juz}</span>
-                {j.completed && <CheckCircle2 className="h-3 w-3 absolute top-1 right-1 opacity-80" />}
-                {j.partial && <Clock className="h-3 w-3 absolute top-1 right-1 opacity-80" />}
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-6 text-xs text-gray-500">
-            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-gradient-primary inline-block" />Completed</span>
-            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-gradient-gold inline-block" />Current Juz</span>
-            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-gray-100 inline-block border" />Not started</span>
+          <HifzJuzGrid direction={direction} currentJuz={currentJuz} />
+          <div className="flex items-center gap-6 text-xs text-gray-500 mt-6">
+            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-primary-600 inline-block" />Memorised</span>
+            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-primary-300 inline-block border border-primary-500" />Current para</span>
+            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-gray-100 inline-block border" />Upcoming</span>
           </div>
         </div>
       )}

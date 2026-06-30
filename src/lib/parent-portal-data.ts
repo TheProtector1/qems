@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { ProgramType } from "@prisma/client";
+import { HifzDirection, ProgramType } from "@prisma/client";
+import { getCompletedJuzCount, getHifzCompletionPercent } from "@/lib/hifz-progress";
 
 export type ParentChildView = {
   id: string;
@@ -9,6 +10,8 @@ export type ParentChildView = {
   className: string;
   teacherName: string;
   currentJuz: number;
+  hifzDirection: HifzDirection | null;
+  hifzCompletionPct: number;
   qualityScore: number;
   attendancePct: number;
   status: string;
@@ -38,19 +41,25 @@ function buildRadarMetrics(attendancePct: number, qualityScore: number, lessonCo
   ];
 }
 
-function buildAchievements(currentJuz: number | null, programType: ProgramType) {
+function buildAchievements(
+  currentJuz: number | null,
+  programType: ProgramType,
+  hifzDirection: HifzDirection | null = HifzDirection.REVERSE
+) {
   const achievements: ParentChildView["achievements"] = [];
+  const dir = hifzDirection ?? HifzDirection.REVERSE;
   if (programType === ProgramType.HIFZ && currentJuz && currentJuz >= 1) {
+    const completed = getCompletedJuzCount(dir, currentJuz);
     achievements.push({
       icon: "📖",
-      name: `Working on Juz ${currentJuz}`,
+      name: `Working on Para ${currentJuz}`,
       date: new Date().toLocaleDateString("en-PK", { month: "short", year: "numeric" }),
       color: "from-green-400 to-emerald-600",
     });
-    if (currentJuz >= 5) {
+    if (completed >= 5) {
       achievements.push({
         icon: "🏆",
-        name: `${currentJuz} Juz Progress`,
+        name: `${completed} Para Completed`,
         date: new Date().toLocaleDateString("en-PK", { month: "short", year: "numeric" }),
         color: "from-yellow-400 to-amber-600",
       });
@@ -135,6 +144,9 @@ export async function getParentChildrenViewData(userId: string): Promise<ParentC
       teacherNote: rec.teacherNote,
     }));
 
+    const dir = student.hifzDirection ?? HifzDirection.REVERSE;
+    const currentPara = student.currentPara ?? student.currentJuz ?? 1;
+
     return {
       id: student.id,
       studentId: student.studentId,
@@ -142,13 +154,19 @@ export async function getParentChildrenViewData(userId: string): Promise<ParentC
       programType: student.programType,
       className: activeClass,
       teacherName: student.teacher?.user.name || "Unassigned Instructor",
-      currentJuz: student.currentJuz || 1,
+      currentJuz: currentPara,
+      hifzDirection: student.hifzDirection,
+      hifzCompletionPct: getHifzCompletionPercent(dir, currentPara),
       qualityScore: quality,
       attendancePct: pct,
       status: pct >= 90 ? "On Track" : pct >= 75 ? "Needs Attention" : "At Risk",
       targetDate: "—",
       recentLessons,
-      achievements: buildAchievements(student.currentJuz, student.programType),
+      achievements: buildAchievements(
+        student.currentPara ?? student.currentJuz,
+        student.programType,
+        student.hifzDirection
+      ),
       radarMetrics: buildRadarMetrics(pct, quality, lessonCounts[student.id] ?? 0),
     };
   });

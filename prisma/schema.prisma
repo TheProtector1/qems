@@ -29,6 +29,11 @@ enum ProgressStartType {
   CONTINUING
 }
 
+enum HifzDirection {
+  FORWARD  // Para 1 → 30 (start with Surah Al-Baqarah)
+  REVERSE  // Para 30 → 1 (start with Juz Amma — common in Pakistan)
+}
+
 enum StudentDocumentCategory {
   PARENT_CNIC_FRONT
   PARENT_CNIC_BACK
@@ -524,6 +529,7 @@ model Student {
   previousEducation String?
   progressStartType ProgressStartType @default(NEW)
   previousInstitute String?
+  hifzDirection   HifzDirection?  // HIFZ program: memorization order
   admissionDate   DateTime        @db.Date
   admissionStatus AdmissionStatus @default(ENROLLED)
   programType     ProgramType

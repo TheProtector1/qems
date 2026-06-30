@@ -5,6 +5,8 @@ import {
   BookOpen, Star, Award, TrendingUp, CheckCircle2, Clock, CalendarCheck
 } from "lucide-react";
 import { cn, getSurahName } from "@/lib/utils";
+import { HifzDirection } from "@prisma/client";
+import { buildJuzGrid } from "@/lib/hifz-progress";
 
 // ── Types ────────────────────────────────────────────────────
 type HifzRecordItem = {
@@ -25,6 +27,8 @@ type ChildStudent = {
   className: string;
   teacherName: string;
   currentJuz: number;
+  hifzDirection?: HifzDirection | null;
+  hifzCompletionPct?: number;
   qualityScore: number;
   attendancePct: number;
   status: string;
@@ -125,29 +129,24 @@ export function ParentQuranProgress({ childrenData }: ParentQuranProgressProps) 
           <p className="text-xs text-gray-400 mb-5">Click on a Juz to view completion notes</p>
 
           <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 mb-6">
-            {Array.from({ length: 30 }, (_, i) => {
-              const juz = i + 1;
-              const done = juz < child.currentJuz;
-              const current = juz === child.currentJuz;
-              return (
+            {buildJuzGrid(child.hifzDirection ?? HifzDirection.REVERSE, child.currentJuz).map(({ juz, completed, partial }) => (
                 <div
                   key={juz}
-                  title={`Juz ${juz}`}
+                  title={`Para ${juz}`}
                   className={cn(
                     "aspect-square rounded-xl flex flex-col items-center justify-center font-bold text-xs border transition-all cursor-default",
-                    done
+                    completed
                       ? "bg-gradient-primary text-white border-primary-600"
-                      : current
+                      : partial
                       ? "bg-gradient-gold text-white border-amber-600 ring-2 ring-amber-300"
                       : "bg-gray-50 border-gray-150 text-gray-400"
                   )}
                 >
                   <span>{juz}</span>
-                  {done && <CheckCircle2 className="h-3 w-3 mt-1 text-white opacity-80" />}
-                  {current && <Clock className="h-3 w-3 mt-1 text-white opacity-80" />}
+                  {completed && <CheckCircle2 className="h-3 w-3 mt-1 text-white opacity-80" />}
+                  {partial && <Clock className="h-3 w-3 mt-1 text-white opacity-80" />}
                 </div>
-              );
-            })}
+            ))}
           </div>
 
           <div className="flex items-center gap-6 text-[10px] text-gray-500 border-t pt-4">

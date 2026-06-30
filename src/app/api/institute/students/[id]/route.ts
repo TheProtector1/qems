@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Gender, ProgramType } from "@prisma/client";
+import { Gender, HifzDirection, ProgramType, ProgressStartType } from "@prisma/client";
 import { createAuditLog, diffFields } from "@/lib/audit";
 import { resolveInstituteClassIds, syncStudentClassEnrollments } from "@/lib/student-enrollments";
+import { parseHifzDirection } from "@/lib/hifz-progress";
 
 const TRACKED_FIELDS = [
   "fullName",
@@ -14,6 +15,10 @@ const TRACKED_FIELDS = [
   "programType",
   "teacherId",
   "currentJuz",
+  "currentPara",
+  "hifzDirection",
+  "progressStartType",
+  "previousInstitute",
   "isActive",
   "photo",
 ] as const;
@@ -39,6 +44,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       program,
       teacherId,
       currentJuz,
+      currentPara,
+      hifzDirection,
+      progressStartType,
+      previousInstitute,
       isActive,
       photo,
       classIds,
@@ -61,6 +70,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       programType: student.programType,
       teacherId: student.teacherId,
       currentJuz: student.currentJuz,
+      currentPara: student.currentPara,
+      hifzDirection: student.hifzDirection,
+      progressStartType: student.progressStartType,
+      previousInstitute: student.previousInstitute,
       isActive: student.isActive,
       photo: student.photo,
     };
@@ -74,6 +87,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if (city !== undefined) studentData.city = city;
       if (teacherId !== undefined) studentData.teacherId = teacherId || null;
       if (currentJuz !== undefined) studentData.currentJuz = currentJuz ? parseInt(currentJuz) : null;
+      if (currentPara !== undefined) studentData.currentPara = currentPara ? parseInt(currentPara) : null;
+      if (hifzDirection !== undefined) {
+        studentData.hifzDirection = hifzDirection ? parseHifzDirection(hifzDirection) : null;
+      }
+      if (progressStartType !== undefined) {
+        studentData.progressStartType =
+          progressStartType === "CONTINUING" ? ProgressStartType.CONTINUING : ProgressStartType.NEW;
+      }
+      if (previousInstitute !== undefined) studentData.previousInstitute = previousInstitute || null;
       if (typeof isActive === "boolean") studentData.isActive = isActive;
       if (photo !== undefined) studentData.photo = photo || null;
 
@@ -139,6 +161,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       programType: result.programType,
       teacherId: result.teacherId,
       currentJuz: result.currentJuz,
+      currentPara: result.currentPara,
+      hifzDirection: result.hifzDirection,
+      progressStartType: result.progressStartType,
+      previousInstitute: result.previousInstitute,
       isActive: result.isActive,
       photo: result.photo,
     };

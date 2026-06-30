@@ -5,6 +5,8 @@ import {
   BookOpen, CalendarCheck, DollarSign, Star, Award, TrendingUp, CheckCircle2, Heart, ChevronRight
 } from "lucide-react";
 import { cn, formatCurrency, getSurahName } from "@/lib/utils";
+import { HifzDirection } from "@prisma/client";
+import { buildJuzGrid } from "@/lib/hifz-progress";
 
 // ── Types ────────────────────────────────────────────────────
 type HifzRecordItem = {
@@ -25,6 +27,8 @@ type ChildStudent = {
   className: string;
   teacherName: string;
   currentJuz: number;
+  hifzDirection?: HifzDirection | null;
+  hifzCompletionPct?: number;
   qualityScore: number;
   attendancePct: number;
   status: string;
@@ -169,34 +173,29 @@ export function ParentDashboardContent({ childrenData }: ParentDashboardContentP
           {/* Memorization map mini */}
           <div className="dash-card p-6">
             <h3 className="font-semibold text-gray-900 mb-1">Memorization Progress</h3>
-            <p className="text-xs text-gray-400 mb-4">30 Juz completion map</p>
+            <p className="text-xs text-gray-400 mb-4">30 Para completion map</p>
             <div className="grid grid-cols-5 sm:grid-cols-6 gap-1.5 mb-4">
-              {Array.from({ length: 30 }, (_, i) => {
-                const juz = i + 1;
-                const done = juz < child.currentJuz;
-                const partial = juz === child.currentJuz;
-                return (
+              {buildJuzGrid(child.hifzDirection ?? HifzDirection.REVERSE, child.currentJuz).map(({ juz, completed, partial }) => (
                   <div
                     key={juz}
                     className={cn(
                       "aspect-square rounded-lg flex items-center justify-center text-xs font-bold transition-all duration-200",
-                      done ? "bg-gradient-primary text-white" : partial ? "bg-gradient-gold text-white" : "bg-gray-100 text-gray-400"
+                      completed ? "bg-gradient-primary text-white" : partial ? "bg-gradient-gold text-white" : "bg-gray-100 text-gray-400"
                     )}
                   >
                     {juz}
                   </div>
-                );
-              })}
+              ))}
             </div>
             <div className="bg-primary-50 rounded-xl p-4 border border-primary-100">
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-500">Overall Progress</span>
-                <span className="font-bold text-primary-700">{(((child.currentJuz - 1) / 30) * 100).toFixed(1)}%</span>
+                <span className="font-bold text-primary-700">{(child.hifzCompletionPct ?? 0).toFixed(1)}%</span>
               </div>
               <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-primary rounded-full transition-all"
-                  style={{ width: `${((child.currentJuz - 1) / 30) * 100}%` }}
+                  style={{ width: `${child.hifzCompletionPct ?? 0}%` }}
                 />
               </div>
             </div>

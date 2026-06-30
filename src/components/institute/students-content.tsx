@@ -15,6 +15,9 @@ import { StudentPhotoUpload } from "@/components/common/student-photo-upload";
 import { StudentAuditPanel } from "@/components/institute/student-audit-panel";
 import { ClassAssignmentField, type InstituteClassOption } from "@/components/institute/class-assignment-field";
 import { StudentDocumentsManager } from "@/components/institute/student-documents-manager";
+import { HIFZ_DIRECTION_OPTIONS } from "@/lib/hifz-progress";
+import { HifzDirection } from "@prisma/client";
+import { getHifzCompletionPercent } from "@/lib/hifz-progress";
 
 type Student = {
   id: string;
@@ -28,6 +31,10 @@ type Student = {
   teacher: string;
   teacherId: string;
   currentJuz: number | null;
+  currentPara: number | null;
+  hifzDirection: string | null;
+  progressStartType: string | null;
+  previousInstitute: string | null;
   qualityScore: number | null;
   attendancePct: number | null;
   status: "Excellent" | "On Track" | "Needs Attention" | "At Risk";
@@ -78,7 +85,10 @@ function EditStudentModal({
   const [program, setProgram] = useState(student.program);
   const [teacherId, setTeacherId] = useState(student.teacherId || "");
   const [classIds, setClassIds] = useState<string[]>(student.classIds || []);
-  const [currentJuz, setCurrentJuz] = useState(student.currentJuz?.toString() || "");
+  const [currentJuz, setCurrentJuz] = useState(student.currentJuz?.toString() || student.currentPara?.toString() || "");
+  const [hifzDirection, setHifzDirection] = useState(student.hifzDirection || "REVERSE");
+  const [progressStartType, setProgressStartType] = useState(student.progressStartType || "NEW");
+  const [previousInstitute, setPreviousInstitute] = useState(student.previousInstitute || "");
   const [fatherName, setFatherName] = useState(student.parentName);
   const [parentEmail, setParentEmail] = useState(student.parentEmail || "");
   const [photo, setPhoto] = useState(student.photo || "");
@@ -103,6 +113,10 @@ function EditStudentModal({
           teacherId: teacherId || null,
           classIds,
           currentJuz: program === "Hifz" ? currentJuz : null,
+          currentPara: program === "Hifz" ? currentJuz : null,
+          hifzDirection: program === "Hifz" ? hifzDirection : null,
+          progressStartType: program === "Hifz" ? progressStartType : undefined,
+          previousInstitute: program === "Hifz" && progressStartType === "CONTINUING" ? previousInstitute : null,
           fatherName,
           parentEmail,
           photo: photo || null,
@@ -241,17 +255,62 @@ function EditStudentModal({
           </div>
 
           {program === "Hifz" && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Current Juz progress</label>
-              <input
-                type="number"
-                min="1"
-                max="30"
-                value={currentJuz}
-                onChange={(e) => setCurrentJuz(e.target.value)}
-                className="form-input text-xs"
-                placeholder="Juz 1-30"
-              />
+            <div className="col-span-2 space-y-3 border border-gray-100 rounded-xl p-3 bg-gray-50">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-2">Hifz memorisation order</label>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {HIFZ_DIRECTION_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setHifzDirection(opt.value)}
+                      className={cn(
+                        "text-left rounded-lg border px-3 py-2 text-xs transition-colors",
+                        hifzDirection === opt.value
+                          ? "border-primary-600 bg-primary-50 text-primary-800"
+                          : "border-gray-200 bg-white text-gray-600"
+                      )}
+                    >
+                      <span className="font-semibold block">{opt.shortLabel}</span>
+                      <span className="text-[10px] opacity-75">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Progress type</label>
+                <select
+                  value={progressStartType}
+                  onChange={(e) => setProgressStartType(e.target.value)}
+                  className="form-input text-xs"
+                >
+                  <option value="NEW">Starting fresh at admission</option>
+                  <option value="CONTINUING">Transferred with progress</option>
+                </select>
+              </div>
+              {progressStartType === "CONTINUING" && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Previous institute</label>
+                  <input
+                    value={previousInstitute}
+                    onChange={(e) => setPreviousInstitute(e.target.value)}
+                    className="form-input text-xs"
+                    placeholder="Previous madrasa name"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Current para / juz (1–30)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={currentJuz}
+                  onChange={(e) => setCurrentJuz(e.target.value)}
+                  className="form-input text-xs"
+                  placeholder="Para currently being memorised"
+                />
+              </div>
             </div>
           )}
 
@@ -356,16 +415,21 @@ function StudentCard({ student, onEdit, onDelete }: { student: Student; onEdit: 
         </div>
 
         {/* Progress Bar (Hifz only) */}
-        {student.currentJuz && (
+        {student.program === "Hifz" && student.currentJuz && (
           <div className="mb-4">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] text-gray-400 font-medium">Hifz Progress</span>
-              <span className="text-[10px] font-bold text-primary-700">Juz {student.currentJuz}/30</span>
+              <span className="text-[10px] font-bold text-primary-700">Para {student.currentPara ?? student.currentJuz}/30</span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-primary-500 to-primary-700 transition-all duration-700"
-                style={{ width: `${(student.currentJuz / 30) * 100}%` }}
+                style={{
+                  width: `${getHifzCompletionPercent(
+                    (student.hifzDirection as HifzDirection) || HifzDirection.REVERSE,
+                    student.currentPara ?? student.currentJuz
+                  )}%`,
+                }}
               />
             </div>
           </div>
@@ -501,6 +565,10 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
           teacher: s.teacher?.user?.name || "Unassigned",
           teacherId: s.teacherId || "",
           currentJuz: s.currentJuz,
+          currentPara: s.currentPara,
+          hifzDirection: s.hifzDirection,
+          progressStartType: s.progressStartType,
+          previousInstitute: s.previousInstitute,
           qualityScore: s.qualityScore ?? null,
           attendancePct: s.attendancePct ?? null,
           status: s.isActive ? "On Track" : "Needs Attention",
@@ -832,14 +900,24 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
                             </td>
                             <td><span className={cn("pill text-xs", programColors[s.program])}>{s.program}</span></td>
                             <td>
-                              {s.currentJuz ? (
+                              {s.program === "Hifz" && s.currentJuz ? (
                                 <div className="flex items-center gap-2">
                                   <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                    <div className="h-full bg-gradient-primary rounded-full" style={{ width: `${(s.currentJuz / 30) * 100}%` }} />
+                                    <div
+                                      className="h-full bg-gradient-primary rounded-full"
+                                      style={{
+                                        width: `${getHifzCompletionPercent(
+                                          (s.hifzDirection as HifzDirection) || HifzDirection.REVERSE,
+                                          s.currentPara ?? s.currentJuz
+                                        )}%`,
+                                      }}
+                                    />
                                   </div>
-                                  <span className="text-xs text-gray-600">Juz {s.currentJuz}/30</span>
+                                  <span className="text-xs text-gray-600">Para {s.currentPara ?? s.currentJuz}/30</span>
                                 </div>
-                              ) : <span className="text-xs text-gray-400">—</span>}
+                              ) : (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
                             </td>
                             <td>
                               <div className="flex items-center gap-1">

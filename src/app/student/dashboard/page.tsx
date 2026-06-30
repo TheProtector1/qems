@@ -32,7 +32,9 @@ export default async function StudentDashboard() {
       <StudentDashboardContent 
         initialStudent={student ? {
           name: student.fullName,
-          currentJuz: student.currentJuz || 1,
+          currentJuz: student.currentJuz,
+          currentPara: student.currentPara ?? student.currentJuz,
+          hifzDirection: student.hifzDirection,
           streak: 0,
           quality: 0,
           enrollments: student.enrollments

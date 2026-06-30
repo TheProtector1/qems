@@ -16,6 +16,9 @@ import { StudentAttendanceCalendar } from "@/components/institute/student-attend
 import { StudentReportsPanel } from "@/components/institute/student-reports-panel";
 import { StudentDocumentsManager } from "@/components/institute/student-documents-manager";
 import { progressSummaryLabel } from "@/lib/student-progress";
+import { HifzJuzGrid } from "@/components/common/hifz-juz-grid";
+import { HifzDirection } from "@prisma/client";
+import { getHifzCompletionPercent, hifzDirectionLabel } from "@/lib/hifz-progress";
 
 export const metadata = { title: "Student Profile — QEMS" };
 
@@ -95,7 +98,12 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
   const parentName = student.parent?.user?.name || "Parent";
   const parentEmail = student.parent?.user?.email || null;
   const status = student.user?.isActive ? "On Track" : "Needs Attention";
-  const completionPct = student.currentJuz ? Math.round((student.currentJuz / 30) * 100) : 0;
+  const hifzDir = student.hifzDirection ?? HifzDirection.REVERSE;
+  const currentPara = student.currentPara ?? student.currentJuz;
+  const completionPct =
+    student.programType === "HIFZ" && currentPara
+      ? getHifzCompletionPercent(hifzDir, currentPara)
+      : 0;
   const showAudit = session.user.role === "INSTITUTE_OWNER" || session.user.role === "SUPER_ADMIN";
 
   const recentProgress = student.hifzRecords.map((r) => ({
@@ -182,10 +190,10 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: "Current Juz", value: student.currentJuz ? `${student.currentJuz}/30` : "N/A", icon: BookOpen, color: "text-green-600 bg-green-50", sub: student.currentJuz ? `${completionPct}% complete` : "Nazra/Tajweed" },
+            { label: "Current Para", value: currentPara ? `${currentPara}/30` : "N/A", icon: BookOpen, color: "text-green-600 bg-green-50", sub: student.programType === "HIFZ" ? hifzDirectionLabel(hifzDir) : "Nazra/Tajweed" },
             { label: "Quality Score", value: qualityScore != null ? String(qualityScore) : "—", icon: Star, color: "text-amber-600 bg-amber-50", sub: qualityScore != null ? "Out of 10.0" : "No hifz records" },
             { label: "Attendance", value: attendancePct != null ? `${attendancePct}%` : "—", icon: CalendarCheck, color: "text-green-600 bg-green-50", sub: attendanceTotal ? "Last 30 days" : "No records yet" },
-            { label: "Completion", value: student.currentJuz ? `${completionPct}%` : "—", icon: TrendingUp, color: "text-violet-600 bg-violet-50", sub: "Hifz progress" },
+            { label: "Completion", value: currentPara ? `${completionPct}%` : "—", icon: TrendingUp, color: "text-violet-600 bg-violet-50", sub: "Hifz progress" },
           ].map((stat) => {
             const Icon = stat.icon;
             return (
@@ -203,30 +211,9 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
           })}
         </div>
 
-        {student.currentJuz && (
+        {student.programType === "HIFZ" && currentPara && (
           <div className="dash-card p-6 bg-white">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display font-bold text-gray-900">Hifz Map — 30 Juz</h3>
-              <span className="pill pill-success">{completionPct}% Complete</span>
-            </div>
-            <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
-              {Array.from({ length: 30 }, (_, i) => i + 1).map((juz) => (
-                <div
-                  key={juz}
-                  title={`Juz ${juz}${juz <= (student.currentJuz ?? 0) ? " ✓ Memorized" : ""}`}
-                  className={cn(
-                    "h-8 rounded-lg flex items-center justify-center text-[10px] font-bold transition-all",
-                    juz < (student.currentJuz ?? 0)
-                      ? "bg-primary-600 text-white shadow-sm"
-                      : juz === student.currentJuz
-                      ? "bg-primary-300 text-primary-900 ring-2 ring-primary-500 ring-offset-1"
-                      : "bg-gray-100 text-gray-400"
-                  )}
-                >
-                  {juz}
-                </div>
-              ))}
-            </div>
+            <HifzJuzGrid direction={hifzDir} currentJuz={currentPara} />
           </div>
         )}
 

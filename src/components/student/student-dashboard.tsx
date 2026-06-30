@@ -2,18 +2,19 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Star, CheckCircle2, Clock, BookOpen, Award, CalendarCheck, Flame } from "lucide-react";
+import { Star, BookOpen, Award, CalendarCheck, Flame } from "lucide-react";
+import { HifzDirection } from "@prisma/client";
+import { buildJuzGrid, getHifzCompletionPercent, hifzDirectionLabel } from "@/lib/hifz-progress";
 
 const BADGES: any[] = [];
 
 export function StudentDashboardContent({ initialStudent }: { initialStudent: any }) {
   const [activeTab, setActiveTab] = useState<"today" | "progress" | "badges">("today");
 
-  const JUZ_DATA = Array.from({ length: 30 }, (_, i) => ({
-    juz: i + 1,
-    completed: initialStudent ? i < initialStudent.currentJuz - 1 : false,
-    partial: initialStudent ? i === initialStudent.currentJuz - 1 : false,
-  }));
+  const direction = (initialStudent?.hifzDirection as HifzDirection) || HifzDirection.REVERSE;
+  const currentPara = initialStudent?.currentPara ?? initialStudent?.currentJuz ?? 1;
+  const JUZ_DATA = buildJuzGrid(direction, currentPara);
+  const completionPct = getHifzCompletionPercent(direction, currentPara);
 
   const TODAY_LESSON: any = null;
 
@@ -31,7 +32,7 @@ export function StudentDashboardContent({ initialStudent }: { initialStudent: an
             <div className="flex items-center gap-4 mt-2 text-sm text-green-100">
               <span className="flex items-center gap-1"><Flame className="h-4 w-4 text-orange-300" /> {initialStudent?.streak || 0}-day streak</span>
               <span className="flex items-center gap-1"><Star className="h-4 w-4 text-amber-300 fill-amber-300" /> {initialStudent?.quality || 0} quality</span>
-              <span className="flex items-center gap-1"><BookOpen className="h-4 w-4" /> Juz {initialStudent?.currentJuz || 1}/30</span>
+              <span className="flex items-center gap-1"><BookOpen className="h-4 w-4" /> Para {currentPara}/30</span>
             </div>
           </div>
         </div>
@@ -94,10 +95,9 @@ export function StudentDashboardContent({ initialStudent }: { initialStudent: an
       {activeTab === "progress" && (
         <div className="space-y-4">
           <div className="dash-card p-6">
-            <h3 className="font-semibold text-gray-900 mb-1">30-Juz Progress</h3>
-            <p className="text-xs text-gray-400 mb-4">
-              {initialStudent ? Math.round(((initialStudent.currentJuz - 1) / 30) * 100) : 0}% completed
-            </p>
+            <h3 className="font-semibold text-gray-900 mb-1">30-Para Hifz Progress</h3>
+            <p className="text-xs text-gray-400 mb-1">{hifzDirectionLabel(direction)}</p>
+            <p className="text-xs text-gray-500 mb-4">{completionPct}% completed</p>
             <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 mb-4">
               {JUZ_DATA.map((j) => (
                 <div
@@ -112,7 +112,7 @@ export function StudentDashboardContent({ initialStudent }: { initialStudent: an
               ))}
             </div>
             <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-primary rounded-full" style={{ width: `${initialStudent ? ((initialStudent.currentJuz - 1) / 30) * 100 : 0}%` }} />
+              <div className="h-full bg-gradient-primary rounded-full" style={{ width: `${completionPct}%` }} />
             </div>
           </div>
 

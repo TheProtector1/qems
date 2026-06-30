@@ -1,8 +1,10 @@
-import { ProgramType, ProgressStartType } from "@prisma/client";
+import { HifzDirection, ProgramType, ProgressStartType } from "@prisma/client";
+import { getDefaultStartingJuz, parseHifzDirection } from "@/lib/hifz-progress";
 
 export type ProgressInput = {
   progressStartType?: string;
   previousInstitute?: string;
+  hifzDirection?: string;
   currentJuz?: string | number | null;
   currentPara?: string | number | null;
   currentSurah?: string | number | null;
@@ -15,6 +17,7 @@ export function resolveInitialProgress(
 ): {
   progressStartType: ProgressStartType;
   previousInstitute: string | null;
+  hifzDirection: HifzDirection | null;
   currentJuz: number | null;
   currentPara: number | null;
   currentSurah: number | null;
@@ -30,11 +33,17 @@ export function resolveInitialProgress(
   };
 
   if (programType === ProgramType.HIFZ) {
+    const hifzDirection = parseHifzDirection(input.hifzDirection);
+    const defaultJuz = getDefaultStartingJuz(hifzDirection);
+    const continuingJuz =
+      parseIntOrNull(input.currentPara) ?? parseIntOrNull(input.currentJuz) ?? defaultJuz;
+
     return {
       progressStartType,
       previousInstitute: isContinuing ? input.previousInstitute || null : null,
-      currentJuz: isContinuing ? parseIntOrNull(input.currentJuz) ?? 1 : 1,
-      currentPara: isContinuing ? parseIntOrNull(input.currentPara) : null,
+      hifzDirection,
+      currentJuz: isContinuing ? continuingJuz : defaultJuz,
+      currentPara: isContinuing ? continuingJuz : defaultJuz,
       currentSurah: null,
       currentPage: null,
     };
@@ -44,6 +53,7 @@ export function resolveInitialProgress(
     return {
       progressStartType,
       previousInstitute: isContinuing ? input.previousInstitute || null : null,
+      hifzDirection: null,
       currentJuz: null,
       currentPara: null,
       currentSurah: isContinuing ? parseIntOrNull(input.currentSurah) ?? 1 : 1,
@@ -54,6 +64,7 @@ export function resolveInitialProgress(
   return {
     progressStartType,
     previousInstitute: isContinuing ? input.previousInstitute || null : null,
+    hifzDirection: null,
     currentJuz: null,
     currentPara: null,
     currentSurah: null,
@@ -66,6 +77,7 @@ export function progressSummaryLabel(
   student: {
     progressStartType?: ProgressStartType | null;
     previousInstitute?: string | null;
+    hifzDirection?: HifzDirection | null;
     currentJuz?: number | null;
     currentPara?: number | null;
     currentSurah?: number | null;
@@ -74,10 +86,11 @@ export function progressSummaryLabel(
 ): string {
   const start = student.progressStartType === ProgressStartType.CONTINUING ? "Continuing" : "Starting fresh";
   if (programType === ProgramType.HIFZ) {
-    const juz = student.currentJuz ?? 1;
-    const para = student.currentPara ? `, Para ${student.currentPara}` : "";
+    const juz = student.currentPara ?? student.currentJuz ?? getDefaultStartingJuz(student.hifzDirection ?? HifzDirection.REVERSE);
+    const dir =
+      student.hifzDirection === HifzDirection.FORWARD ? "1→30" : "30→1";
     const from = student.previousInstitute ? ` from ${student.previousInstitute}` : "";
-    return `${start}${from} — Juz ${juz}${para}`;
+    return `${start}${from} — Para ${juz} (${dir})`;
   }
   if (programType === ProgramType.NAZRA) {
     const from = student.previousInstitute ? ` from ${student.previousInstitute}` : "";

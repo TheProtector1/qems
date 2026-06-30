@@ -471,6 +471,7 @@ async function main() {
         programType: s.program,
         currentJuz: s.currentJuz ?? null,
         currentPara: s.currentJuz ?? null,
+        hifzDirection: s.programType === ProgramType.HIFZ ? "REVERSE" : null,
         currentSurah: s.currentSurah ?? null,
         city: "Lahore",
         country: "PK",

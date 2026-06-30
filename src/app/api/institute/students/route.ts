@@ -140,6 +140,7 @@ export async function POST(req: Request) {
       photo,
       progressStartType,
       previousInstitute,
+      hifzDirection,
       currentJuz,
       currentPara,
       currentSurah,
@@ -174,6 +175,7 @@ export async function POST(req: Request) {
     const progress = resolveInitialProgress(programType, {
       progressStartType,
       previousInstitute,
+      hifzDirection,
       currentJuz,
       currentPara,
       currentSurah,
@@ -275,6 +277,7 @@ export async function POST(req: Request) {
           photo: photo || null,
           progressStartType: progress.progressStartType,
           previousInstitute: progress.previousInstitute,
+          hifzDirection: progress.hifzDirection,
           currentJuz: progress.currentJuz,
           currentPara: progress.currentPara,
           currentSurah: progress.currentSurah,

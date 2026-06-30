@@ -13,6 +13,7 @@ import {
   StudentDocumentsManager,
   type PendingStudentDocument,
 } from "@/components/institute/student-documents-manager";
+import { HIFZ_DIRECTION_OPTIONS, getDefaultStartingJuz } from "@/lib/hifz-progress";
 
 // ── Types ────────────────────────────────────────────────────
 type FormData = {
@@ -41,6 +42,7 @@ type FormData = {
   notes: string;
   progressStartType: string;
   previousInstitute: string;
+  hifzDirection: string;
   currentJuz: string;
   currentPara: string;
   currentSurah: string;
@@ -70,8 +72,9 @@ const INITIAL: FormData = {
   notes: "",
   progressStartType: "NEW",
   previousInstitute: "",
-  currentJuz: "1",
-  currentPara: "",
+  hifzDirection: "REVERSE",
+  currentJuz: "30",
+  currentPara: "30",
   currentSurah: "1",
   currentPage: "1",
 };
@@ -208,8 +211,9 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                   photo: form.photo || null,
                   progressStartType: form.progressStartType,
                   previousInstitute: form.progressStartType === "CONTINUING" ? form.previousInstitute : undefined,
-                  currentJuz: form.program === "Hifz" ? form.currentJuz : undefined,
-                  currentPara: form.program === "Hifz" ? form.currentPara : undefined,
+                  hifzDirection: form.program === "Hifz" ? form.hifzDirection : undefined,
+                  currentJuz: form.program === "Hifz" && form.progressStartType === "CONTINUING" ? form.currentJuz : undefined,
+                  currentPara: form.program === "Hifz" && form.progressStartType === "CONTINUING" ? (form.currentPara || form.currentJuz) : undefined,
                   currentSurah: form.program === "Nazra" ? form.currentSurah : undefined,
                   currentPage: form.program === "Nazra" ? form.currentPage : undefined,
                   documents: pendingDocuments.map(({ category, label, fileName, mimeType, fileSize, fileData }) => ({
@@ -743,6 +747,46 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                   ))}
                 </div>
 
+                {form.program === "Hifz" && (
+                  <div className="mb-4">
+                    <label className="block text-xs font-semibold text-gray-700 mb-2">
+                      Hifz Memorisation Order
+                    </label>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {HIFZ_DIRECTION_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            const start = String(getDefaultStartingJuz(opt.value));
+                            setForm((f) => ({
+                              ...f,
+                              hifzDirection: opt.value,
+                              ...(f.progressStartType === "NEW"
+                                ? { currentJuz: start, currentPara: start }
+                                : {}),
+                            }));
+                          }}
+                          className={cn(
+                            "py-3 px-4 rounded-xl border-2 text-left transition-all",
+                            form.hifzDirection === opt.value
+                              ? "border-emerald-600 bg-emerald-50 text-emerald-900"
+                              : "border-gray-200 text-gray-500 hover:border-gray-300"
+                          )}
+                        >
+                          <span className="text-sm font-semibold block">{opt.label}</span>
+                          <span className="text-[10px] opacity-80 leading-snug block mt-0.5">{opt.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {form.progressStartType === "NEW" && (
+                      <p className="text-xs text-emerald-700 mt-2 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                        Will start at <strong>Para {form.hifzDirection === "REVERSE" ? "30 (Juz Amma)" : "1 (Al-Baqarah)"}</strong>
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {form.progressStartType === "CONTINUING" && (
                   <div className="grid md:grid-cols-2 gap-4 p-4 rounded-xl bg-blue-50 border border-blue-100">
                     <div className="md:col-span-2">
@@ -756,16 +800,27 @@ export function AdmissionForm({ mode = "enroll" }: AdmissionFormProps) {
                       />
                     </div>
                     {form.program === "Hifz" && (
-                      <>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1.5">Current Juz (1–30)</label>
-                          <input type="number" min={1} max={30} value={form.currentJuz} onChange={(e) => set("currentJuz", e.target.value)} className="form-input" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1.5">Current Para (optional)</label>
-                          <input type="number" min={1} max={30} value={form.currentPara} onChange={(e) => set("currentPara", e.target.value)} className="form-input" />
-                        </div>
-                      </>
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                          Current Para / Juz (1–30)
+                        </label>
+                        <p className="text-[10px] text-gray-500 mb-2">
+                          {form.hifzDirection === "REVERSE"
+                            ? "Which para is the student currently memorising? (e.g. 25 if they finished Amma through Para 26)"
+                            : "Which para is the student currently memorising? (e.g. 5 if they completed Para 1–4)"}
+                        </p>
+                        <input
+                          type="number"
+                          min={1}
+                          max={30}
+                          value={form.currentPara || form.currentJuz}
+                          onChange={(e) => {
+                            set("currentPara", e.target.value);
+                            set("currentJuz", e.target.value);
+                          }}
+                          className="form-input max-w-xs"
+                        />
+                      </div>
                     )}
                     {form.program === "Nazra" && (
                       <>
