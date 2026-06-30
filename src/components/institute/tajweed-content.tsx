@@ -31,7 +31,13 @@ type Evaluation = {
   isMastered: boolean;
 };
 
-export function TajweedContent() {
+export function TajweedContent({
+  readOnly = false,
+  apiBase = "/api/institute/tajweed",
+}: {
+  readOnly?: boolean;
+  apiBase?: string;
+}) {
   const [students, setStudents] = useState<TajweedStudent[]>([]);
   const [rules, setRules] = useState<TajweedRule[]>([]);
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
@@ -48,7 +54,7 @@ export function TajweedContent() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/institute/tajweed");
+      const res = await fetch(apiBase);
       if (!res.ok) throw new Error("Failed to load");
       const data = await res.json();
       const list: TajweedStudent[] = data.students || [];
@@ -175,7 +181,7 @@ export function TajweedContent() {
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {[
           { key: "rules", label: "📜 Tajweed Rules & Weight" },
-          { key: "evaluation", label: "✏️ Evaluate Rule" },
+          ...(!readOnly ? [{ key: "evaluation", label: "✏️ Evaluate Rule" }] : []),
           { key: "records", label: "📋 Evaluation History" },
         ].map((t) => (
           <button

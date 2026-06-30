@@ -18,12 +18,35 @@ export async function GET(req: Request) {
     const studentId = searchParams.get("studentId");
     const limit = Math.min(parseInt(searchParams.get("limit") || "30", 10), 100);
 
+    const studentsWhere: {
+      instituteId: string;
+      isActive: boolean;
+      programType: ProgramType;
+      teacherId?: string;
+      branchId?: string;
+    } = {
+      instituteId,
+      isActive: true,
+      programType: ProgramType.HIFZ,
+    };
+
+    if (session.user.role === "STUDENT") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (session.user.role === "TEACHER") {
+      const teacher = await prisma.teacher.findFirst({
+        where: { userId: session.user.id, instituteId },
+      });
+      if (teacher) studentsWhere.teacherId = teacher.id;
+    }
+
+    if (session.user.role === "BRANCH_MANAGER" && session.user.branchId) {
+      studentsWhere.branchId = session.user.branchId;
+    }
+
     const students = await prisma.student.findMany({
-      where: {
-        instituteId,
-        isActive: true,
-        programType: ProgramType.HIFZ,
-      },
+      where: studentsWhere,
       select: {
         id: true,
         fullName: true,
@@ -33,10 +56,43 @@ export async function GET(req: Request) {
         currentJuz: true,
         currentPara: true,
         hifzDirection: true,
+        hifzCompletedAt: true,
         targetCompletionDate: true,
       },
       orderBy: { fullName: "asc" },
     });
+
+    const studentIds = studentId ? [studentId] : students.map((s) => s.id);
+
+    const paraCompletions = await prisma.hifzParaCompletion.findMany({
+      where: { studentId: { in: studentIds } },
+      include: { markedBy: { include: { user: { select: { name: true } } } } },
+      orderBy: [{ studentId: "asc" }, { paraNumber: "asc" }],
+    });
+
+    const completionsByStudent: Record<
+      string,
+      Array<{
+        id: string;
+        paraNumber: number;
+        completedAt: string;
+        daysToComplete: number;
+        notes: string | null;
+        markedByName: string | null;
+      }>
+    > = {};
+
+    for (const c of paraCompletions) {
+      if (!completionsByStudent[c.studentId]) completionsByStudent[c.studentId] = [];
+      completionsByStudent[c.studentId].push({
+        id: c.id,
+        paraNumber: c.paraNumber,
+        completedAt: c.completedAt.toISOString().slice(0, 10),
+        daysToComplete: c.daysToComplete,
+        notes: c.notes,
+        markedByName: c.markedBy?.user?.name ?? null,
+      });
+    }
 
     const recordsWhere = {
       student: { instituteId },
@@ -60,7 +116,11 @@ export async function GET(req: Request) {
       : null;
 
     return NextResponse.json({
-      students,
+      students: students.map((s) => ({
+        ...s,
+        hifzCompletedAt: s.hifzCompletedAt?.toISOString() ?? null,
+        paraCompletions: completionsByStudent[s.id] ?? [],
+      })),
       records: records.map((r) => ({
         id: r.id,
         studentId: r.studentId,
@@ -97,6 +157,10 @@ export async function POST(req: Request) {
     const session = await getAuthSession();
     if (!session?.user.instituteId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (session.user.role === "STUDENT") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const instituteId = session.user.instituteId;

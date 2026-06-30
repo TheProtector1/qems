@@ -6,9 +6,10 @@ import {
 } from "lucide-react";
 import { cn, formatDate, getSurahName } from "@/lib/utils";
 import { StudentAvatar } from "@/components/common/student-avatar";
-import { HifzJuzGrid } from "@/components/common/hifz-juz-grid";
+import { HifzJuzGrid, ParaCompletionHistory } from "@/components/common/hifz-juz-grid";
 import { HifzDirection } from "@prisma/client";
-import { getHifzCompletionPercent, hifzDirectionLabel } from "@/lib/hifz-progress";
+import { getHifzCompletionPercent, hifzDirectionLabel, type JuzCellState, type ParaCompletionInfo } from "@/lib/hifz-progress";
+import { ParaCompletionModal } from "@/components/institute/para-completion-modal";
 
 const SABAQ_TYPES = [
   { value: "SABAQ", label: "Sabaq (New Lesson)", color: "text-green-600 bg-green-50 border-green-200" },
@@ -25,6 +26,8 @@ type HifzStudent = {
   currentJuz: number | null;
   currentPara: number | null;
   hifzDirection: HifzDirection | null;
+  hifzCompletedAt: string | null;
+  paraCompletions: ParaCompletionInfo[];
   targetCompletionDate: string | null;
 };
 
@@ -57,7 +60,13 @@ const typeLabels: Record<string, string> = {
   MANZIL: "Manzil",
 };
 
-export function HifzContent() {
+export function HifzContent({
+  readOnly = false,
+  apiBase = "/api/institute/hifz",
+}: {
+  readOnly?: boolean;
+  apiBase?: string;
+}) {
   const [students, setStudents] = useState<HifzStudent[]>([]);
   const [records, setRecords] = useState<HifzRecordRow[]>([]);
   const [selectedStudent, setSelectedStudent] = useState("");
@@ -67,6 +76,13 @@ export function HifzContent() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [avgRating, setAvgRating] = useState(0);
+  const [paraModal, setParaModal] = useState<{
+    open: boolean;
+    mode: "complete" | "view";
+    para: number;
+    completion: ParaCompletionInfo | null;
+  }>({ open: false, mode: "complete", para: 1, completion: null });
+  const [paraSaving, setParaSaving] = useState(false);
 
   const [form, setForm] = useState({
     type: "SABAQ",
@@ -86,7 +102,7 @@ export function HifzContent() {
       const params = new URLSearchParams({ limit: "50" });
       if (selectedStudent) params.set("studentId", selectedStudent);
 
-      const res = await fetch(`/api/institute/hifz?${params}`);
+      const res = await fetch(`${apiBase}?${params}`);
       if (!res.ok) throw new Error("Failed to load hifz data.");
 
       const data = await res.json();
@@ -102,7 +118,7 @@ export function HifzContent() {
     } finally {
       setLoading(false);
     }
-  }, [selectedStudent]);
+  }, [selectedStudent, apiBase]);
 
   useEffect(() => {
     loadData();
@@ -111,9 +127,64 @@ export function HifzContent() {
   const student = students.find((s) => s.id === selectedStudent);
   const currentJuz = student?.currentPara ?? student?.currentJuz ?? 0;
   const direction = student?.hifzDirection ?? HifzDirection.REVERSE;
-  const completionPct = getHifzCompletionPercent(direction, currentJuz);
+  const hifzCompleted = Boolean(student?.hifzCompletedAt);
+  const paraCompletions = student?.paraCompletions ?? [];
+  const completedParas = paraCompletions.map((c) => c.paraNumber);
+  const paraDetails = Object.fromEntries(
+    paraCompletions.map((c) => [c.paraNumber, c])
+  ) as Record<number, ParaCompletionInfo>;
+  const completionPct = getHifzCompletionPercent(direction, currentJuz, {
+    completedCount: completedParas.length,
+    hifzCompleted,
+  });
 
   const studentRecords = records.filter((r) => r.studentId === selectedStudent);
+
+  const handleParaClick = (para: number, state: JuzCellState, completion: ParaCompletionInfo | null) => {
+    if (readOnly) {
+      if (state === "completed" && completion) {
+        setParaModal({ open: true, mode: "view", para, completion });
+      }
+      return;
+    }
+    if (state === "current" && !hifzCompleted) {
+      setParaModal({ open: true, mode: "complete", para, completion: null });
+    } else if (state === "completed" && completion) {
+      setParaModal({ open: true, mode: "view", para, completion });
+    }
+  };
+
+  const handleParaComplete = async (data: {
+    daysToComplete: number;
+    notes: string;
+    completedAt: string;
+  }) => {
+    if (!selectedStudent) return;
+    setParaSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/institute/hifz/para-completion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: selectedStudent,
+          paraNumber: paraModal.para,
+          daysToComplete: data.daysToComplete,
+          notes: data.notes || undefined,
+          completedAt: data.completedAt,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to mark para complete.");
+
+      setParaModal((m) => ({ ...m, open: false }));
+      await loadData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to mark para complete.");
+    } finally {
+      setParaSaving(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!selectedStudent || !form.ayahFrom || !form.ayahTo) {
@@ -209,7 +280,10 @@ export function HifzContent() {
             <StudentAvatar name={student.fullName} gender={student.gender} photo={student.photo} size="lg" />
             <div className="flex-1">
               <h3 className="font-display text-xl font-bold text-gray-900">{student.fullName}</h3>
-              <p className="text-sm text-gray-500 mb-1">{student.studentId} · Para {currentJuz || 0} / 30</p>
+              <p className="text-sm text-gray-500 mb-1">
+                {student.studentId} ·{" "}
+                {hifzCompleted ? "Hifz Complete" : `Para ${currentJuz || 0} / 30`}
+              </p>
               <p className="text-xs text-gray-400 mb-4">{hifzDirectionLabel(direction)}</p>
               <div className="flex items-center gap-6 flex-wrap">
                 <div>
@@ -250,7 +324,7 @@ export function HifzContent() {
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {[
           { key: "tracker", label: "Juz Progress Map" },
-          { key: "entry", label: "Record Lesson" },
+          ...(!readOnly ? [{ key: "entry", label: "Record Lesson" }] : []),
           { key: "records", label: "Recent Records" },
         ].map((t) => (
           <button
@@ -268,14 +342,34 @@ export function HifzContent() {
 
       {activeTab === "tracker" && student && (
         <div className="dash-card p-6">
-          <HifzJuzGrid direction={direction} currentJuz={currentJuz} />
-          <div className="flex items-center gap-6 text-xs text-gray-500 mt-6">
+          <HifzJuzGrid
+            direction={direction}
+            currentJuz={currentJuz}
+            interactive={!readOnly}
+            hifzCompleted={hifzCompleted}
+            completedParas={completedParas}
+            paraDetails={paraDetails}
+            onParaClick={handleParaClick}
+          />
+          <div className="flex items-center gap-6 text-xs text-gray-500 mt-6 flex-wrap">
             <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-primary-600 inline-block" />Memorised</span>
-            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-primary-300 inline-block border border-primary-500" />Current para</span>
+            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-primary-300 inline-block border border-primary-500" />Current para — click to complete</span>
             <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-gray-100 inline-block border" />Upcoming</span>
           </div>
+          <ParaCompletionHistory completions={paraCompletions} />
         </div>
       )}
+
+      <ParaCompletionModal
+        open={paraModal.open}
+        mode={paraModal.mode}
+        para={paraModal.para}
+        direction={direction}
+        completion={paraModal.completion}
+        onClose={() => setParaModal((m) => ({ ...m, open: false }))}
+        onSubmit={handleParaComplete}
+        submitting={paraSaving}
+      />
 
       {activeTab === "entry" && (
         <div className="dash-card p-6">

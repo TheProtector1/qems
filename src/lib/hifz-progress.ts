@@ -61,20 +61,63 @@ export function getCompletedJuzCount(
 
 export function getHifzCompletionPercent(
   direction: HifzDirection,
-  currentJuz: number | null | undefined
+  currentJuz: number | null | undefined,
+  options?: { completedCount?: number; hifzCompleted?: boolean }
 ): number {
+  if (options?.hifzCompleted) return 100;
+  if (options?.completedCount !== undefined) {
+    return Math.round((options.completedCount / 30) * 100);
+  }
   return Math.round((getCompletedJuzCount(direction, currentJuz) / 30) * 100);
 }
 
-export function buildJuzGrid(direction: HifzDirection, currentJuz: number | null | undefined) {
+export function getNextPara(direction: HifzDirection, completedPara: number): number | null {
+  if (direction === HifzDirection.FORWARD) {
+    return completedPara < 30 ? completedPara + 1 : null;
+  }
+  return completedPara > 1 ? completedPara - 1 : null;
+}
+
+export function isLastPara(direction: HifzDirection, para: number): boolean {
+  return direction === HifzDirection.FORWARD ? para === 30 : para === 1;
+}
+
+export type ParaCompletionInfo = {
+  paraNumber: number;
+  completedAt: string;
+  daysToComplete: number;
+  notes: string | null;
+  markedByName?: string | null;
+};
+
+export function buildJuzGrid(
+  direction: HifzDirection,
+  currentJuz: number | null | undefined,
+  options?: {
+    completedParas?: number[];
+    hifzCompleted?: boolean;
+    paraDetails?: Record<number, ParaCompletionInfo>;
+  }
+) {
+  const completedSet = new Set(options?.completedParas ?? []);
+  const fullyDone = options?.hifzCompleted ?? false;
+
   return Array.from({ length: 30 }, (_, i) => {
     const juz = i + 1;
-    const state = getJuzCellState(direction, currentJuz, juz);
+    let state: JuzCellState;
+
+    if (fullyDone || completedSet.has(juz)) {
+      state = "completed";
+    } else {
+      state = getJuzCellState(direction, currentJuz, juz);
+    }
+
     return {
       juz,
       state,
       completed: state === "completed",
       partial: state === "current",
+      completion: options?.paraDetails?.[juz] ?? null,
     };
   });
 }

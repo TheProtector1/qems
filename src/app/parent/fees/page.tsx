@@ -24,13 +24,16 @@ export default async function ParentFeesPage() {
     where: { userId: session.user.id },
     include: {
       students: {
-        select: { id: true, fullName: true, studentId: true },
+        include: {
+          institute: { select: { name: true, phone: true, email: true, address: true, city: true } },
+        },
       },
     },
   });
 
   const studentIds = parent?.students.map((s) => s.id) ?? [];
   const studentNames = Object.fromEntries(parent?.students.map((s) => [s.id, s.fullName]) ?? []);
+  const institute = parent?.students[0]?.institute;
 
   const payments = studentIds.length
     ? await prisma.feePayment.findMany({
@@ -95,11 +98,35 @@ export default async function ParentFeesPage() {
               <CreditCard className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-xs text-blue-600 font-semibold uppercase tracking-wider">Online Payments</p>
-              <p className="font-display text-sm font-bold text-blue-700 mt-1">Contact institute to pay</p>
+              <p className="text-xs text-blue-600 font-semibold uppercase tracking-wider">Payment Options</p>
+              <p className="font-display text-sm font-bold text-blue-700 mt-1">
+                {institute?.phone ? `Call ${institute.phone}` : "See methods below"}
+              </p>
             </div>
           </div>
         </div>
+
+        {institute && (
+          <div className="dash-card p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">How to Pay</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Pay {institute.name} using any of the methods below. Include your child&apos;s student ID in the payment reference.
+            </p>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {[
+                { title: "JazzCash", text: institute.phone ? `Send to ${institute.phone} via JazzCash and WhatsApp the receipt.` : "Contact the office for JazzCash details." },
+                { title: "EasyPaisa", text: institute.phone ? `Transfer to ${institute.phone} with student ID in remarks.` : "Contact the office for EasyPaisa details." },
+                { title: "Bank Transfer", text: `Email ${institute.email || "the institute"} for bank account details.` },
+                { title: "Cash", text: institute.address ? `Pay at: ${[institute.address, institute.city].filter(Boolean).join(", ")}` : "Pay in person at the institute office." },
+              ].map((m) => (
+                <div key={m.title} className="rounded-xl border border-border p-4 bg-gray-50/50">
+                  <p className="font-semibold text-gray-900 text-sm mb-1">{m.title}</p>
+                  <p className="text-xs text-gray-500 leading-relaxed">{m.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="dash-card overflow-hidden">
           <div className="p-5 border-b border-border">

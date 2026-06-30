@@ -27,8 +27,26 @@ export async function GET() {
 
     const instituteId = session.user.instituteId;
 
+    const whereClause: { instituteId?: string; teacherId?: string; branchId?: string } = {};
+    if (isSuperAdmin && !instituteId) {
+      // super admin sees all
+    } else {
+      whereClause.instituteId = instituteId!;
+    }
+
+    if (session.user.role === "TEACHER" && instituteId) {
+      const teacher = await prisma.teacher.findFirst({
+        where: { userId: session.user.id, instituteId },
+      });
+      if (teacher) whereClause.teacherId = teacher.id;
+    }
+
+    if (session.user.role === "BRANCH_MANAGER" && session.user.branchId) {
+      whereClause.branchId = session.user.branchId;
+    }
+
     const students = await prisma.student.findMany({
-      where: isSuperAdmin && !instituteId ? {} : { instituteId: instituteId! },
+      where: whereClause,
       include: {
         parent: {
           include: {

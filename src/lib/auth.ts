@@ -41,6 +41,9 @@ export const authOptions: NextAuthOptions = {
                 institute: {
                   select: { id: true, slug: true, name: true, isApproved: true },
                 },
+                branch: {
+                  select: { id: true, name: true },
+                },
               },
             })
           : await prisma.user.findFirst({
@@ -48,6 +51,9 @@ export const authOptions: NextAuthOptions = {
               include: {
                 institute: {
                   select: { id: true, slug: true, name: true, isApproved: true },
+                },
+                branch: {
+                  select: { id: true, name: true },
                 },
               },
             });
@@ -85,6 +91,8 @@ export const authOptions: NextAuthOptions = {
           instituteId: user.instituteId,
           instituteSlug: user.institute?.slug || null,
           instituteName: user.institute?.name || null,
+          branchId: user.branchId,
+          branchName: user.branch?.name || null,
           mustChangePassword: user.mustChangePassword,
         };
       },
@@ -98,6 +106,8 @@ export const authOptions: NextAuthOptions = {
         token.instituteId = (user as any).instituteId;
         token.instituteSlug = (user as any).instituteSlug;
         token.instituteName = (user as any).instituteName;
+        token.branchId = (user as any).branchId;
+        token.branchName = (user as any).branchName;
         token.mustChangePassword = (user as any).mustChangePassword ?? false;
       }
 
@@ -121,6 +131,8 @@ export const authOptions: NextAuthOptions = {
         session.user.instituteId = token.instituteId as string;
         session.user.instituteSlug = token.instituteSlug as string;
         session.user.instituteName = token.instituteName as string;
+        session.user.branchId = token.branchId as string | null;
+        session.user.branchName = token.branchName as string | null;
         session.user.mustChangePassword = Boolean(token.mustChangePassword);
         // Explicitly clear image from session — profile photos are fetched
         // on-demand from /api/profile to keep the session cookie small.

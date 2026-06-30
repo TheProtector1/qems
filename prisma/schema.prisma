@@ -458,6 +458,7 @@ model Teacher {
   salaryPayments  SalaryPayment[] @relation("TeacherSalaryPayments")
   students        Student[]
   hifzRecords     HifzRecord[]
+  hifzParaCompletions HifzParaCompletion[]
   nazraRecords    NazraRecord[]
   attendanceRecords Attendance[]
   teacherAttendance TeacherAttendance[]
@@ -538,6 +539,7 @@ model Student {
   currentSurah    Int?            // 1-114
   currentPage     Int?
   targetCompletionDate DateTime?  @db.Date
+  hifzCompletedAt   DateTime?
   isActive        Boolean         @default(true)
   instituteId     String
   institute       Institute       @relation(fields: [instituteId], references: [id], onDelete: Cascade)
@@ -555,6 +557,7 @@ model Student {
   // Relations
   enrollments     ClassEnrollment[]
   hifzRecords     HifzRecord[]
+  hifzParaCompletions HifzParaCompletion[]
   nazraRecords    NazraRecord[]
   tajweedRecords  TajweedRecord[]
   attendance      Attendance[]
@@ -706,6 +709,23 @@ model HifzRecord {
   @@index([studentId])
   @@index([date])
   @@index([type])
+}
+
+model HifzParaCompletion {
+  id             String   @id @default(cuid())
+  paraNumber     Int      // 1-30
+  completedAt    DateTime @db.Date
+  daysToComplete Int
+  notes          String?
+  studentId      String
+  student        Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  markedById     String?
+  markedBy       Teacher? @relation(fields: [markedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([studentId, paraNumber])
+  @@index([studentId])
 }
 
 model NazraRecord {

@@ -153,6 +153,15 @@ export async function POST(req: Request) {
       },
     });
 
+    const { notifyParentOfStudent } = await import("@/lib/notifications");
+    const { NotificationType } = await import("@prisma/client");
+    await notifyParentOfStudent(studentId, {
+      type: NotificationType.EXAM_RESULT,
+      title: "Exam result published",
+      message: `Result for "${assessment.title}": ${grade} (${finalScore}%).`,
+      data: { assessmentId, studentId, resultId: result.id },
+    });
+
     return NextResponse.json({ success: true, result });
   } catch (error) {
     console.error("Create assessment result error:", error);

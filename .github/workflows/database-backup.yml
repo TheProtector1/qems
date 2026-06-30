@@ -1,0 +1,64 @@
+# Hourly PostgreSQL backup (runs on GitHub — no Mac required).
+#
+# Setup (one time):
+#   1. GitHub repo → Settings → Secrets and variables → Actions
+#   2. Add secret: QURAN_EDUCATION_DATABASE_URL (same value as Vercel env)
+#      (DATABASE_URL also works as a fallback name)
+#   3. Optional: disable Mac cron — crontab -e and remove the qems-hourly-backup line
+#
+# Backups appear under Actions → "Database backup" → latest run → Artifacts.
+# Each artifact is kept for 5 days (matches BACKUP_RETENTION_DAYS).
+
+name: Database backup
+
+on:
+  schedule:
+    # Every hour at :00 UTC
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+env:
+  BACKUP_RETENTION_DAYS: "5"
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates lsb-release
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+
+      - name: Run backup
+        env:
+          QURAN_EDUCATION_DATABASE_URL: ${{ secrets.QURAN_EDUCATION_DATABASE_URL || secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_DIR: ${{ runner.temp }}/backups
+          BACKUP_LOG: ${{ runner.temp }}/backup.log
+        run: |
+          if [ -z "$QURAN_EDUCATION_DATABASE_URL" ] && [ -z "$DATABASE_URL" ]; then
+            echo "ERROR: Add QURAN_EDUCATION_DATABASE_URL (or DATABASE_URL) to GitHub Actions secrets."
+            exit 1
+          fi
+          bash scripts/backup-database.sh
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qems-db-${{ github.run_number }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/backups/*.dump
+          retention-days: ${{ env.BACKUP_RETENTION_DAYS }}
+          if-no-files-found: error
+
+      - name: Print backup log
+        if: always()
+        run: cat "${{ runner.temp }}/backup.log" || true

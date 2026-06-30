@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Users, GraduationCap, CalendarCheck, DollarSign,
   TrendingUp, BookOpen, Award, AlertTriangle,
@@ -12,6 +13,32 @@ import {
 import { cn, formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 
+const PROGRAM_COLORS: Record<string, string> = {
+  HIFZ: "#1B5E20",
+  NAZRA: "#D4AF37",
+  TAJWEED: "#81C784",
+  TARBIYAH: "#7C3AED",
+};
+
+type AnalyticsData = {
+  kpis: {
+    totalStudents: number;
+    activeTeachers: number;
+    attendanceRate: number;
+    qualityScore: number | null;
+    totalCollected: number;
+    totalOutstanding: number;
+    collectionRate: number;
+    hifzCompletions: number;
+  };
+  attendanceTrend: { week: string; rate: number }[];
+  attendanceAvg: number;
+  programDistribution: { name: string; value: number; color?: string }[];
+  hifzProgressData: { month: string; sabaq: number; sabqi: number; manzil: number }[];
+  recentStudents: { id: string; name: string; studentId: string; program: string; admissionDate: string }[];
+  alerts: { type: string; message: string; severity: string }[];
+};
+
 export function InstituteDashboardContent({
   initialTotalStudents,
   initialActiveTeachers
@@ -19,10 +46,25 @@ export function InstituteDashboardContent({
   initialTotalStudents: number,
   initialActiveTeachers: number
 }) {
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/institute/analytics")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setAnalytics(data))
+      .catch(() => setAnalytics(null))
+      .finally(() => setLoadingAnalytics(false));
+  }, []);
+
+  const kpi = analytics?.kpis;
+  const totalStudents = kpi?.totalStudents ?? initialTotalStudents;
+  const activeTeachers = kpi?.activeTeachers ?? initialActiveTeachers;
+
   const kpis = [
     {
       label: "Total Students",
-      value: initialTotalStudents.toString(),
+      value: totalStudents.toString(),
       change: "Active",
       changePct: "",
       up: true,
@@ -33,10 +75,10 @@ export function InstituteDashboardContent({
     },
     {
       label: "Attendance Rate",
-      value: "N/A",
-      change: "0%",
-      changePct: "vs last month",
-      up: true,
+      value: loadingAnalytics ? "…" : kpi ? `${kpi.attendanceRate}%` : "N/A",
+      change: analytics ? `${analytics.attendanceAvg}%` : "—",
+      changePct: "6-wk avg",
+      up: (kpi?.attendanceRate ?? 0) >= 75,
       icon: CalendarCheck,
       color: "from-emerald-500 to-green-600",
       bg: "bg-emerald-50",
@@ -44,9 +86,9 @@ export function InstituteDashboardContent({
     },
     {
       label: "Hifz Quality Score",
-      value: "N/A",
-      change: "0",
-      changePct: "vs last month",
+      value: loadingAnalytics ? "…" : kpi?.qualityScore != null ? `${kpi.qualityScore}/10` : "N/A",
+      change: "Live",
+      changePct: "from lessons",
       up: true,
       icon: BookOpen,
       color: "from-violet-500 to-purple-600",
@@ -55,10 +97,10 @@ export function InstituteDashboardContent({
     },
     {
       label: "Fee Collection",
-      value: "N/A",
-      change: "0",
+      value: loadingAnalytics ? "…" : kpi ? formatCurrency(kpi.totalCollected) : "N/A",
+      change: kpi ? formatCurrency(kpi.totalOutstanding) : "—",
       changePct: "outstanding",
-      up: false,
+      up: (kpi?.collectionRate ?? 0) >= 70,
       icon: DollarSign,
       color: "from-amber-500 to-orange-600",
       bg: "bg-amber-50",
@@ -66,7 +108,7 @@ export function InstituteDashboardContent({
     },
     {
       label: "Active Teachers",
-      value: initialActiveTeachers.toString(),
+      value: activeTeachers.toString(),
       change: "Active",
       changePct: "",
       up: true,
@@ -77,9 +119,9 @@ export function InstituteDashboardContent({
     },
     {
       label: "Completions (YTD)",
-      value: "0",
-      change: "0",
-      changePct: "vs last year",
+      value: loadingAnalytics ? "…" : String(kpi?.hifzCompletions ?? 0),
+      change: "Hifz",
+      changePct: "completed",
       up: true,
       icon: Award,
       color: "from-teal-500 to-cyan-600",
@@ -88,11 +130,29 @@ export function InstituteDashboardContent({
     },
   ];
 
-  const attendanceData: any[] = [];
-  const hifzProgressData: any[] = [];
-  const programDistribution: any[] = [];
-  const recentStudents: any[] = [];
-  const alerts: any[] = [];
+  const attendanceData = (analytics?.attendanceTrend || []).map((w) => ({
+    week: w.week,
+    present: w.rate,
+    absent: Math.max(0, 100 - w.rate),
+  }));
+  const hifzProgressData = analytics?.hifzProgressData || [];
+  const programDistribution = (analytics?.programDistribution || []).map((p) => ({
+    ...p,
+    color: p.color || PROGRAM_COLORS[p.name] || "#6B7280",
+  }));
+  const recentStudents = (analytics?.recentStudents || []).map((s) => ({
+    name: s.name,
+    program: s.program,
+    juz: null,
+    quality: "—",
+    status: "On Track",
+  }));
+  const alerts = (analytics?.alerts || []).map((a) => ({
+    type: a.severity === "warning" ? "warning" : "info",
+    msg: a.message,
+    href: a.type === "fee" ? "/institute/finance/fees" : "/institute/attendance",
+    action: "View",
+  }));
 
   return (
     <div className="space-y-6">
@@ -184,7 +244,9 @@ export function InstituteDashboardContent({
               <h3 className="font-semibold text-gray-900">Attendance Trend</h3>
               <p className="text-xs text-gray-400 mt-0.5">Last 8 weeks</p>
             </div>
-            <span className="pill pill-success">94.7% avg</span>
+            <span className="pill pill-success">
+              {analytics?.attendanceAvg ?? kpi?.attendanceRate ?? "—"}% avg
+            </span>
           </div>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={attendanceData}>
@@ -210,7 +272,7 @@ export function InstituteDashboardContent({
         <div className="dash-card p-6">
           <div className="mb-6">
             <h3 className="font-semibold text-gray-900">Program Distribution</h3>
-            <p className="text-xs text-gray-400 mt-0.5">284 total students</p>
+            <p className="text-xs text-gray-400 mt-0.5">{totalStudents} total students</p>
           </div>
           <ResponsiveContainer width="100%" height={160}>
             <PieChart>
@@ -288,7 +350,10 @@ export function InstituteDashboardContent({
             </Link>
           </div>
           <div className="space-y-3">
-            {recentStudents.map((s, i) => (
+            {recentStudents.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">No students yet.</p>
+            ) : (
+            recentStudents.map((s, i) => (
               <div key={i} className="flex items-center gap-3">
                 <div className="h-9 w-9 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
                   <span className="text-white text-xs font-bold">
@@ -315,7 +380,8 @@ export function InstituteDashboardContent({
                   </span>
                 </div>
               </div>
-            ))}
+            ))
+            )}
           </div>
         </div>
 

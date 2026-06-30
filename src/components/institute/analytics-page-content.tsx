@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BarChart3, Download, RefreshCw } from "lucide-react";
 import { InstituteDashboardContent } from "@/components/institute/dashboard-content";
@@ -7,19 +8,29 @@ import { downloadCsv } from "@/lib/utils";
 
 export function AnalyticsPageContent() {
   const router = useRouter();
+  const [exportData, setExportData] = useState<{ kpis?: Record<string, unknown> } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/institute/analytics")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setExportData)
+      .catch(() => setExportData(null));
+  }, []);
 
   const handleRefresh = () => router.refresh();
   const handleExport = () => {
+    const k = exportData?.kpis as Record<string, number> | undefined;
     downloadCsv(
       "institute-analytics-report.csv",
-      ["Metric", "Value", "Change"],
+      ["Metric", "Value"],
       [
-        ["Total Students", "284", "+12"],
-        ["Attendance Rate", "94.7%", "+1.2%"],
-        ["Hifz Quality Score", "8.4 / 10", "+0.3"],
-        ["Fee Collection", "PKR 1.8M", "-PKR 120K"],
-        ["Active Teachers", "18", "+2"],
-        ["Completions (YTD)", "12", "+5"],
+        ["Total Students", String(k?.totalStudents ?? "—")],
+        ["Attendance Rate", k?.attendanceRate != null ? `${k.attendanceRate}%` : "—"],
+        ["Hifz Quality Score", k?.qualityScore != null ? `${k.qualityScore}/10` : "—"],
+        ["Fee Collected", String(k?.totalCollected ?? "—")],
+        ["Outstanding Fees", String(k?.totalOutstanding ?? "—")],
+        ["Active Teachers", String(k?.activeTeachers ?? "—")],
+        ["Hifz Completions", String(k?.hifzCompletions ?? "—")],
       ]
     );
   };
@@ -44,8 +55,8 @@ export function AnalyticsPageContent() {
       </div>
 
       <InstituteDashboardContent 
-        initialTotalStudents={284} 
-        initialActiveTeachers={18} 
+        initialTotalStudents={0} 
+        initialActiveTeachers={0} 
       />
     </div>
   );

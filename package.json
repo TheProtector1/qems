@@ -11,7 +11,10 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:seed:quran-valley": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed-quran-valley.ts"
+    "db:seed:quran-valley": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed-quran-valley.ts",
+    "backup": "bash scripts/backup-database.sh",
+    "backup:install": "bash scripts/setup-backup-cron.sh",
+    "backup:restore": "bash scripts/restore-database.sh"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

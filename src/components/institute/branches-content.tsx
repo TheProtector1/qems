@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { GitBranch, Plus, UserCheck, Mail, Phone, Users, Loader2 } from "lucide-react";
+import { GitBranch, Plus, UserCheck, Mail, Phone, Users, Loader2, X } from "lucide-react";
 
 type Branch = {
   id: string;
@@ -18,6 +17,9 @@ type Branch = {
 export function BranchesContent() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: "", city: "", phone: "", email: "", address: "" });
 
   const loadBranches = useCallback(async () => {
     setLoading(true);
@@ -38,6 +40,26 @@ export function BranchesContent() {
     loadBranches();
   }, [loadBranches]);
 
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/institute/branches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (res.ok) {
+        setShowForm(false);
+        setForm({ name: "", city: "", phone: "", email: "", address: "" });
+        await loadBranches();
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-gray-400">
@@ -55,18 +77,57 @@ export function BranchesContent() {
           </h2>
           <p className="text-sm text-gray-500 mt-0.5">Manage details and staff allocation for different branches</p>
         </div>
-        <Link href="/institute/settings" className="btn-primary text-xs py-2">
+        <button type="button" onClick={() => setShowForm(true)} className="btn-primary text-xs py-2">
           <Plus className="h-4 w-4" /> Add Branch
-        </Link>
+        </button>
       </div>
+
+      {showForm && (
+        <div className="dash-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-900">New Branch</h3>
+            <button type="button" onClick={() => setShowForm(false)} className="p-1 text-gray-400 hover:text-gray-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <form onSubmit={handleCreate} className="grid md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Branch Name *</label>
+              <input className="form-input text-sm" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">City</label>
+              <input className="form-input text-sm" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Phone</label>
+              <input className="form-input text-sm" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Email</label>
+              <input type="email" className="form-input text-sm" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Address</label>
+              <input className="form-input text-sm" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            </div>
+            <div className="md:col-span-2 flex gap-2">
+              <button type="submit" disabled={saving} className="btn-primary text-xs py-2">
+                {saving ? "Saving..." : "Create Branch"}
+              </button>
+              <button type="button" onClick={() => setShowForm(false)} className="btn-ghost text-xs py-2">Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {branches.length === 0 ? (
         <div className="dash-card p-12 text-center text-gray-400">
           <GitBranch className="h-10 w-10 mx-auto mb-3 opacity-40" />
           <p>No branches configured yet.</p>
-          <Link href="/institute/settings" className="text-primary-700 text-sm font-semibold mt-2 inline-block">
+          <button type="button" onClick={() => setShowForm(true)} className="text-primary-700 text-sm font-semibold mt-2 inline-block">
             Add your first branch →
-          </Link>
+          </button>
         </div>
       ) : (
         <div className="grid md:grid-cols-2 gap-6">

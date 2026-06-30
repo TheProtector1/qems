@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { AttendanceStatus } from "@prisma/client";
+import { AttendanceStatus, NotificationType } from "@prisma/client";
+import { notifyParentOfStudent } from "@/lib/notifications";
 import {
   fetchActiveHolidays,
   getHolidayForDate,
@@ -248,6 +249,7 @@ export async function POST(req: Request) {
       });
 
       if (existing) {
+        const prevStatus = existing.status;
         await prisma.attendance.update({
           where: { id: existing.id },
           data: {
@@ -257,6 +259,14 @@ export async function POST(req: Request) {
             leaveRequestedBy: rec.status === "LEAVE" ? rec.leaveRequestedBy : null,
           },
         });
+        if (rec.status === "ABSENT" && prevStatus !== "ABSENT") {
+          await notifyParentOfStudent(rec.studentId, {
+            type: NotificationType.ABSENCE,
+            title: "Absence recorded",
+            message: `${student.fullName} was marked absent on ${targetDate.toLocaleDateString("en-PK")}.`,
+            data: { studentId: rec.studentId, date },
+          });
+        }
       } else {
         await prisma.attendance.create({
           data: {
@@ -269,6 +279,14 @@ export async function POST(req: Request) {
             leaveRequestedBy: rec.status === "LEAVE" ? rec.leaveRequestedBy : null,
           },
         });
+        if (rec.status === "ABSENT") {
+          await notifyParentOfStudent(rec.studentId, {
+            type: NotificationType.ABSENCE,
+            title: "Absence recorded",
+            message: `${student.fullName} was marked absent on ${targetDate.toLocaleDateString("en-PK")}.`,
+            data: { studentId: rec.studentId, date },
+          });
+        }
       }
     }
 

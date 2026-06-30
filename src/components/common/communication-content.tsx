@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { MessageSquare, Bell, Send, Sparkles, Check, Paperclip, Search, PlusCircle, Loader2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,16 @@ type Announcement = {
 };
 
 export function CommunicationContent() {
+  const { data: session } = useSession();
+  const role = session?.user?.role;
+  const isParent = role === "PARENT";
+  const isTeacher = role === "TEACHER";
+  const messagesApi = isParent
+    ? "/api/parent/messages"
+    : isTeacher
+      ? "/api/teacher/messages"
+      : "/api/institute/messages";
+  const canChat = isParent || isTeacher || role === "INSTITUTE_OWNER" || role === "BRANCH_MANAGER";
   const [activeMode, setActiveMode] = useState<"chat" | "announcements">("chat");
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -49,8 +60,9 @@ export function CommunicationContent() {
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
   const loadThreads = useCallback(async () => {
+    if (!canChat) return;
     try {
-      const res = await fetch("/api/institute/messages");
+      const res = await fetch(messagesApi);
       if (!res.ok) return;
       const data = await res.json();
       const list: Thread[] = data.threads || [];
@@ -61,23 +73,25 @@ export function CommunicationContent() {
     } catch (err) {
       console.error(err);
     }
-  }, [selectedThreadId]);
+  }, [selectedThreadId, canChat, messagesApi]);
 
   const loadAnnouncements = useCallback(async () => {
     try {
-      const res = await fetch("/api/institute/announcements");
+      const url = isParent ? "/api/parent/announcements" : "/api/institute/announcements";
+      const res = await fetch(url);
       if (!res.ok) return;
       const data = await res.json();
       setAnnouncements(data.announcements || []);
     } catch (err) {
       console.error(err);
     }
-  }, []);
+  }, [isParent]);
 
   const loadMessages = useCallback(async (partnerId: string) => {
+    if (!canChat) return;
     setMessagesLoading(true);
     try {
-      const res = await fetch(`/api/institute/messages?partnerId=${partnerId}`);
+      const res = await fetch(`${messagesApi}?partnerId=${partnerId}`);
       if (!res.ok) return;
       const data = await res.json();
       setChatMessages(data.messages || []);
@@ -87,7 +101,7 @@ export function CommunicationContent() {
     } finally {
       setMessagesLoading(false);
     }
-  }, []);
+  }, [canChat, messagesApi]);
 
   useEffect(() => {
     setLoading(true);
@@ -104,7 +118,7 @@ export function CommunicationContent() {
     e.preventDefault();
     if (!inputMsg.trim() || !selectedThreadId) return;
 
-    const res = await fetch("/api/institute/messages", {
+    const res = await fetch(messagesApi, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ receiverId: selectedThreadId, content: inputMsg }),
@@ -162,6 +176,7 @@ export function CommunicationContent() {
   return (
     <div className="space-y-6">
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-full sm:w-fit overflow-x-auto no-scrollbar">
+        {canChat && (
         <button
           onClick={() => setActiveMode("chat")}
           className={cn(
@@ -169,8 +184,9 @@ export function CommunicationContent() {
             activeMode === "chat" ? "bg-white text-primary-800 shadow-sm" : "text-gray-500 hover:text-gray-700"
           )}
         >
-          <MessageSquare className="h-4 w-4" /> Direct Messaging
+          <MessageSquare className="h-4 w-4" /> {isParent ? "Message Teacher" : isTeacher ? "Message Parents" : "Direct Messaging"}
         </button>
+        )}
         <button
           onClick={() => setActiveMode("announcements")}
           className={cn(
@@ -178,11 +194,11 @@ export function CommunicationContent() {
             activeMode === "announcements" ? "bg-white text-primary-800 shadow-sm" : "text-gray-500 hover:text-gray-700"
           )}
         >
-          <Bell className="h-4 w-4" /> Broadcast Notice Board
+          <Bell className="h-4 w-4" /> {isParent ? "Institute Notices" : "Broadcast Notice Board"}
         </button>
       </div>
 
-      {activeMode === "chat" && (
+      {activeMode === "chat" && canChat && (
         <div className="border border-border rounded-2xl bg-white overflow-hidden shadow-sm min-h-[min(70dvh,600px)] lg:min-h-[600px] flex flex-col lg:grid lg:grid-cols-3 lg:gap-0">
           <div
             className={cn(
@@ -305,9 +321,11 @@ export function CommunicationContent() {
       )}
 
       {activeMode === "announcements" && (
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
-            <h3 className="font-semibold text-gray-900">Broadcast History</h3>
+        <div className={cn("grid gap-6", !isParent && "lg:grid-cols-3")}>
+          <div className={cn("space-y-4", !isParent && "lg:col-span-2")}>
+            <h3 className="font-semibold text-gray-900">
+              {isParent ? "Announcements from Institute" : "Broadcast History"}
+            </h3>
             {announcements.length === 0 ? (
               <p className="text-sm text-gray-400 py-8 text-center">No announcements published yet.</p>
             ) : (
@@ -329,6 +347,7 @@ export function CommunicationContent() {
             )}
           </div>
 
+          {!isParent && (
           <div>
             <div className="dash-card p-6 bg-white border border-border">
               <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-1.5">
@@ -376,6 +395,7 @@ export function CommunicationContent() {
               </form>
             </div>
           </div>
+          )}
         </div>
       )}
     </div>

@@ -38,8 +38,23 @@ type ChildStudent = {
   radarMetrics: { subject: string; score: number }[];
 };
 
+type FeeRecord = {
+  month: string;
+  amount: number;
+  status: string;
+  dueDate: string;
+};
+
+type NotificationItem = {
+  icon: string;
+  msg: string;
+  time: string;
+};
+
 type ParentDashboardContentProps = {
   childrenData: ChildStudent[];
+  feesByStudent?: Record<string, FeeRecord[]>;
+  notifications?: NotificationItem[];
 };
 
 const typeColors: Record<string, string> = {
@@ -48,9 +63,19 @@ const typeColors: Record<string, string> = {
   MANZIL: "pill-primary",
 };
 
-const NOTIFICATIONS: any[] = [];
+const NOTIFICATION_ICONS: Record<string, string> = {
+  ABSENCE: "📅",
+  FEE_DUE: "💰",
+  ACHIEVEMENT: "🏆",
+  ANNOUNCEMENT: "📢",
+  GENERAL: "🔔",
+};
 
-export function ParentDashboardContent({ childrenData }: ParentDashboardContentProps) {
+export function ParentDashboardContent({
+  childrenData,
+  feesByStudent = {},
+  notifications = [],
+}: ParentDashboardContentProps) {
   const [selectedChildIndex, setSelectedChildIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<"overview" | "lessons" | "notifications">("overview");
 
@@ -67,6 +92,8 @@ export function ParentDashboardContent({ childrenData }: ParentDashboardContentP
   }
 
   const child = childrenData[selectedChildIndex];
+  const childFees = feesByStudent[child.id] || [];
+  const outstanding = childFees.filter((f) => f.status !== "PAID").reduce((s, f) => s + f.amount, 0);
 
   return (
     <div className="space-y-6">
@@ -223,10 +250,60 @@ export function ParentDashboardContent({ childrenData }: ParentDashboardContentP
 
           {/* Fee status */}
           <div className="dash-card p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">💰 Tuition Fee Status</h3>
-            <div className="space-y-3">
-              <p className="text-sm text-gray-500">No fee records found.</p>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900">💰 Tuition Fee Status</h3>
+              <Link href="/parent/fees" className="text-xs text-primary-700 font-semibold hover:underline">
+                View all
+              </Link>
             </div>
+            <div className="space-y-3">
+              {childFees.length === 0 ? (
+                <p className="text-sm text-gray-500">No fee records found.</p>
+              ) : (
+                <>
+                  {outstanding > 0 && (
+                    <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-700">
+                      Outstanding: <strong>{formatCurrency(outstanding)}</strong>
+                    </div>
+                  )}
+                  {childFees.slice(0, 3).map((f, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm border-b border-gray-100 pb-2 last:border-0">
+                      <span className="text-gray-700">{f.month}</span>
+                      <div className="text-right">
+                        <span className="font-semibold">{formatCurrency(f.amount)}</span>
+                        <span className={cn("ml-2 pill text-[9px] py-0.5", f.status === "PAID" ? "pill-success" : "pill-danger")}>
+                          {f.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Character building link card */}
+          <div className="dash-card p-6 bg-violet-50/50 border border-violet-100">
+            <h3 className="font-semibold text-gray-900 mb-2">🌱 Character Building</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              View read-only progress on Akhlaaq, Adab, and class character tasks.
+            </p>
+            <Link href="/parent/character-building" className="btn-primary text-xs py-2 inline-flex">
+              View Character Tasks
+            </Link>
+          </div>
+
+          {/* PDF report download */}
+          <div className="dash-card p-6">
+            <h3 className="font-semibold text-gray-900 mb-2">📄 Progress Report</h3>
+            <p className="text-sm text-gray-500 mb-4">Download a PDF summary of attendance and Hifz progress.</p>
+            <a
+              href={`/api/institute/reports/${child.id}?type=combined`}
+              className="btn-ghost text-xs py-2 inline-flex border border-border"
+              download
+            >
+              Download Report (PDF)
+            </a>
           </div>
         </div>
       )}
@@ -271,9 +348,12 @@ export function ParentDashboardContent({ childrenData }: ParentDashboardContentP
             <h3 className="font-semibold text-gray-900">Alerts & Notifications</h3>
           </div>
           <div className="divide-y divide-border">
-            {NOTIFICATIONS.map((n, i) => (
+            {notifications.length === 0 ? (
+              <p className="p-6 text-sm text-gray-400 text-center">No alerts yet.</p>
+            ) : (
+            notifications.map((n, i) => (
               <div key={i} className="flex items-start gap-4 px-6 py-4">
-                <span className="text-2xl">{n.icon}</span>
+                <span className="text-2xl">{n.icon || NOTIFICATION_ICONS.GENERAL}</span>
                 <div className="flex-1">
                   <p className="text-sm text-gray-800">{n.msg}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{n.time}</p>
@@ -282,7 +362,8 @@ export function ParentDashboardContent({ childrenData }: ParentDashboardContentP
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-            ))}
+            ))
+            )}
           </div>
         </div>
       )}

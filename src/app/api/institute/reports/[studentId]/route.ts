@@ -15,6 +15,22 @@ async function authorizeStudentAccess(
   session: NonNullable<Awaited<ReturnType<typeof getAuthSession>>>,
   studentId: string
 ) {
+  if (session.user.role === "PARENT") {
+    const parent = await prisma.parent.findUnique({
+      where: { userId: session.user.id },
+      include: { students: { where: { id: studentId }, take: 1 } },
+    });
+    if (!parent?.students.length) return null;
+    return prisma.student.findFirst({
+      where: { id: studentId },
+      include: {
+        institute: { select: { name: true } },
+        teacher: { include: { user: { select: { name: true } } } },
+        parent: { include: { user: { select: { name: true, email: true } } } },
+      },
+    });
+  }
+
   const allowedRoles = ["SUPER_ADMIN", "INSTITUTE_OWNER", "TEACHER", "BRANCH_MANAGER"];
   if (!allowedRoles.includes(session.user.role)) return null;
 

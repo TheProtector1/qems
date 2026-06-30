@@ -14,7 +14,7 @@ export default async function StudentHifzPage() {
       title="My Hifz Progress Map"
       breadcrumbs={[{ label: "Student Portal" }, { label: "Hifz Map" }]}
     >
-      <HifzContent />
+      <HifzContent readOnly apiBase="/api/student/hifz" />
     </DashboardShell>
   );
 }

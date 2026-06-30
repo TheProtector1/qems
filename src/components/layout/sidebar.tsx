@@ -100,10 +100,24 @@ const teacherNav: NavItem[] = [
   { label: "Spiritual Tracker", href: "/teacher/worship", icon: Sparkles },
 ];
 
+const branchNav: NavItem[] = [
+  { label: "Dashboard", href: "/branch/dashboard", icon: LayoutDashboard },
+  { label: "Students", href: "/teacher/students", icon: GraduationCap },
+  { label: "Attendance", href: "/teacher/attendance", icon: CalendarCheck },
+  { label: "Hifz Records", href: "/teacher/quran/hifz", icon: Star },
+  { label: "Assessments", href: "/teacher/assessments", icon: ClipboardList },
+  { label: "Communication", href: "/teacher/communication", icon: MessageSquare },
+  { label: "My Profile", href: "/profile", icon: Settings },
+];
+
 const parentNav: NavItem[] = [
   { label: "Dashboard", href: "/parent/dashboard", icon: LayoutDashboard },
   { label: "Hifz Progress", href: "/parent/quran/hifz", icon: BookOpen },
+  { label: "Nazra Progress", href: "/parent/quran/nazra", icon: BookOpen },
+  { label: "Tajweed Progress", href: "/parent/quran/tajweed", icon: Star },
   { label: "Attendance", href: "/parent/attendance", icon: CalendarCheck },
+  { label: "Character Building", href: "/parent/character-building", icon: HeartHandshake },
+  { label: "Exam Results", href: "/parent/assessments", icon: ClipboardList },
   { label: "Fees & Payments", href: "/parent/fees", icon: DollarSign },
   { label: "Messaging", href: "/parent/communication", icon: MessageSquare },
   { label: "Spiritual Tracker", href: "/parent/worship", icon: Sparkles },
@@ -114,6 +128,8 @@ const parentNav: NavItem[] = [
 const studentNav: NavItem[] = [
   { label: "Dashboard", href: "/student/dashboard", icon: LayoutDashboard },
   { label: "Quran Hifz Map", href: "/student/quran/hifz", icon: BookOpen },
+  { label: "Nazra Progress", href: "/student/quran/nazra", icon: BookOpen },
+  { label: "Tajweed Progress", href: "/student/quran/tajweed", icon: Star },
   { label: "Achievements", href: "/student/achievements", icon: Award },
   { label: "My Attendance", href: "/student/attendance", icon: CalendarCheck },
   { label: "Spiritual Tracker", href: "/student/worship", icon: Sparkles },
@@ -228,6 +244,8 @@ export function Sidebar({ collapsed, onCollapse, mobileOpen = false, onMobileClo
   let currentNav = instituteNav;
   if (role === "SUPER_ADMIN") {
     currentNav = superAdminNav;
+  } else if (role === "BRANCH_MANAGER") {
+    currentNav = branchNav;
   } else if (role === "TEACHER") {
     currentNav = teacherNav;
   } else if (role === "PARENT") {

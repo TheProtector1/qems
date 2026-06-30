@@ -33,7 +33,13 @@ const QAIDA_LESSONS = Array.from({ length: 17 }, (_, i) => ({
   active: false,
 }));
 
-export function NazraContent() {
+export function NazraContent({
+  readOnly = false,
+  apiBase = "/api/institute/nazra",
+}: {
+  readOnly?: boolean;
+  apiBase?: string;
+}) {
   const [students, setStudents] = useState<NazraStudent[]>([]);
   const [records, setRecords] = useState<NazraRecord[]>([]);
   const [selectedStudent, setSelectedStudent] = useState("");
@@ -55,7 +61,7 @@ export function NazraContent() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/institute/nazra");
+      const res = await fetch(apiBase);
       if (!res.ok) throw new Error("Failed to load");
       const data = await res.json();
       const list: NazraStudent[] = data.students || [];
@@ -128,7 +134,7 @@ export function NazraContent() {
         <select
           value={selectedStudent}
           onChange={(e) => setSelectedStudent(e.target.value)}
-          className="form-input w-full sm:w-64 max-w-md"
+          className={cn("form-input w-full sm:w-64 max-w-md", readOnly && students.length <= 1 && "hidden")}
           id="select-student"
         >
           {students.map((s) => (
@@ -178,7 +184,7 @@ export function NazraContent() {
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {[
           { key: "milestones", label: "📊 Milestones & Lessons" },
-          { key: "entry", label: "✏️ Record Lesson" },
+          ...(!readOnly ? [{ key: "entry", label: "✏️ Record Lesson" }] : []),
           { key: "records", label: "📋 Recent Progress" },
         ].map((t) => (
           <button

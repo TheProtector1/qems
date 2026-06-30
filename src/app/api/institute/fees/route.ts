@@ -118,3 +118,98 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+export async function POST(req: Request) {
+  try {
+    const session = await getAuthSession();
+    if (!session?.user.instituteId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const instituteId = session.user.instituteId;
+    const body = await req.json();
+    const month = body.month as string;
+    const amount = Number(body.amount) || 5000;
+    const dueDay = Math.min(28, Math.max(1, Number(body.dueDay) || 10));
+
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return NextResponse.json({ error: "Invalid month (use YYYY-MM)" }, { status: 400 });
+    }
+
+    const [y, m] = month.split("-").map(Number);
+    const dueDate = new Date(y, m - 1, dueDay);
+
+    const [students, feeStructures] = await Promise.all([
+      prisma.student.findMany({
+        where: { instituteId, isActive: true },
+        select: {
+          id: true,
+          fullName: true,
+          programType: true,
+          scholarships: {
+            where: { isActive: true },
+            select: {
+              amount: true,
+              percentage: true,
+              isFullScholarship: true,
+              isActive: true,
+              startDate: true,
+              endDate: true,
+            },
+          },
+        },
+      }),
+      prisma.feeStructure.findMany({
+        where: { instituteId, isActive: true },
+        select: { programType: true, amount: true },
+      }),
+    ]);
+
+    const { generateInvoiceNo } = await import("@/lib/utils");
+    const { notifyParentOfStudent } = await import("@/lib/notifications");
+    const { NotificationType } = await import("@prisma/client");
+    const { resolveBaseFeeAmount, computeNetFee } = await import("@/lib/fee-billing");
+
+    let created = 0;
+    for (const student of students) {
+      const exists = await prisma.feePayment.findFirst({
+        where: { studentId: student.id, month },
+      });
+      if (exists) continue;
+
+      const baseAmount = resolveBaseFeeAmount(student.programType, feeStructures, amount);
+      const { amount: gross, discount, netAmount, waived } = computeNetFee(
+        baseAmount,
+        student.scholarships
+      );
+
+      await prisma.feePayment.create({
+        data: {
+          studentId: student.id,
+          month,
+          dueDate,
+          amount: gross,
+          discount,
+          netAmount,
+          status: waived ? "WAIVED" : "PENDING",
+          invoiceNo: generateInvoiceNo(),
+        },
+      });
+
+      if (!waived) {
+        await notifyParentOfStudent(student.id, {
+          type: NotificationType.FEE_DUE,
+          title: "Fee invoice generated",
+          message: `Tuition fee for ${formatMonthLabel(month)} is due on ${dueDate.toLocaleDateString("en-PK")}. Amount: PKR ${netAmount.toLocaleString()}.`,
+          data: { studentId: student.id, month },
+        });
+      }
+      created += 1;
+    }
+
+    return NextResponse.json({ success: true, created, month });
+  } catch (error) {
+    console.error("Generate fees error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
