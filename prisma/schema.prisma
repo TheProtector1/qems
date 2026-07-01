@@ -575,6 +575,9 @@ model Student {
   @@index([branchId])
   @@index([teacherId])
   @@index([studentId])
+  @@index([parentId])
+  @@index([instituteId, isActive])
+  @@index([branchId, isActive])
 }
 
 // ─────────────────────────────────────────────
@@ -676,6 +679,8 @@ model ClassEnrollment {
 
   @@unique([studentId, classId])
   @@index([classId])
+  @@index([studentId])
+  @@index([studentId, isActive])
 }
 
 // ─────────────────────────────────────────────
@@ -709,6 +714,7 @@ model HifzRecord {
   @@index([studentId])
   @@index([date])
   @@index([type])
+  @@index([studentId, date])
 }
 
 model HifzParaCompletion {
@@ -823,6 +829,7 @@ model Attendance {
   @@index([studentId])
   @@index([date])
   @@index([classId])
+  @@index([studentId, date])
 }
 
 // ─────────────────────────────────────────────
@@ -854,6 +861,7 @@ model Assessment {
 
   @@index([instituteId])
   @@index([classId])
+  @@index([instituteId, startDate])
 }
 
 model AssessmentResult {
@@ -925,6 +933,7 @@ model FeePayment {
   @@index([studentId])
   @@index([status])
   @@index([dueDate])
+  @@index([studentId, month])
 }
 
 model Scholarship {
@@ -1036,6 +1045,8 @@ model Message {
 
   @@index([senderId])
   @@index([receiverId])
+  @@index([senderId, createdAt])
+  @@index([receiverId, createdAt])
 }
 
 model Notification {
@@ -1054,6 +1065,7 @@ model Notification {
 
   @@index([userId])
   @@index([isRead])
+  @@index([userId, createdAt])
 }
 
 // ─────────────────────────────────────────────
@@ -1216,6 +1228,7 @@ model CharacterTask {
   assignments   CharacterTaskAssignment[]
 
   @@index([instituteId])
+  @@index([instituteId, isActive])
 }
 
 model CharacterTaskClassProgress {

@@ -24,13 +24,14 @@ export async function getBranchDashboardStats(branchId: string) {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const [students, teachers, classes, attendanceRows, overdueFees] = await Promise.all([
+  const [students, teachers, classes, attendanceByStatus, overdueFees] = await Promise.all([
     prisma.student.count({ where: { branchId, isActive: true } }),
     prisma.teacher.count({ where: { branchId, isActive: true } }),
     prisma.class.count({ where: { branchId, isActive: true } }),
-    prisma.attendance.findMany({
-      where: { student: { branchId }, date: { gte: thirtyDaysAgo } },
-      select: { status: true },
+    prisma.attendance.groupBy({
+      by: ["status"],
+      where: { student: { branchId }, date: { gte: thirtyDaysAgo }, status: { not: "HOLIDAY" } },
+      _count: true,
     }),
     prisma.feePayment.count({
       where: {
@@ -41,8 +42,12 @@ export async function getBranchDashboardStats(branchId: string) {
     }),
   ]);
 
-  const attTotal = attendanceRows.filter((r) => r.status !== "HOLIDAY").length;
-  const attPresent = attendanceRows.filter((r) => ["PRESENT", "LATE"].includes(r.status)).length;
+  let attTotal = 0;
+  let attPresent = 0;
+  for (const row of attendanceByStatus) {
+    attTotal += row._count;
+    if (row.status === "PRESENT" || row.status === "LATE") attPresent += row._count;
+  }
   const attendanceRate = attTotal ? Math.round((attPresent / attTotal) * 100) : 0;
 
   const recentStudents = await prisma.student.findMany({

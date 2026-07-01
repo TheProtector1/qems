@@ -82,36 +82,48 @@ export async function syncHolidayAttendanceForDate(
     select: { id: true },
   });
 
-  let synced = 0;
-  for (const student of students) {
-    const existing = await tx.attendance.findFirst({
-      where: { studentId: student.id, date, classId: null },
-    });
+  if (students.length === 0) return { synced: 0, holiday };
 
-    if (existing) {
-      if (existing.status !== "HOLIDAY") {
-        await tx.attendance.update({
-          where: { id: existing.id },
-          data: {
-            status: "HOLIDAY",
-            leaveReason: null,
-            leaveRequestedBy: null,
-          },
-        });
-        synced++;
-      }
+  const studentIds = students.map((s) => s.id);
+  const existing = await tx.attendance.findMany({
+    where: { studentId: { in: studentIds }, date, classId: null },
+    select: { id: true, studentId: true, status: true },
+  });
+
+  const existingByStudent = new Map(existing.map((row) => [row.studentId, row]));
+  const toCreate: Array<{ studentId: string; date: Date; status: "HOLIDAY"; classId: null }> = [];
+  const toUpdateIds: string[] = [];
+
+  for (const student of students) {
+    const row = existingByStudent.get(student.id);
+    if (row) {
+      if (row.status !== "HOLIDAY") toUpdateIds.push(row.id);
     } else {
-      await tx.attendance.create({
-        data: {
-          studentId: student.id,
-          date,
-          status: "HOLIDAY",
-          classId: null,
-        },
+      toCreate.push({
+        studentId: student.id,
+        date,
+        status: "HOLIDAY",
+        classId: null,
       });
-      synced++;
     }
   }
+
+  if (toUpdateIds.length) {
+    await tx.attendance.updateMany({
+      where: { id: { in: toUpdateIds } },
+      data: {
+        status: "HOLIDAY",
+        leaveReason: null,
+        leaveRequestedBy: null,
+      },
+    });
+  }
+
+  if (toCreate.length) {
+    await tx.attendance.createMany({ data: toCreate });
+  }
+
+  const synced = toUpdateIds.length + toCreate.length;
 
   return { synced, holiday };
 }

@@ -69,7 +69,7 @@ export function FinanceContent() {
   const loadFees = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/institute/fees?summary=true");
+      const res = await fetch("/api/institute/fees?summary=true&limit=200");
       if (!res.ok) throw new Error("Failed to load fees");
       const data = await res.json();
       setFees(data.fees || []);

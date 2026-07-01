@@ -47,34 +47,38 @@ export async function GET() {
 
     const students = await prisma.student.findMany({
       where: whereClause,
-      include: {
+      select: {
+        id: true,
+        studentId: true,
+        fullName: true,
+        gender: true,
+        dateOfBirth: true,
+        city: true,
+        address: true,
+        programType: true,
+        teacherId: true,
+        currentJuz: true,
+        currentPara: true,
+        hifzDirection: true,
+        progressStartType: true,
+        previousInstitute: true,
+        isActive: true,
+        admissionDate: true,
         parent: {
-          include: {
-            user: {
-              select: {
-                name: true,
-                email: true,
-              },
-            },
+          select: {
+            user: { select: { name: true, email: true } },
           },
         },
         teacher: {
-          include: {
-            user: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        },
-        user: {
           select: {
-            isActive: true,
+            user: { select: { name: true } },
           },
         },
+        user: { select: { isActive: true } },
         enrollments: {
           where: { isActive: true },
-          include: {
+          select: {
+            classId: true,
             class: { select: { id: true, name: true, programType: true } },
           },
         },
@@ -85,34 +89,43 @@ export async function GET() {
     const since = new Date();
     since.setDate(since.getDate() - 30);
 
-    const attendanceRows = await prisma.attendance.findMany({
-      where: {
-        ...(isSuperAdmin && !instituteId ? {} : { student: { instituteId: instituteId! } }),
-        date: { gte: since },
-      },
-      select: { studentId: true, status: true },
-    });
+    const studentIds = students.map((s) => s.id);
+    const attendanceGrouped =
+      studentIds.length === 0
+        ? []
+        : await prisma.attendance.groupBy({
+            by: ["studentId", "status"],
+            where: {
+              studentId: { in: studentIds },
+              date: { gte: since },
+              status: { not: "HOLIDAY" },
+            },
+            _count: true,
+          });
 
     const attendancePct: Record<string, number> = {};
-    const attendanceGrouped: Record<string, { present: number; total: number }> = {};
-    for (const row of attendanceRows) {
-      if (!attendanceGrouped[row.studentId]) {
-        attendanceGrouped[row.studentId] = { present: 0, total: 0 };
+    const statsByStudent: Record<string, { present: number; total: number }> = {};
+    for (const row of attendanceGrouped) {
+      if (!statsByStudent[row.studentId]) {
+        statsByStudent[row.studentId] = { present: 0, total: 0 };
       }
-      attendanceGrouped[row.studentId].total += 1;
+      statsByStudent[row.studentId].total += row._count;
       if (row.status === "PRESENT" || row.status === "LATE") {
-        attendanceGrouped[row.studentId].present += 1;
+        statsByStudent[row.studentId].present += row._count;
       }
     }
-    for (const [sid, stats] of Object.entries(attendanceGrouped)) {
+    for (const [sid, stats] of Object.entries(statsByStudent)) {
       attendancePct[sid] = stats.total ? Math.round((stats.present / stats.total) * 100) : 0;
     }
 
-    const hifzRatings = await prisma.hifzRecord.groupBy({
-      by: ["studentId"],
-      where: isSuperAdmin && !instituteId ? {} : { student: { instituteId: instituteId! } },
-      _avg: { rating: true },
-    });
+    const hifzRatings =
+      studentIds.length === 0
+        ? []
+        : await prisma.hifzRecord.groupBy({
+            by: ["studentId"],
+            where: { studentId: { in: studentIds } },
+            _avg: { rating: true },
+          });
     const qualityScore: Record<string, number> = {};
     for (const row of hifzRatings) {
       if (row._avg.rating) qualityScore[row.studentId] = Number((row._avg.rating * 2).toFixed(1));
@@ -120,6 +133,7 @@ export async function GET() {
 
     const enriched = students.map((s) => ({
       ...s,
+      photo: null as string | null,
       attendancePct: attendancePct[s.id] ?? null,
       qualityScore: qualityScore[s.id] ?? null,
     }));

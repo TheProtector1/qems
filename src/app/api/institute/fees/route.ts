@@ -29,19 +29,31 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const includeSummary = searchParams.get("summary") === "true";
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") || "100", 10)));
+    const skip = (page - 1) * limit;
 
-    const payments = await prisma.feePayment.findMany({
-      where: {
-        student: { instituteId },
-        ...(status && status !== "ALL" ? { status: status as "PAID" | "PENDING" | "OVERDUE" | "WAIVED" | "PARTIAL" } : {}),
-      },
-      include: {
-        student: {
-          select: { id: true, fullName: true, studentId: true, programType: true },
+    const where = {
+      student: { instituteId },
+      ...(status && status !== "ALL"
+        ? { status: status as "PAID" | "PENDING" | "OVERDUE" | "WAIVED" | "PARTIAL" }
+        : {}),
+    };
+
+    const [payments, total] = await Promise.all([
+      prisma.feePayment.findMany({
+        where,
+        include: {
+          student: {
+            select: { id: true, fullName: true, studentId: true, programType: true },
+          },
         },
-      },
-      orderBy: [{ dueDate: "desc" }, { createdAt: "desc" }],
-    });
+        orderBy: [{ dueDate: "desc" }, { createdAt: "desc" }],
+        skip,
+        take: limit,
+      }),
+      prisma.feePayment.count({ where }),
+    ]);
 
     const fees = payments.map((p) => ({
       id: p.id,
@@ -100,8 +112,10 @@ export async function GET(req: Request) {
           outstanding: data.outstanding,
         }));
 
-      const totalFees = fees.length;
-      const paidCount = fees.filter((f) => f.status === "PAID").length;
+      const totalFees = total;
+      const paidCount = await prisma.feePayment.count({
+        where: { ...where, status: "PAID" },
+      });
 
       summary = {
         totalCollected: Number(paid._sum.netAmount || 0),
@@ -112,7 +126,11 @@ export async function GET(req: Request) {
       };
     }
 
-    return NextResponse.json({ fees, summary });
+    return NextResponse.json({
+      fees,
+      summary,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
     console.error("Get fees error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -170,12 +188,27 @@ export async function POST(req: Request) {
     const { NotificationType } = await import("@prisma/client");
     const { resolveBaseFeeAmount, computeNetFee } = await import("@/lib/fee-billing");
 
-    let created = 0;
+    const studentIds = students.map((s) => s.id);
+    const existing = await prisma.feePayment.findMany({
+      where: { studentId: { in: studentIds }, month },
+      select: { studentId: true },
+    });
+    const billedStudentIds = new Set(existing.map((e) => e.studentId));
+
+    const toCreate: Array<{
+      studentId: string;
+      month: string;
+      dueDate: Date;
+      amount: number;
+      discount: number;
+      netAmount: number;
+      status: "PENDING" | "WAIVED";
+      invoiceNo: string;
+    }> = [];
+    const notifyTargets: Array<{ studentId: string; netAmount: number }> = [];
+
     for (const student of students) {
-      const exists = await prisma.feePayment.findFirst({
-        where: { studentId: student.id, month },
-      });
-      if (exists) continue;
+      if (billedStudentIds.has(student.id)) continue;
 
       const baseAmount = resolveBaseFeeAmount(student.programType, feeStructures, amount);
       const { amount: gross, discount, netAmount, waived } = computeNetFee(
@@ -183,29 +216,42 @@ export async function POST(req: Request) {
         student.scholarships
       );
 
-      await prisma.feePayment.create({
-        data: {
-          studentId: student.id,
-          month,
-          dueDate,
-          amount: gross,
-          discount,
-          netAmount,
-          status: waived ? "WAIVED" : "PENDING",
-          invoiceNo: generateInvoiceNo(),
-        },
+      toCreate.push({
+        studentId: student.id,
+        month,
+        dueDate,
+        amount: gross,
+        discount,
+        netAmount,
+        status: waived ? "WAIVED" : "PENDING",
+        invoiceNo: generateInvoiceNo(),
       });
 
       if (!waived) {
-        await notifyParentOfStudent(student.id, {
-          type: NotificationType.FEE_DUE,
-          title: "Fee invoice generated",
-          message: `Tuition fee for ${formatMonthLabel(month)} is due on ${dueDate.toLocaleDateString("en-PK")}. Amount: PKR ${netAmount.toLocaleString()}.`,
-          data: { studentId: student.id, month },
-        });
+        notifyTargets.push({ studentId: student.id, netAmount });
       }
-      created += 1;
     }
+
+    if (toCreate.length) {
+      await prisma.feePayment.createMany({ data: toCreate });
+    }
+
+    if (notifyTargets.length) {
+      const dueLabel = dueDate.toLocaleDateString("en-PK");
+      const monthLabel = formatMonthLabel(month);
+      void Promise.all(
+        notifyTargets.map(({ studentId, netAmount }) =>
+          notifyParentOfStudent(studentId, {
+            type: NotificationType.FEE_DUE,
+            title: "Fee invoice generated",
+            message: `Tuition fee for ${monthLabel} is due on ${dueLabel}. Amount: PKR ${netAmount.toLocaleString()}.`,
+            data: { studentId, month },
+          })
+        )
+      );
+    }
+
+    const created = toCreate.length;
 
     return NextResponse.json({ success: true, created, month });
   } catch (error) {

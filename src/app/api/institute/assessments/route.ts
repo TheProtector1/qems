@@ -37,6 +37,7 @@ export async function GET(req: Request) {
           assessment: { select: { id: true, title: true, type: true, startDate: true } },
         },
         orderBy: { createdAt: "desc" },
+        take: 50,
       }),
       prisma.student.findMany({
         where: { instituteId, isActive: true },

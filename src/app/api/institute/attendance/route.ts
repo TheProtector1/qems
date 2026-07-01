@@ -4,12 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { AttendanceStatus, NotificationType } from "@prisma/client";
 import { notifyParentOfStudent } from "@/lib/notifications";
 import {
-  fetchActiveHolidays,
   getHolidayForDate,
   getWeeklyOffDays,
   parseDateOnly,
   syncHolidayAttendanceForDate,
 } from "@/lib/institute-holidays";
+import { getCachedInstituteHolidays } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     const program = searchParams.get("program");
     const historyDays = Math.min(parseInt(searchParams.get("days") || "14", 10), 60);
 
-    const holidays = await fetchActiveHolidays(instituteId);
+    const holidays = await getCachedInstituteHolidays(instituteId);
     const weeklyOffDays = getWeeklyOffDays(holidays);
 
     const programFilter =
@@ -47,7 +47,6 @@ export async function GET(req: Request) {
         id: true,
         fullName: true,
         studentId: true,
-        photo: true,
         gender: true,
         programType: true,
       },
@@ -120,6 +119,7 @@ export async function GET(req: Request) {
         student: { instituteId },
         date: { gte: startHistory, lte: endHistory },
       },
+      select: { studentId: true, date: true, status: true },
     });
 
     const historyMap: Record<string, Record<string, AttendanceStatus>> = {};
@@ -215,7 +215,7 @@ export async function POST(req: Request) {
     }
 
     const targetDate = parseDateOnly(date);
-    const holidays = await fetchActiveHolidays(instituteId);
+    const holidays = await getCachedInstituteHolidays(instituteId);
     const holidayInfo = getHolidayForDate(holidays, targetDate);
 
     if (holidayInfo) {
@@ -232,62 +232,81 @@ export async function POST(req: Request) {
       where: { userId: session.user.id, instituteId },
     });
 
-    for (const rec of records) {
-      if (!rec.studentId || !rec.status) continue;
+    const validRecords = records.filter((r) => r.studentId && r.status);
+    if (validRecords.length === 0) {
+      return NextResponse.json({ success: true });
+    }
 
-      const student = await prisma.student.findFirst({
-        where: { id: rec.studentId, instituteId },
-      });
-      if (!student) continue;
-
-      const existing = await prisma.attendance.findFirst({
+    const recordStudentIds = [...new Set(validRecords.map((r) => r.studentId))];
+    const [students, existingRows] = await Promise.all([
+      prisma.student.findMany({
+        where: { id: { in: recordStudentIds }, instituteId },
+        select: { id: true, fullName: true },
+      }),
+      prisma.attendance.findMany({
         where: {
-          studentId: rec.studentId,
+          studentId: { in: recordStudentIds },
           date: targetDate,
           classId: null,
         },
-      });
+      }),
+    ]);
 
-      if (existing) {
-        const prevStatus = existing.status;
-        await prisma.attendance.update({
-          where: { id: existing.id },
-          data: {
-            status: rec.status,
-            markedById: teacher?.id ?? existing.markedById,
-            leaveReason: rec.status === "LEAVE" ? rec.leaveReason : null,
-            leaveRequestedBy: rec.status === "LEAVE" ? rec.leaveRequestedBy : null,
-          },
-        });
-        if (rec.status === "ABSENT" && prevStatus !== "ABSENT") {
-          await notifyParentOfStudent(rec.studentId, {
-            type: NotificationType.ABSENCE,
-            title: "Absence recorded",
-            message: `${student.fullName} was marked absent on ${targetDate.toLocaleDateString("en-PK")}.`,
-            data: { studentId: rec.studentId, date },
+    const studentMap = new Map(students.map((s) => [s.id, s]));
+    const existingMap = new Map(existingRows.map((r) => [r.studentId, r]));
+    const absentNotifications: Array<{ studentId: string; fullName: string }> = [];
+
+    await prisma.$transaction(async (tx) => {
+      for (const rec of validRecords) {
+        const student = studentMap.get(rec.studentId);
+        if (!student) continue;
+
+        const existing = existingMap.get(rec.studentId);
+        if (existing) {
+          const prevStatus = existing.status;
+          await tx.attendance.update({
+            where: { id: existing.id },
+            data: {
+              status: rec.status,
+              markedById: teacher?.id ?? existing.markedById,
+              leaveReason: rec.status === "LEAVE" ? rec.leaveReason : null,
+              leaveRequestedBy: rec.status === "LEAVE" ? rec.leaveRequestedBy : null,
+            },
           });
-        }
-      } else {
-        await prisma.attendance.create({
-          data: {
-            studentId: rec.studentId,
-            date: targetDate,
-            status: rec.status,
-            classId: null,
-            markedById: teacher?.id ?? null,
-            leaveReason: rec.status === "LEAVE" ? rec.leaveReason : null,
-            leaveRequestedBy: rec.status === "LEAVE" ? rec.leaveRequestedBy : null,
-          },
-        });
-        if (rec.status === "ABSENT") {
-          await notifyParentOfStudent(rec.studentId, {
-            type: NotificationType.ABSENCE,
-            title: "Absence recorded",
-            message: `${student.fullName} was marked absent on ${targetDate.toLocaleDateString("en-PK")}.`,
-            data: { studentId: rec.studentId, date },
+          if (rec.status === "ABSENT" && prevStatus !== "ABSENT") {
+            absentNotifications.push({ studentId: rec.studentId, fullName: student.fullName });
+          }
+        } else {
+          await tx.attendance.create({
+            data: {
+              studentId: rec.studentId,
+              date: targetDate,
+              status: rec.status,
+              classId: null,
+              markedById: teacher?.id ?? null,
+              leaveReason: rec.status === "LEAVE" ? rec.leaveReason : null,
+              leaveRequestedBy: rec.status === "LEAVE" ? rec.leaveRequestedBy : null,
+            },
           });
+          if (rec.status === "ABSENT") {
+            absentNotifications.push({ studentId: rec.studentId, fullName: student.fullName });
+          }
         }
       }
+    });
+
+    if (absentNotifications.length) {
+      const dateLabel = targetDate.toLocaleDateString("en-PK");
+      void Promise.all(
+        absentNotifications.map(({ studentId, fullName }) =>
+          notifyParentOfStudent(studentId, {
+            type: NotificationType.ABSENCE,
+            title: "Absence recorded",
+            message: `${fullName} was marked absent on ${dateLabel}.`,
+            data: { studentId, date },
+          })
+        )
+      );
     }
 
     return NextResponse.json({ success: true });

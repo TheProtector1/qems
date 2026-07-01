@@ -537,8 +537,11 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
     setLoading(true);
     setError(null);
     try {
-      // 1. Fetch Students
-      const resSt = await fetch("/api/institute/students");
+      const [resSt, resCls, resTe] = await Promise.all([
+        fetch("/api/institute/students"),
+        fetch("/api/institute/classes"),
+        fetch("/api/institute/teachers"),
+      ]);
       if (!resSt.ok) throw new Error("Failed to load students database.");
       const dataSt = await resSt.json();
 
@@ -587,7 +590,6 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
 
       setStudents(mapped);
 
-      const resCls = await fetch("/api/institute/classes");
       if (resCls.ok) {
         const dataCls = await resCls.json();
         const clsList: InstituteClassOption[] = dataCls.classes || [];
@@ -596,8 +598,6 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
         setClassOptions(["All Classes", ...names]);
       }
 
-      // 2. Fetch Teachers for dropdown select
-      const resTe = await fetch("/api/institute/teachers");
       if (resTe.ok) {
         const dataTe = await resTe.json();
         setTeachers(

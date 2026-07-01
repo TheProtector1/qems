@@ -20,42 +20,30 @@ const PROGRAM_COLORS: Record<string, string> = {
   TARBIYAH: "#7C3AED",
 };
 
-type AnalyticsData = {
-  kpis: {
-    totalStudents: number;
-    activeTeachers: number;
-    attendanceRate: number;
-    qualityScore: number | null;
-    totalCollected: number;
-    totalOutstanding: number;
-    collectionRate: number;
-    hifzCompletions: number;
-  };
-  attendanceTrend: { week: string; rate: number }[];
-  attendanceAvg: number;
-  programDistribution: { name: string; value: number; color?: string }[];
-  hifzProgressData: { month: string; sabaq: number; sabqi: number; manzil: number }[];
-  recentStudents: { id: string; name: string; studentId: string; program: string; admissionDate: string }[];
-  alerts: { type: string; message: string; severity: string }[];
-};
+import type { InstituteAnalytics } from "@/lib/institute-analytics";
+
+type AnalyticsData = InstituteAnalytics;
 
 export function InstituteDashboardContent({
   initialTotalStudents,
-  initialActiveTeachers
+  initialActiveTeachers,
+  initialAnalytics = null,
 }: {
-  initialTotalStudents: number,
-  initialActiveTeachers: number
+  initialTotalStudents: number;
+  initialActiveTeachers: number;
+  initialAnalytics?: AnalyticsData | null;
 }) {
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [loadingAnalytics, setLoadingAnalytics] = useState(true);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(initialAnalytics);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(!initialAnalytics);
 
   useEffect(() => {
+    if (initialAnalytics) return;
     fetch("/api/institute/analytics")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setAnalytics(data))
       .catch(() => setAnalytics(null))
       .finally(() => setLoadingAnalytics(false));
-  }, []);
+  }, [initialAnalytics]);
 
   const kpi = analytics?.kpis;
   const totalStudents = kpi?.totalStudents ?? initialTotalStudents;

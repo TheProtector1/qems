@@ -231,15 +231,8 @@ export function Sidebar({ collapsed, onCollapse, mobileOpen = false, onMobileClo
   const handleNavigate = () => onMobileClose?.();
 
   useEffect(() => {
-    if (session?.user?.image) {
-      setProfileImage(session.user.image);
-    } else if (session?.user) {
-      fetch("/api/profile")
-        .then((res) => res.json())
-        .then((data) => { if (data.image) setProfileImage(data.image); })
-        .catch(console.error);
-    }
-  }, [session]);
+    setProfileImage(session?.user?.image ?? null);
+  }, [session?.user?.image]);
 
   let currentNav = instituteNav;
   if (role === "SUPER_ADMIN") {
