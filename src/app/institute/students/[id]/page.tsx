@@ -3,9 +3,23 @@ import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import {
-  ArrowLeft, BookOpen, CalendarCheck, Star, TrendingUp,
-  Phone, Mail, MapPin, User, Heart, GraduationCap,
-  Clock, Award, CheckCircle, Stethoscope,
+  ArrowLeft,
+  BookOpen,
+  CalendarCheck,
+  Star,
+  TrendingUp,
+  Phone,
+  Mail,
+  MapPin,
+  User,
+  Heart,
+  GraduationCap,
+  Clock,
+  Award,
+  CheckCircle,
+  Stethoscope,
+  FileText,
+  Calendar,
 } from "lucide-react";
 import Link from "next/link";
 import { cn, formatDate, getSurahName } from "@/lib/utils";
@@ -16,6 +30,7 @@ import { StudentAttendanceCalendar } from "@/components/institute/student-attend
 import { StudentReportsPanel } from "@/components/institute/student-reports-panel";
 import { StudentDocumentsManager } from "@/components/institute/student-documents-manager";
 import { progressSummaryLabel } from "@/lib/student-progress";
+import type { ElementType } from "react";
 import { HifzJuzGrid } from "@/components/common/hifz-juz-grid";
 import { HifzDirection } from "@prisma/client";
 import { getHifzCompletionPercent, hifzDirectionLabel } from "@/lib/hifz-progress";
@@ -24,10 +39,10 @@ export const metadata = { title: "Student Profile — QEMS" };
 
 const gradeStyles: Record<string, string> = {
   "A+": "pill-success",
-  "A": "pill-success",
+  A: "pill-success",
   "B+": "pill-info",
-  "B": "pill-info",
-  "C": "pill-warning",
+  B: "pill-info",
+  C: "pill-warning",
 };
 
 const typeBadge: Record<string, string> = {
@@ -48,6 +63,28 @@ function ratingToGrade(rating: number) {
   if (rating >= 3) return "B+";
   if (rating >= 2) return "B";
   return "C";
+}
+
+function SectionHeading({
+  icon: Icon,
+  title,
+  action,
+}: {
+  icon: ElementType;
+  title: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="flex items-center gap-2.5">
+        <div className="h-9 w-9 rounded-xl bg-gray-100 flex items-center justify-center">
+          <Icon className="h-4 w-4 text-gray-600" />
+        </div>
+        <h3 className="font-display font-bold text-gray-900">{title}</h3>
+      </div>
+      {action}
+    </div>
+  );
 }
 
 export default async function StudentProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -81,7 +118,9 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
     select: { status: true },
   });
   const attendanceTotal = attendanceRows.length;
-  const attendancePresent = attendanceRows.filter((r) => r.status === "PRESENT" || r.status === "LATE").length;
+  const attendancePresent = attendanceRows.filter(
+    (r) => r.status === "PRESENT" || r.status === "LATE"
+  ).length;
   const attendancePct = attendanceTotal ? Math.round((attendancePresent / attendanceTotal) * 100) : null;
 
   const hifzAvg = await prisma.hifzRecord.aggregate({
@@ -97,13 +136,12 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
     : "Unassigned";
   const parentName = student.parent?.user?.name || "Parent";
   const parentEmail = student.parent?.user?.email || null;
-  const status = student.user?.isActive ? "On Track" : "Needs Attention";
+  const parentPhone = student.parent?.user?.phone || student.emergencyPhone || null;
+  const isActive = student.user?.isActive ?? true;
   const hifzDir = student.hifzDirection ?? HifzDirection.REVERSE;
   const currentPara = student.currentPara ?? student.currentJuz;
   const completionPct =
-    student.programType === "HIFZ" && currentPara
-      ? getHifzCompletionPercent(hifzDir, currentPara)
-      : 0;
+    student.programType === "HIFZ" && currentPara ? getHifzCompletionPercent(hifzDir, currentPara) : 0;
   const showAudit = session.user.role === "INSTITUTE_OWNER" || session.user.role === "SUPER_ADMIN";
 
   const recentProgress = student.hifzRecords.map((r) => ({
@@ -115,240 +153,339 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
     notes: r.teacherNote || "—",
   }));
 
-  const backHref = session.user.role === "TEACHER"
-    ? "/teacher/students"
-    : session.user.role === "SUPER_ADMIN"
-    ? "/admin/students"
-    : "/institute/students";
+  const backHref =
+    session.user.role === "TEACHER"
+      ? "/teacher/students"
+      : session.user.role === "SUPER_ADMIN"
+        ? "/admin/students"
+        : "/institute/students";
+
+  const stats = [
+    {
+      label: "Current Para",
+      value: currentPara ? `${currentPara}/30` : "—",
+      sub: student.programType === "HIFZ" ? hifzDirectionLabel(hifzDir) : program,
+      icon: BookOpen,
+      tone: "bg-slate-50 text-slate-600",
+    },
+    {
+      label: "Quality Score",
+      value: qualityScore != null ? String(qualityScore) : "—",
+      sub: qualityScore != null ? "Out of 10" : "No records yet",
+      icon: Star,
+      tone: "bg-amber-50 text-amber-600",
+    },
+    {
+      label: "Attendance",
+      value: attendancePct != null ? `${attendancePct}%` : "—",
+      sub: attendanceTotal ? "Last 30 days" : "No records yet",
+      icon: CalendarCheck,
+      tone: "bg-blue-50 text-blue-600",
+    },
+    {
+      label: "Completion",
+      value: currentPara ? `${completionPct}%` : "—",
+      sub: student.programType === "HIFZ" ? "Hifz progress" : "Program progress",
+      icon: TrendingUp,
+      tone: "bg-violet-50 text-violet-600",
+    },
+  ];
 
   return (
     <DashboardShell
       title="Student Profile"
       breadcrumbs={[{ label: "Students", href: backHref }, { label: student.fullName }]}
     >
-      <div className="max-w-5xl mx-auto space-y-6">
-        <Link href={backHref} className="btn-ghost text-sm py-2 inline-flex w-auto">
-          <ArrowLeft className="h-4 w-4" /> Back to Students
+      <div className="max-w-5xl mx-auto space-y-6 pb-8">
+        <Link
+          href={backHref}
+          className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to students
         </Link>
 
-        <div className="dash-card bg-white overflow-hidden">
-          <div className="h-24 bg-gradient-to-r from-primary-700 via-primary-600 to-primary-500 relative">
-            <div className="absolute inset-0 opacity-10"
-              style={{ backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(255,255,255,0.1) 20px, rgba(255,255,255,0.1) 40px)" }}
-            />
-          </div>
-          <div className="px-6 pb-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 -mt-10 mb-5">
+        {/* Profile header */}
+        <div className="dash-card bg-white border border-gray-200/80 shadow-sm overflow-hidden">
+          <div className="p-6 sm:p-8">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
               <StudentAvatar
                 name={student.fullName}
                 gender={student.gender}
                 photo={student.photo}
-                size="lg"
-                className="ring-4 ring-white"
+                size="xl"
+                className="ring-4 ring-gray-100 mx-auto lg:mx-0"
               />
-              <div className="flex-1 pb-1">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <h2 className="font-display text-2xl font-bold text-gray-900">{student.fullName}</h2>
-                  <span className={cn("pill", status === "On Track" ? "pill-info" : "pill-warning")}>
-                    {status}
-                  </span>
-                </div>
-                <p className="text-sm font-mono text-primary-700 mt-0.5">{student.studentId}</p>
-              </div>
-              <StudentProfileActions
-                studentId={student.id}
-                parentEmail={parentEmail}
-                backHref={backHref}
-              />
-            </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              {[
-                { label: "Program", value: program, icon: BookOpen },
-                { label: "Progress", value: progressSummaryLabel(student.programType, student), icon: BookOpen },
-                { label: "Class(es)", value: classLabel, icon: GraduationCap },
-                { label: "Teacher", value: teacherName, icon: User },
-                { label: "Date of Birth", value: formatDate(student.dateOfBirth), icon: Clock },
-                { label: "Blood Group", value: student.bloodGroup || "—", icon: Heart },
-                { label: "City", value: student.city || "—", icon: MapPin },
-                { label: "Admitted", value: formatDate(student.admissionDate), icon: CalendarCheck },
-              ].map((f) => {
-                const Icon = f.icon;
-                return (
-                  <div key={f.label} className="flex items-start gap-2.5 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                    <Icon className="h-4 w-4 text-primary-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">{f.label}</p>
-                      <p className="font-semibold text-gray-900 mt-0.5 text-xs">{f.value}</p>
+              <div className="flex-1 min-w-0 text-center lg:text-left">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h1 className="font-display text-2xl sm:text-3xl font-bold text-gray-900">
+                      {student.fullName}
+                    </h1>
+                    <p className="text-sm font-mono text-gray-500 mt-1">{student.studentId}</p>
+                    <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 mt-3">
+                      <span className="pill pill-info text-xs">{program}</span>
+                      <span className="pill bg-gray-100 text-gray-700 text-xs">{classLabel}</span>
+                      <span
+                        className={cn(
+                          "pill text-xs",
+                          isActive ? "pill-success" : "pill-warning"
+                        )}
+                      >
+                        {isActive ? "Active" : "Inactive"}
+                      </span>
                     </div>
                   </div>
-                );
-              })}
+
+                  <div className="flex justify-center lg:justify-end">
+                    <StudentProfileActions
+                      studentId={student.id}
+                      parentEmail={parentEmail}
+                      backHref={backHref}
+                    />
+                  </div>
+                </div>
+
+                <dl className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 text-left">
+                  {[
+                    { label: "Teacher", value: teacherName },
+                    { label: "Admitted", value: formatDate(student.admissionDate) },
+                    { label: "Date of birth", value: formatDate(student.dateOfBirth) },
+                    { label: "Progress", value: progressSummaryLabel(student.programType, student) },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className="rounded-xl border border-gray-100 bg-gray-50/80 px-3 py-2.5"
+                    >
+                      <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                        {item.label}
+                      </dt>
+                      <dd className="mt-0.5 text-sm font-semibold text-gray-900 truncate">{item.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: "Current Para", value: currentPara ? `${currentPara}/30` : "N/A", icon: BookOpen, color: "text-green-600 bg-green-50", sub: student.programType === "HIFZ" ? hifzDirectionLabel(hifzDir) : "Nazra/Tajweed" },
-            { label: "Quality Score", value: qualityScore != null ? String(qualityScore) : "—", icon: Star, color: "text-amber-600 bg-amber-50", sub: qualityScore != null ? "Out of 10.0" : "No hifz records" },
-            { label: "Attendance", value: attendancePct != null ? `${attendancePct}%` : "—", icon: CalendarCheck, color: "text-green-600 bg-green-50", sub: attendanceTotal ? "Last 30 days" : "No records yet" },
-            { label: "Completion", value: currentPara ? `${completionPct}%` : "—", icon: TrendingUp, color: "text-violet-600 bg-violet-50", sub: "Hifz progress" },
-          ].map((stat) => {
+        {/* Quick stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {stats.map((stat) => {
             const Icon = stat.icon;
             return (
-              <div key={stat.label} className="kpi-card p-5 flex items-center gap-4">
-                <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center flex-shrink-0", stat.color)}>
-                  <Icon className="h-6 w-6" />
+              <div
+                key={stat.label}
+                className="dash-card bg-white p-4 sm:p-5 flex items-center gap-3 sm:gap-4"
+              >
+                <div
+                  className={cn(
+                    "h-11 w-11 sm:h-12 sm:w-12 rounded-2xl flex items-center justify-center flex-shrink-0",
+                    stat.tone
+                  )}
+                >
+                  <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
-                <div>
-                  <p className="font-display text-2xl font-bold text-gray-900">{stat.value}</p>
-                  <p className="text-xs text-gray-500">{stat.label}</p>
-                  <p className="text-[10px] text-gray-400">{stat.sub}</p>
+                <div className="min-w-0">
+                  <p className="font-display text-xl sm:text-2xl font-bold text-gray-900">{stat.value}</p>
+                  <p className="text-xs text-gray-600 font-medium">{stat.label}</p>
+                  <p className="text-[10px] text-gray-400 truncate">{stat.sub}</p>
                 </div>
               </div>
             );
           })}
         </div>
 
+        {/* Student details */}
+        <div className="dash-card bg-white p-5 sm:p-6">
+          <SectionHeading icon={User} title="Student details" />
+          <dl className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+            {[
+              { label: "Blood group", value: student.bloodGroup || "—", icon: Heart },
+              { label: "City", value: student.city || "—", icon: MapPin },
+              { label: "Country", value: student.country || "PK", icon: MapPin },
+              { label: "Address", value: student.address || "—", icon: MapPin },
+              { label: "Emergency contact", value: student.emergencyContact || "—", icon: Phone },
+              { label: "Emergency phone", value: student.emergencyPhone || "—", icon: Phone },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.label} className="flex items-start gap-2.5">
+                  <Icon className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                      {item.label}
+                    </dt>
+                    <dd className="mt-0.5 font-medium text-gray-900 break-words">{item.value}</dd>
+                  </div>
+                </div>
+              );
+            })}
+          </dl>
+        </div>
+
         {student.programType === "HIFZ" && currentPara && (
-          <div className="dash-card p-6 bg-white">
+          <div className="dash-card p-5 sm:p-6 bg-white">
+            <SectionHeading icon={BookOpen} title="Hifz progress map" />
             <HifzJuzGrid direction={hifzDir} currentJuz={currentPara} />
           </div>
         )}
 
         <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 dash-card overflow-hidden bg-white">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-display font-bold text-gray-900">Recent Lesson Records</h3>
-              <Link href={`/institute/quran/hifz?student=${student.id}`} className="text-xs text-primary-700 font-semibold hover:underline">
-                View all →
-              </Link>
+          <div className="lg:col-span-2 dash-card bg-white overflow-hidden">
+            <div className="px-5 sm:px-6 py-5 border-b border-gray-100">
+              <SectionHeading
+                icon={GraduationCap}
+                title="Recent lesson records"
+                action={
+                  <Link
+                    href={`/institute/quran/hifz?student=${student.id}`}
+                    className="text-xs text-primary-700 font-semibold hover:underline whitespace-nowrap"
+                  >
+                    View all →
+                  </Link>
+                }
+              />
             </div>
             {recentProgress.length > 0 ? (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Surah</th>
-                    <th>Ayahs</th>
-                    <th>Grade</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentProgress.map((r, i) => (
-                    <tr key={i}>
-                      <td className="text-sm font-medium text-gray-900">{r.date}</td>
-                      <td>
-                        <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", typeBadge[r.type] || "bg-gray-100 text-gray-600")}>
-                          {r.type}
-                        </span>
-                      </td>
-                      <td className="text-sm text-gray-700">{r.surah}</td>
-                      <td className="font-mono text-xs text-gray-500">{r.ayahs}</td>
-                      <td>
-                        <span className={cn("pill text-[10px]", gradeStyles[r.grade] || "pill-warning")}>{r.grade}</span>
-                      </td>
-                      <td className="text-xs text-gray-500">{r.notes}</td>
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th>Surah</th>
+                      <th>Ayahs</th>
+                      <th>Grade</th>
+                      <th>Notes</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {recentProgress.map((r, i) => (
+                      <tr key={i}>
+                        <td className="text-sm font-medium text-gray-900">{r.date}</td>
+                        <td>
+                          <span
+                            className={cn(
+                              "text-[10px] font-bold px-2 py-0.5 rounded-full",
+                              typeBadge[r.type] || "bg-gray-100 text-gray-600"
+                            )}
+                          >
+                            {r.type}
+                          </span>
+                        </td>
+                        <td className="text-sm text-gray-700">{r.surah}</td>
+                        <td className="font-mono text-xs text-gray-500">{r.ayahs}</td>
+                        <td>
+                          <span className={cn("pill text-[10px]", gradeStyles[r.grade] || "pill-warning")}>
+                            {r.grade}
+                          </span>
+                        </td>
+                        <td className="text-xs text-gray-500 max-w-[180px] truncate">{r.notes}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
-              <div className="p-8 text-center text-sm text-gray-500">No lesson records yet.</div>
+              <div className="px-6 py-10 text-center">
+                <BookOpen className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">No lesson records yet.</p>
+                <Link
+                  href={`/institute/quran/hifz?student=${student.id}`}
+                  className="inline-block mt-3 text-xs font-semibold text-primary-700 hover:underline"
+                >
+                  Add first lesson →
+                </Link>
+              </div>
             )}
           </div>
 
           <div className="space-y-6">
-            <div className="dash-card p-5 bg-white">
-              <h3 className="font-display font-bold text-gray-900 mb-4">Parent / Guardian</h3>
+            <div className="dash-card p-5 sm:p-6 bg-white">
+              <SectionHeading icon={User} title="Parent / guardian" />
               <div className="space-y-3 text-sm">
                 {[
-                  { icon: User, label: student.parent?.relation || "Parent", value: parentName },
-                  { icon: Phone, label: "Contact", value: parentEmail || "—" },
+                  { icon: User, label: "Name", value: `${parentName} (${student.parent?.relation || "Parent"})` },
+                  { icon: Phone, label: "Phone", value: parentPhone || "—" },
                   { icon: Mail, label: "Email", value: parentEmail || "—" },
                   { icon: MapPin, label: "Address", value: student.address || "—" },
                 ].map((f) => {
                   const Icon = f.icon;
                   return (
                     <div key={f.label} className="flex items-start gap-3">
-                      <div className="h-8 w-8 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
-                        <Icon className="h-3.5 w-3.5 text-gray-400" />
+                      <div className="h-8 w-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center flex-shrink-0">
+                        <Icon className="h-3.5 w-3.5 text-gray-500" />
                       </div>
-                      <div>
-                        <p className="text-[10px] text-gray-400">{f.label}</p>
-                        <p className="font-semibold text-gray-900 text-xs">{f.value}</p>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                          {f.label}
+                        </p>
+                        <p className="font-medium text-gray-900 text-xs break-words">{f.value}</p>
                       </div>
                     </div>
                   );
                 })}
               </div>
-              {(student.emergencyContact || student.emergencyPhone) && (
-                <div className="mt-4 pt-3 border-t border-gray-100">
-                  <p className="text-[10px] text-gray-400 mb-1">Emergency Contact</p>
-                  <p className="text-xs font-semibold text-gray-800">{student.emergencyContact || "—"}</p>
-                  <p className="text-xs text-gray-500">{student.emergencyPhone || "—"}</p>
-                </div>
-              )}
             </div>
 
-            <div className="dash-card p-5 bg-white">
-              <div className="flex items-center gap-2 mb-3">
-                <Stethoscope className="h-4 w-4 text-red-500" />
-                <h3 className="font-display font-bold text-gray-900">Medical Notes</h3>
-              </div>
+            <div className="dash-card p-5 sm:p-6 bg-white">
+              <SectionHeading icon={Stethoscope} title="Medical notes" />
               {student.medicalNotes ? (
                 <div className="p-3 rounded-xl bg-red-50 border border-red-100">
                   <p className="text-xs text-red-800 leading-relaxed">{student.medicalNotes}</p>
                 </div>
               ) : (
-                <div className="p-3 rounded-xl bg-green-50 border border-green-100 flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                  <p className="text-xs text-green-700">No medical concerns on record</p>
+                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <p className="text-xs text-gray-600">No medical concerns on record</p>
                 </div>
               )}
             </div>
 
-            <div className="dash-card p-5 bg-white">
-              <div className="flex items-center gap-2 mb-3">
-                <Award className="h-4 w-4 text-primary-600" />
-                <h3 className="font-display font-bold text-gray-900">Prior Education</h3>
-              </div>
-              <p className="text-xs text-gray-700">{student.previousEducation || "Not provided"}</p>
+            <div className="dash-card p-5 sm:p-6 bg-white">
+              <SectionHeading icon={Award} title="Prior education" />
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {student.previousEducation || "Not provided"}
+              </p>
             </div>
           </div>
         </div>
 
         {showAudit && (
-          <StudentAuditPanel
-            studentId={student.id}
-            title="Profile Change History"
-            limit={20}
-          />
+          <div className="dash-card bg-white p-5 sm:p-6">
+            <StudentAuditPanel studentId={student.id} title="Profile change history" limit={20} />
+          </div>
         )}
 
-        <StudentAttendanceCalendar
-          studentId={student.id}
-          compact
-          student={{
-            id: student.id,
-            fullName: student.fullName,
-            studentId: student.studentId,
-            photo: student.photo,
-            gender: student.gender,
-            programType: student.programType,
-          }}
-        />
+        <div className="dash-card bg-white p-5 sm:p-6">
+          <SectionHeading icon={Calendar} title="Attendance calendar" />
+          <StudentAttendanceCalendar
+            studentId={student.id}
+            compact
+            student={{
+              id: student.id,
+              fullName: student.fullName,
+              studentId: student.studentId,
+              photo: student.photo,
+              gender: student.gender,
+              programType: student.programType,
+            }}
+          />
+        </div>
 
-        <StudentReportsPanel
-          studentId={student.id}
-          studentName={student.fullName}
-          program={program}
-        />
+        <div className="dash-card bg-white p-5 sm:p-6">
+          <SectionHeading icon={FileText} title="Reports" />
+          <StudentReportsPanel
+            studentId={student.id}
+            studentName={student.fullName}
+            program={program}
+          />
+        </div>
 
-        <div className="dash-card p-5 sm:p-6 bg-white">
+        <div className="dash-card bg-white p-5 sm:p-6">
+          <SectionHeading icon={FileText} title="Documents" />
           <StudentDocumentsManager
             studentId={student.id}
             readOnly={session.user.role === "TEACHER"}
