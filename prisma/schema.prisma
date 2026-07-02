@@ -255,6 +255,13 @@ model Institute {
   directorName      String?
   directorEmail     String?
   directorPhone     String?
+  tagline           String?
+  vision            String?   @db.Text
+  mission           String?   @db.Text
+  goals             Json?     // [{ title, description }]
+  values            Json?     // [{ title, description }]
+  achievements      Json?     // [{ year, title, description }]
+  foundedYear       Int?
   isActive          Boolean   @default(true)
   isApproved        Boolean   @default(false)
   approvedAt        DateTime?
@@ -283,9 +290,36 @@ model Institute {
   holidays          InstituteHoliday[]
   sponsors          Sponsor[]
   donations         Donation[]
+  managementMembers InstituteManagementMember[]
 
   @@index([slug])
   @@index([isApproved])
+}
+
+model InstituteManagementMember {
+  id             String   @id @default(cuid())
+  fullName       String
+  email          String?
+  phone          String?
+  roleTitle      String
+  department     String?
+  qualifications String?  @db.Text
+  bio            String?  @db.Text
+  photo          String?
+  joinDate       DateTime? @db.Date
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  instituteId    String
+  institute      Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  reportsToId    String?
+  reportsTo      InstituteManagementMember?  @relation("ManagementReporting", fields: [reportsToId], references: [id], onDelete: SetNull)
+  directReports  InstituteManagementMember[] @relation("ManagementReporting")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([instituteId])
+  @@index([reportsToId])
+  @@index([instituteId, isActive])
 }
 
 model InstituteSubscription {
