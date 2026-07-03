@@ -97,8 +97,22 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       donations: donations.map((d) => ({
-        ...d,
+        id: d.id,
         amount: Number(d.amount),
+        currency: d.currency,
+        donationDate: d.donationDate,
+        frequency: d.frequency,
+        category: d.category,
+        status: d.status,
+        paymentMethod: d.paymentMethod,
+        referenceNo: d.referenceNo,
+        purpose: d.purpose,
+        notes: d.notes,
+        periodMonth: d.periodMonth,
+        sponsorId: d.sponsorId,
+        sponsor: d.sponsor,
+        receivedByName: d.receivedByName,
+        hasReceipt: Boolean(d.receiptData),
       })),
       summary,
     });
@@ -127,6 +141,8 @@ export async function POST(req: Request) {
       notes,
       sponsorId,
       periodMonth,
+      receiptData,
+      receivedByName,
     } = body;
 
     if (!amount || !donationDate) {
@@ -152,6 +168,8 @@ export async function POST(req: Request) {
         referenceNo: referenceNo || null,
         purpose: purpose || null,
         notes: notes || null,
+        receiptData: receiptData || null,
+        receivedByName: receivedByName?.trim() || null,
         periodMonth: periodMonth || periodMonthFromDate(donationDate),
         sponsorId: sponsorId || null,
         instituteId,
@@ -162,7 +180,12 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json({ ...donation, amount: Number(donation.amount) });
+    return NextResponse.json({
+      ...donation,
+      amount: Number(donation.amount),
+      hasReceipt: Boolean(donation.receiptData),
+      receiptData: undefined,
+    });
   } catch (error) {
     console.error("[DONATIONS_POST]", error);
     return new NextResponse("Internal Error", { status: 500 });

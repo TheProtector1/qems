@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Plus, Edit2, Trash2, X, Loader2, Heart, TrendingUp,
-  Users, HandCoins, Calendar, Search, Gift,
+  Users, HandCoins, Calendar, Search, Gift, Receipt, Briefcase, Eye, ImageIcon,
 } from "lucide-react";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, getInitials } from "@/lib/utils";
 import {
   SPONSOR_TYPES,
   DONATION_FREQUENCIES,
@@ -16,8 +16,10 @@ import {
   getFrequencyLabel,
   getCategoryMeta,
   getStatusMeta,
+  getPaymentMethodLabel,
   periodMonthFromDate,
 } from "@/lib/sponsors-donations";
+import { compressImageFile } from "@/lib/image";
 
 type Sponsor = {
   id: string;
@@ -26,6 +28,11 @@ type Sponsor = {
   email: string | null;
   phone: string | null;
   organization: string | null;
+  profession: string | null;
+  employer: string | null;
+  city: string | null;
+  cnic: string | null;
+  photo: string | null;
   address: string | null;
   notes: string | null;
   isActive: boolean;
@@ -48,6 +55,9 @@ type Donation = {
   periodMonth: string | null;
   sponsorId: string | null;
   sponsor: { id: string; name: string; type: string } | null;
+  receivedByName: string | null;
+  hasReceipt?: boolean;
+  receiptData?: string | null;
 };
 
 type Summary = {
@@ -71,6 +81,8 @@ const emptyDonationForm = () => ({
   notes: "",
   sponsorId: "",
   periodMonth: periodMonthFromDate(new Date()),
+  receivedByName: "",
+  receiptData: null as string | null,
 });
 
 const emptySponsorForm = () => ({
@@ -79,9 +91,29 @@ const emptySponsorForm = () => ({
   email: "",
   phone: "",
   organization: "",
+  profession: "",
+  employer: "",
+  city: "",
+  cnic: "",
+  photo: null as string | null,
   address: "",
   notes: "",
 });
+
+function SponsorAvatar({ name, photo, size = "md" }: { name: string; photo?: string | null; size?: "sm" | "md" | "lg" }) {
+  const sizes = { sm: "h-10 w-10 text-sm", md: "h-14 w-14 text-lg", lg: "h-20 w-20 text-2xl" };
+  if (photo) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={photo} alt={name} className={cn("rounded-2xl object-cover ring-2 ring-white shadow-sm", sizes[size])} />
+    );
+  }
+  return (
+    <div className={cn("rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold flex items-center justify-center ring-2 ring-white shadow-sm", sizes[size])}>
+      {getInitials(name)}
+    </div>
+  );
+}
 
 export function SponsorsDonationsContent() {
   const [tab, setTab] = useState<"overview" | "donations" | "sponsors">("overview");
@@ -103,6 +135,10 @@ export function SponsorsDonationsContent() {
   const [sponsorModal, setSponsorModal] = useState(false);
   const [editingSponsor, setEditingSponsor] = useState<Sponsor | null>(null);
   const [sponsorForm, setSponsorForm] = useState(emptySponsorForm());
+  const [profileSponsor, setProfileSponsor] = useState<Sponsor | null>(null);
+  const [profileDonations, setProfileDonations] = useState<Donation[]>([]);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -155,8 +191,16 @@ export function SponsorsDonationsContent() {
     setDonationModal(true);
   };
 
-  const openEditDonation = (d: Donation) => {
+  const openEditDonation = async (d: Donation) => {
     setEditingDonation(d);
+    let receiptData: string | null = null;
+    if (d.hasReceipt) {
+      const res = await fetch(`/api/institute/donations/${d.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        receiptData = data.donation?.receiptData || null;
+      }
+    }
     setDonationForm({
       amount: String(d.amount),
       donationDate: d.donationDate.slice(0, 10),
@@ -169,6 +213,8 @@ export function SponsorsDonationsContent() {
       notes: d.notes || "",
       sponsorId: d.sponsorId || "",
       periodMonth: d.periodMonth || periodMonthFromDate(d.donationDate),
+      receivedByName: d.receivedByName || "",
+      receiptData,
     });
     setDonationModal(true);
   };
@@ -182,6 +228,8 @@ export function SponsorsDonationsContent() {
         amount: parseFloat(donationForm.amount),
         sponsorId: donationForm.sponsorId || null,
         periodMonth: donationForm.periodMonth || periodMonthFromDate(donationForm.donationDate),
+        receiptData: donationForm.receiptData || null,
+        receivedByName: donationForm.receivedByName || null,
       };
       const res = editingDonation
         ? await fetch(`/api/institute/donations/${editingDonation.id}`, {
@@ -223,10 +271,50 @@ export function SponsorsDonationsContent() {
       email: s.email || "",
       phone: s.phone || "",
       organization: s.organization || "",
+      profession: s.profession || "",
+      employer: s.employer || "",
+      city: s.city || "",
+      cnic: s.cnic || "",
+      photo: s.photo,
       address: s.address || "",
       notes: s.notes || "",
     });
     setSponsorModal(true);
+  };
+
+  const openSponsorProfile = async (s: Sponsor) => {
+    setProfileSponsor(s);
+    setProfileLoading(true);
+    try {
+      const res = await fetch(`/api/institute/sponsors/${s.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setProfileSponsor(data.sponsor);
+        setProfileDonations(data.sponsor.donations || []);
+      }
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleSponsorPhoto = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const compressed = await compressImageFile(file);
+      setSponsorForm((f) => ({ ...f, photo: compressed }));
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Photo upload failed");
+    }
+  };
+
+  const handleReceiptUpload = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const compressed = await compressImageFile(file);
+      setDonationForm((f) => ({ ...f, receiptData: compressed }));
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Receipt upload failed");
+    }
   };
 
   const saveSponsor = async (e: React.FormEvent) => {
@@ -428,13 +516,16 @@ export function SponsorsDonationsContent() {
                   <th>Frequency</th>
                   <th>Category</th>
                   <th>Status</th>
+                  <th>Payment</th>
+                  <th>Received by</th>
+                  <th>Receipt</th>
                   <th>Purpose</th>
                   <th className="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredDonations.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-12 text-gray-400">No donations for this period.</td></tr>
+                  <tr><td colSpan={10} className="text-center py-12 text-gray-400">No donations for this period.</td></tr>
                 ) : filteredDonations.map((d) => {
                   const cat = getCategoryMeta(d.category);
                   const st = getStatusMeta(d.status);
@@ -449,7 +540,28 @@ export function SponsorsDonationsContent() {
                       <td><span className="text-xs text-gray-600">{getFrequencyLabel(d.frequency)}</span></td>
                       <td><span className={cn("pill text-[10px] py-0", cat.color)}>{cat.label}</span></td>
                       <td><span className={cn("pill text-[10px] py-0", st.pill)}>{st.label}</span></td>
-                      <td className="text-sm text-gray-600 max-w-[140px] truncate">{d.purpose || "—"}</td>
+                      <td className="text-xs text-gray-600">{getPaymentMethodLabel(d.paymentMethod)}</td>
+                      <td className="text-xs text-gray-600">{d.receivedByName || "—"}</td>
+                      <td>
+                        {d.hasReceipt ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const res = await fetch(`/api/institute/donations/${d.id}`);
+                              if (res.ok) {
+                                const data = await res.json();
+                                setReceiptPreview(data.donation?.receiptData || null);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-purple-700 hover:underline"
+                          >
+                            <Receipt className="h-3.5 w-3.5" /> View
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="text-sm text-gray-600 max-w-[120px] truncate">{d.purpose || "—"}</td>
                       <td className="text-right">
                         <button type="button" onClick={() => openEditDonation(d)} className="p-1.5 text-gray-400 hover:text-blue-600"><Edit2 className="h-4 w-4" /></button>
                         <button type="button" onClick={() => deleteDonation(d.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
@@ -479,20 +591,21 @@ export function SponsorsDonationsContent() {
                 <p className="text-sm text-gray-500 mt-1">Add individuals, organizations, or anonymous donors.</p>
               </div>
             ) : sponsors.map((s) => {
-              const typeMeta = SPONSOR_TYPES.find((t) => t.value === s.type);
               return (
                 <div key={s.id} className={cn("dash-card p-5 border-l-4", s.isActive ? "border-l-purple-500" : "border-l-gray-300 opacity-60")}>
                   <div className="flex justify-between items-start mb-3">
-                    <div className="h-11 w-11 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-lg">
-                      {typeMeta?.icon || "👤"}
-                    </div>
+                    <SponsorAvatar name={s.name} photo={s.photo} size="md" />
                     <div className="flex gap-1">
+                      <button type="button" onClick={() => openSponsorProfile(s)} className="p-1.5 text-gray-400 hover:text-purple-600" title="View profile"><Eye className="h-4 w-4" /></button>
                       <button type="button" onClick={() => openEditSponsor(s)} className="p-1.5 text-gray-400 hover:text-blue-600"><Edit2 className="h-4 w-4" /></button>
                       <button type="button" onClick={() => deleteSponsor(s.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </div>
-                  <h3 className="font-display font-bold text-gray-900">{s.name}</h3>
+                  <button type="button" onClick={() => openSponsorProfile(s)} className="text-left w-full">
+                    <h3 className="font-display font-bold text-gray-900 hover:text-purple-800">{s.name}</h3>
+                  </button>
                   <p className="text-xs text-gray-500 mt-0.5">{getSponsorTypeLabel(s.type)}{s.organization && ` · ${s.organization}`}</p>
+                  {s.profession && <p className="text-xs text-gray-600 mt-1 flex items-center gap-1"><Briefcase className="h-3 w-3" /> {s.profession}</p>}
                   {(s.email || s.phone) && (
                     <p className="text-xs text-gray-500 mt-2">{s.email}{s.phone && ` · ${s.phone}`}</p>
                   )}
@@ -579,17 +692,39 @@ export function SponsorsDonationsContent() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="form-label">Payment Method</label>
-                  <select className="form-input" value={donationForm.paymentMethod}
+                  <label className="form-label">Payment mode *</label>
+                  <select required className="form-input" value={donationForm.paymentMethod}
                     onChange={(e) => setDonationForm({ ...donationForm, paymentMethod: e.target.value })}>
                     {PAYMENT_METHODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="form-label">Reference / Receipt #</label>
+                  <label className="form-label">Transaction / reference #</label>
                   <input className="form-input" value={donationForm.referenceNo}
-                    onChange={(e) => setDonationForm({ ...donationForm, referenceNo: e.target.value })} placeholder="Optional" />
+                    onChange={(e) => setDonationForm({ ...donationForm, referenceNo: e.target.value })} placeholder="IBFT ref, cheque no., etc." />
                 </div>
+              </div>
+              <div>
+                <label className="form-label">Received by (staff name)</label>
+                <input className="form-input" value={donationForm.receivedByName}
+                  onChange={(e) => setDonationForm({ ...donationForm, receivedByName: e.target.value })}
+                  placeholder="Who received this donation at the institute?" />
+              </div>
+              <div>
+                <label className="form-label">Receipt upload <span className="text-gray-400 font-normal">(optional)</span></label>
+                <div className="mt-1 flex flex-wrap items-center gap-3">
+                  <label className="btn-ghost text-sm py-2 cursor-pointer">
+                    <ImageIcon className="h-4 w-4" /> Upload receipt
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleReceiptUpload(e.target.files?.[0] || null)} />
+                  </label>
+                  {donationForm.receiptData && (
+                    <>
+                      <button type="button" onClick={() => setReceiptPreview(donationForm.receiptData)} className="text-xs text-purple-700 font-medium hover:underline">Preview</button>
+                      <button type="button" onClick={() => setDonationForm({ ...donationForm, receiptData: null })} className="text-xs text-red-600 hover:underline">Remove</button>
+                    </>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">Photo of bank receipt, cash voucher, or transfer screenshot</p>
               </div>
               <div>
                 <label className="form-label">Purpose</label>
@@ -615,14 +750,26 @@ export function SponsorsDonationsContent() {
       {/* Sponsor modal */}
       {sponsorModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-              <h3 className="font-display text-lg font-bold">{editingSponsor ? "Edit Sponsor" : "Add Sponsor"}</h3>
+              <h3 className="font-display text-lg font-bold">{editingSponsor ? "Edit donor profile" : "Add donor / sponsor"}</h3>
               <button type="button" onClick={() => setSponsorModal(false)} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
             </div>
             <form onSubmit={saveSponsor} className="p-6 space-y-4">
+              <div className="flex items-center gap-4">
+                <SponsorAvatar name={sponsorForm.name || "Donor"} photo={sponsorForm.photo} size="lg" />
+                <div>
+                  <label className="btn-ghost text-sm py-2 cursor-pointer inline-flex">
+                    <ImageIcon className="h-4 w-4" /> Upload photo
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleSponsorPhoto(e.target.files?.[0] || null)} />
+                  </label>
+                  {sponsorForm.photo && (
+                    <button type="button" className="block text-xs text-red-600 mt-1" onClick={() => setSponsorForm({ ...sponsorForm, photo: null })}>Remove photo</button>
+                  )}
+                </div>
+              </div>
               <div>
-                <label className="form-label">Name</label>
+                <label className="form-label">Full name *</label>
                 <input required className="form-input" value={sponsorForm.name}
                   onChange={(e) => setSponsorForm({ ...sponsorForm, name: e.target.value })} />
               </div>
@@ -637,6 +784,30 @@ export function SponsorsDonationsContent() {
                 <label className="form-label">Organization (if applicable)</label>
                 <input className="form-input" value={sponsorForm.organization}
                   onChange={(e) => setSponsorForm({ ...sponsorForm, organization: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">Profession</label>
+                  <input className="form-input" value={sponsorForm.profession}
+                    onChange={(e) => setSponsorForm({ ...sponsorForm, profession: e.target.value })} placeholder="e.g. Doctor, Business owner" />
+                </div>
+                <div>
+                  <label className="form-label">Employer / business</label>
+                  <input className="form-input" value={sponsorForm.employer}
+                    onChange={(e) => setSponsorForm({ ...sponsorForm, employer: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">City</label>
+                  <input className="form-input" value={sponsorForm.city}
+                    onChange={(e) => setSponsorForm({ ...sponsorForm, city: e.target.value })} />
+                </div>
+                <div>
+                  <label className="form-label">CNIC (optional)</label>
+                  <input className="form-input" value={sponsorForm.cnic}
+                    onChange={(e) => setSponsorForm({ ...sponsorForm, cnic: e.target.value })} placeholder="xxxxx-xxxxxxx-x" />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -667,6 +838,94 @@ export function SponsorsDonationsContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Donor profile modal */}
+      {profileSponsor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-start gap-4">
+              <div className="flex items-start gap-4">
+                <SponsorAvatar name={profileSponsor.name} photo={profileSponsor.photo} size="lg" />
+                <div>
+                  <h3 className="font-display text-xl font-bold text-gray-900">{profileSponsor.name}</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{getSponsorTypeLabel(profileSponsor.type)}</p>
+                  {profileSponsor.profession && (
+                    <p className="text-sm text-gray-700 mt-2 flex items-center gap-1.5">
+                      <Briefcase className="h-4 w-4 text-gray-400" /> {profileSponsor.profession}
+                      {profileSponsor.employer && ` at ${profileSponsor.employer}`}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button type="button" onClick={() => setProfileSponsor(null)} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="grid sm:grid-cols-2 gap-4 text-sm">
+                {[
+                  { label: "Email", value: profileSponsor.email },
+                  { label: "Phone", value: profileSponsor.phone },
+                  { label: "City", value: profileSponsor.city },
+                  { label: "CNIC", value: profileSponsor.cnic },
+                  { label: "Organization", value: profileSponsor.organization },
+                  { label: "Address", value: profileSponsor.address },
+                ].map((row) => (
+                  <div key={row.label} className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{row.label}</p>
+                    <p className="font-medium text-gray-900 mt-0.5">{row.value || "—"}</p>
+                  </div>
+                ))}
+              </div>
+              {profileSponsor.notes && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-1">Notes</p>
+                  <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3 border border-gray-100">{profileSponsor.notes}</p>
+                </div>
+              )}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-900">Donation history</h4>
+                  <p className="text-sm font-bold text-green-700">{formatCurrency(profileSponsor.totalDonated)} total</p>
+                </div>
+                {profileLoading ? (
+                  <div className="py-8 text-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin inline" /></div>
+                ) : profileDonations.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-6">No donations logged yet.</p>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {profileDonations.map((d) => (
+                      <div key={d.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-gray-100">
+                        <div>
+                          <p className="font-semibold text-sm text-gray-900">{formatCurrency(d.amount)}</p>
+                          <p className="text-xs text-gray-500">{formatDate(d.donationDate)} · {getPaymentMethodLabel(d.paymentMethod)}</p>
+                        </div>
+                        <span className={cn("pill text-[10px] py-0", getCategoryMeta(d.category).color)}>{getCategoryMeta(d.category).label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => { openEditSponsor(profileSponsor); setProfileSponsor(null); }} className="btn-ghost text-sm">Edit profile</button>
+                <button type="button" onClick={() => setProfileSponsor(null)} className="btn-primary text-sm">Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Receipt preview */}
+      {receiptPreview && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={() => setReceiptPreview(null)}>
+          <div className="bg-white rounded-2xl p-4 max-w-lg w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2"><Receipt className="h-4 w-4" /> Donation receipt</h3>
+              <button type="button" onClick={() => setReceiptPreview(null)} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={receiptPreview} alt="Donation receipt" className="w-full rounded-xl border border-gray-200" />
           </div>
         </div>
       )}

@@ -35,13 +35,20 @@ export const DONATION_STATUSES = [
 
 export const PAYMENT_METHODS = [
   { value: "CASH", label: "Cash" },
-  { value: "BANK_TRANSFER", label: "Bank Transfer" },
+  { value: "IBFT", label: "IBFT (Inter-bank transfer)" },
+  { value: "BANK_TRANSFER", label: "Bank transfer" },
+  { value: "RAAST", label: "Raast (instant payment)" },
   { value: "CHEQUE", label: "Cheque" },
   { value: "JAZZCASH", label: "JazzCash" },
   { value: "EASYPAISA", label: "EasyPaisa" },
   { value: "STRIPE", label: "Stripe / Card" },
   { value: "OTHER", label: "Other" },
 ] as const;
+
+export function getPaymentMethodLabel(value: string | null | undefined) {
+  if (!value) return "—";
+  return PAYMENT_METHODS.find((p) => p.value === value)?.label || value;
+}
 
 export function getSponsorTypeLabel(value: string) {
   return SPONSOR_TYPES.find((t) => t.value === value)?.label || value;

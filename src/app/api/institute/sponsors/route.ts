@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     if (!instituteId) return new NextResponse("Unauthorized", { status: 401 });
 
     const body = await req.json();
-    const { name, type, email, phone, organization, address, notes } = body;
+    const { name, type, email, phone, organization, address, notes, profession, employer, city, cnic, photo } = body;
     if (!name?.trim()) return new NextResponse("Name is required", { status: 400 });
 
     const sponsor = await prisma.sponsor.create({
@@ -57,6 +57,11 @@ export async function POST(req: Request) {
         email: email || null,
         phone: phone || null,
         organization: organization || null,
+        profession: profession || null,
+        employer: employer || null,
+        city: city || null,
+        cnic: cnic || null,
+        photo: photo || null,
         address: address || null,
         notes: notes || null,
         instituteId,
