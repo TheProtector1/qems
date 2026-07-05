@@ -106,15 +106,16 @@ export function InstituteDashboardContent({
       text: "text-pink-600",
     },
     {
-      label: "Completions (YTD)",
-      value: loadingAnalytics ? "…" : String(kpi?.hifzCompletions ?? 0),
-      change: "Hifz",
-      changePct: "completed",
+      label: "Alumni",
+      value: loadingAnalytics ? "…" : String(kpi?.totalAlumni ?? 0),
+      change: String(kpi?.hifzCompletions ?? 0),
+      changePct: "Hifz done",
       up: true,
       icon: Award,
       color: "from-teal-500 to-cyan-600",
       bg: "bg-teal-50",
       text: "text-teal-600",
+      href: "/institute/alumni",
     },
   ];
 
@@ -196,8 +197,8 @@ export function InstituteDashboardContent({
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {kpis.map((kpi) => {
           const Icon = kpi.icon;
-          return (
-            <div key={kpi.label} className="kpi-card p-4">
+          const inner = (
+            <>
               <div className="flex items-start justify-between mb-3">
                 <div
                   className={cn(
@@ -207,7 +208,7 @@ export function InstituteDashboardContent({
                 >
                   <Icon className={cn("h-5 w-5", kpi.text)} />
                 </div>
-                <button className="text-gray-300 hover:text-gray-500">
+                <button type="button" className="text-gray-300 hover:text-gray-500">
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
               </div>
@@ -218,6 +219,22 @@ export function InstituteDashboardContent({
                 {kpi.change}
                 <span className="text-gray-400 font-normal">{kpi.changePct}</span>
               </div>
+            </>
+          );
+          if ("href" in kpi && kpi.href) {
+            return (
+              <Link
+                key={kpi.label}
+                href={kpi.href}
+                className="kpi-card p-4 block hover:ring-2 hover:ring-primary-200 transition-shadow"
+              >
+                {inner}
+              </Link>
+            );
+          }
+          return (
+            <div key={kpi.label} className="kpi-card p-4">
+              {inner}
             </div>
           );
         })}

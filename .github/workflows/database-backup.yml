@@ -40,12 +40,13 @@ jobs:
 
       - name: Run backup
         env:
+          quran_education_DATABASE_URL: ${{ secrets.QURAN_EDUCATION_DATABASE_URL || secrets.DATABASE_URL }}
           QURAN_EDUCATION_DATABASE_URL: ${{ secrets.QURAN_EDUCATION_DATABASE_URL || secrets.DATABASE_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.QURAN_EDUCATION_DATABASE_URL }}
           BACKUP_DIR: ${{ runner.temp }}/backups
           BACKUP_LOG: ${{ runner.temp }}/backup.log
         run: |
-          if [ -z "$QURAN_EDUCATION_DATABASE_URL" ] && [ -z "$DATABASE_URL" ]; then
+          if [ -z "$quran_education_DATABASE_URL" ] && [ -z "$QURAN_EDUCATION_DATABASE_URL" ] && [ -z "$DATABASE_URL" ]; then
             echo "ERROR: Add QURAN_EDUCATION_DATABASE_URL (or DATABASE_URL) to GitHub Actions secrets."
             exit 1
           fi

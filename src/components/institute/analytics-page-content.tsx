@@ -27,6 +27,7 @@ export function AnalyticsPageContent({
         ["Outstanding Fees", String(k.totalOutstanding)],
         ["Active Teachers", String(k.activeTeachers)],
         ["Hifz Completions", String(k.hifzCompletions)],
+        ["Total Alumni", String(k.totalAlumni)],
       ]
     );
   };

@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState, type ElementType, type ReactNode } from "react";
 import {
   BookOpen, Sparkles, Target, Award, Heart, Loader2, Save, Pencil, Eye,
-  Plus, Trash2, Building2,
+  Plus, Trash2, Building2, GraduationCap,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDate, getInitials } from "@/lib/utils";
+import Link from "next/link";
+import { COMPLETION_TYPE_LABELS } from "@/lib/alumni";
 import type {
   InstituteAchievement,
   InstituteGoal,
@@ -26,14 +28,31 @@ export function InstituteAboutContent({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [featuredAlumni, setFeaturedAlumni] = useState<Array<{
+    id: string;
+    fullName: string;
+    photo: string | null;
+    completionType: string;
+    completedAt: string;
+    batchYear: string | null;
+    testimonial: string | null;
+    occupation: string | null;
+  }>>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/institute/profile");
-      if (!res.ok) throw new Error("Failed to load institute profile");
-      const data = await res.json();
+      const [profileRes, alumniRes] = await Promise.all([
+        fetch("/api/institute/profile"),
+        fetch("/api/institute/alumni?featured=true&publicOnly=true"),
+      ]);
+      if (!profileRes.ok) throw new Error("Failed to load institute profile");
+      const data = await profileRes.json();
       setProfile(data.profile);
+      if (alumniRes.ok) {
+        const alumniData = await alumniRes.json();
+        setFeaturedAlumni((alumniData.alumni ?? []).slice(0, 6));
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -230,7 +249,7 @@ export function InstituteAboutContent({
           />
         </div>
       ) : (
-        <AboutPreview profile={profile} />
+        <AboutPreview profile={profile} featuredAlumni={featuredAlumni} />
       )}
     </div>
   );
@@ -300,7 +319,22 @@ function ListEditorSection<T>({
   );
 }
 
-function AboutPreview({ profile }: { profile: InstituteProfilePayload }) {
+function AboutPreview({
+  profile,
+  featuredAlumni,
+}: {
+  profile: InstituteProfilePayload;
+  featuredAlumni: Array<{
+    id: string;
+    fullName: string;
+    photo: string | null;
+    completionType: string;
+    completedAt: string;
+    batchYear: string | null;
+    testimonial: string | null;
+    occupation: string | null;
+  }>;
+}) {
   return (
     <div className="space-y-6">
       <div className="dash-card bg-white overflow-hidden border border-gray-200/80">
@@ -402,7 +436,50 @@ function AboutPreview({ profile }: { profile: InstituteProfilePayload }) {
         </div>
       )}
 
-      {!profile.description && !profile.vision && !profile.mission && profile.goals.length === 0 && (
+      {featuredAlumni.length > 0 && (
+        <div className="dash-card bg-white p-6 sm:p-8">
+          <div className="flex items-center justify-between gap-4 mb-5">
+            <h3 className="font-display text-xl font-bold text-gray-900 flex items-center gap-2">
+              <GraduationCap className="h-5 w-5 text-primary-700" /> Featured alumni
+            </h3>
+            <Link href="/institute/alumni" className="text-xs font-medium text-primary-700 hover:underline">
+              View all alumni
+            </Link>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {featuredAlumni.map((a) => (
+              <div key={a.id} className="rounded-2xl border border-gray-100 p-4 bg-gray-50/40">
+                <div className="flex items-center gap-3">
+                  {a.photo ? (
+                    <img src={a.photo} alt="" className="h-12 w-12 rounded-xl object-cover" />
+                  ) : (
+                    <div className="h-12 w-12 rounded-xl bg-primary-100 text-primary-800 flex items-center justify-center font-bold">
+                      {getInitials(a.fullName)}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">{a.fullName}</p>
+                    <p className="text-xs text-primary-700">
+                      {COMPLETION_TYPE_LABELS[a.completionType as keyof typeof COMPLETION_TYPE_LABELS] ?? a.completionType}
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      {a.batchYear ? `Batch ${a.batchYear}` : formatDate(a.completedAt)}
+                    </p>
+                  </div>
+                </div>
+                {a.testimonial && (
+                  <p className="text-xs text-gray-600 mt-3 italic line-clamp-2">&ldquo;{a.testimonial}&rdquo;</p>
+                )}
+                {a.occupation && !a.testimonial && (
+                  <p className="text-xs text-gray-500 mt-2">{a.occupation}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!profile.description && !profile.vision && !profile.mission && profile.goals.length === 0 && featuredAlumni.length === 0 && (
         <div className="dash-card bg-white p-12 text-center border border-dashed border-gray-200">
           <Building2 className="h-10 w-10 text-gray-300 mx-auto mb-3" />
           <p className="text-sm font-medium text-gray-600">Your institute story is not published yet</p>

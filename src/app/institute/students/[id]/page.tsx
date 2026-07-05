@@ -106,6 +106,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
       },
       hifzRecords: { orderBy: { date: "desc" }, take: 5 },
       user: { select: { isActive: true } },
+      alumni: true,
     },
   });
 
@@ -205,6 +206,31 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
           Back to students
         </Link>
 
+        {(student.hifzCompletedAt || student.alumni) && (
+          <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <Award className="h-5 w-5 text-emerald-700" />
+              </div>
+              <div>
+                <p className="font-display font-bold text-emerald-900">
+                  {student.alumni ? "Institute Alumni" : "Hifz Completed — Mabrook!"}
+                </p>
+                <p className="text-sm text-emerald-800/80 mt-0.5">
+                  {student.hifzCompletedAt
+                    ? `Completed full Quran memorization on ${formatDate(student.hifzCompletedAt)}`
+                    : "Eligible for alumni recognition"}
+                </p>
+              </div>
+            </div>
+            {session.user.role === "INSTITUTE_OWNER" && (
+              <Link href="/institute/alumni" className="btn-primary text-sm py-2 self-start sm:self-center">
+                View alumni roll
+              </Link>
+            )}
+          </div>
+        )}
+
         {/* Profile header */}
         <div className="dash-card bg-white border border-gray-200/80 shadow-sm overflow-hidden">
           <div className="p-6 sm:p-8">
@@ -235,6 +261,12 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                       >
                         {isActive ? "Active" : "Inactive"}
                       </span>
+                      {student.alumni && (
+                        <span className="pill pill-success text-xs">Alumni</span>
+                      )}
+                      {student.hifzCompletedAt && !student.alumni && (
+                        <span className="pill bg-emerald-100 text-emerald-800 text-xs">Hifz complete</span>
+                      )}
                     </div>
                   </div>
 

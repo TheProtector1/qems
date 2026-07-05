@@ -16,6 +16,8 @@ if [ ! -f "$BACKUP_FILE" ]; then
   exit 1
 fi
 
+# shellcheck source=load-database-url.sh
+source "$(dirname "$0")/load-database-url.sh"
 # shellcheck source=pg-tools.sh
 source "$(dirname "$0")/pg-tools.sh"
 
@@ -24,22 +26,8 @@ PG_RESTORE="$(resolve_pg_tool pg_restore)" || {
   exit 1
 }
 
-load_database_url() {
-  local f val
-  for f in "$ROOT_DIR/.env.local" "$ROOT_DIR/.env"; do
-    if [ -f "$f" ]; then
-      val="$(grep -E '^(quran_education_DATABASE_URL|DATABASE_URL)=' "$f" | tail -n 1 | cut -d= -f2- | sed 's/^["'\'']//;s/["'\'']$//' || true)"
-      if [ -n "$val" ]; then
-        printf '%s' "$val"
-        return 0
-      fi
-    fi
-  done
-  return 1
-}
-
-DATABASE_URL="$(load_database_url)" || {
-  echo "ERROR: Database URL not found in .env"
+DATABASE_URL="$(load_database_url "$ROOT_DIR")" || {
+  echo "ERROR: Database URL not found. Set quran_education_DATABASE_URL or DATABASE_URL in .env"
   exit 1
 }
 

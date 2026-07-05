@@ -13,28 +13,8 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
 }
 
-load_database_url() {
-  local f val
-  for f in "$ROOT_DIR/.env.local" "$ROOT_DIR/.env"; do
-    if [ -f "$f" ]; then
-      val="$(grep -E '^(quran_education_DATABASE_URL|DATABASE_URL)=' "$f" | tail -n 1 | cut -d= -f2- | sed 's/^["'\'']//;s/["'\'']$//' || true)"
-      if [ -n "$val" ]; then
-        printf '%s' "$val"
-        return 0
-      fi
-    fi
-  done
-  if [ -n "${quran_education_DATABASE_URL:-}" ]; then
-    printf '%s' "$quran_education_DATABASE_URL"
-    return 0
-  fi
-  if [ -n "${DATABASE_URL:-}" ]; then
-    printf '%s' "$DATABASE_URL"
-    return 0
-  fi
-  return 1
-}
-
+# shellcheck source=load-database-url.sh
+source "$(dirname "$0")/load-database-url.sh"
 # shellcheck source=pg-tools.sh
 source "$(dirname "$0")/pg-tools.sh"
 
@@ -43,24 +23,28 @@ PG_DUMP="$(resolve_pg_tool pg_dump)" || {
   exit 1
 }
 
-DATABASE_URL="$(load_database_url)" || {
-  log "ERROR: Database URL not found. Set quran_education_DATABASE_URL in .env"
+DATABASE_URL="$(load_database_url "$ROOT_DIR")" || {
+  log "ERROR: Database URL not found. Set quran_education_DATABASE_URL or DATABASE_URL in .env / GitHub secrets."
   exit 1
 }
 
 TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
 BACKUP_FILE="$BACKUP_DIR/qems-${TIMESTAMP}.dump"
+DUMP_LOG="$(mktemp)"
 
-log "Starting backup → $BACKUP_FILE"
+log "Starting backup → $BACKUP_FILE (pg_dump: $("$PG_DUMP" --version 2>/dev/null | head -1))"
 
-if "$PG_DUMP" "$DATABASE_URL" --format=custom --no-owner --no-acl --file="$BACKUP_FILE"; then
+if "$PG_DUMP" "$DATABASE_URL" --format=custom --no-owner --no-acl --file="$BACKUP_FILE" 2>"$DUMP_LOG"; then
   SIZE="$(du -h "$BACKUP_FILE" | cut -f1)"
   log "Backup completed ($SIZE)"
 else
   log "ERROR: pg_dump failed"
+  sed 's/^/[pg_dump] /' "$DUMP_LOG" | tee -a "$LOG_FILE" >/dev/null
   rm -f "$BACKUP_FILE"
+  rm -f "$DUMP_LOG"
   exit 1
 fi
+rm -f "$DUMP_LOG"
 
 # Delete backups older than retention period (5 days = 120 hourly snapshots max)
 DELETED=0

@@ -64,6 +64,13 @@ enum ProgramType {
   COMBINED
 }
 
+enum AlumniCompletionType {
+  HIFZ_FULL
+  NAZRA_COMPLETE
+  TAJWEED_CERTIFIED
+  OTHER
+}
+
 enum HifzType {
   SABAQ
   SABQI
@@ -293,6 +300,7 @@ model Institute {
   sponsors          Sponsor[]
   donations         Donation[]
   managementMembers InstituteManagementMember[]
+  alumni            InstituteAlumni[]
 
   @@index([slug])
   @@index([isApproved])
@@ -322,6 +330,38 @@ model InstituteManagementMember {
   @@index([instituteId])
   @@index([reportsToId])
   @@index([instituteId, isActive])
+}
+
+model InstituteAlumni {
+  id             String               @id @default(cuid())
+  fullName       String
+  photo          String?
+  gender         Gender?
+  programType    ProgramType          @default(HIFZ)
+  completionType AlumniCompletionType @default(HIFZ_FULL)
+  completedAt    DateTime             @db.Date
+  batchYear      String?
+  studentIdLabel String?
+  teacherName    String?
+  totalDaysHifz  Int?
+  occupation     String?
+  currentStudy   String?
+  city           String?
+  achievements   String?              @db.Text
+  testimonial    String?              @db.Text
+  isFeatured     Boolean              @default(false)
+  isPublic       Boolean              @default(true)
+  studentId      String?              @unique
+  student        Student?             @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  instituteId    String
+  institute      Institute            @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([instituteId])
+  @@index([instituteId, completedAt])
+  @@index([instituteId, isFeatured])
+  @@index([instituteId, isPublic])
 }
 
 model InstituteSubscription {
@@ -606,6 +646,7 @@ model Student {
   characterTaskProgress CharacterTaskProgress[]
   dailyWorshipRecords   DailyWorshipRecord[]
   documents             StudentDocument[]
+  alumni                InstituteAlumni?
 
   @@index([instituteId])
   @@index([branchId])

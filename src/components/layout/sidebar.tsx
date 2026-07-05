@@ -31,6 +31,7 @@ const instituteNav: NavItem[] = [
       { label: "All Students", href: "/institute/students", icon: Users },
       { label: "Admissions", href: "/institute/students/admissions", icon: ClipboardList },
       { label: "Classes", href: "/institute/students/classes", icon: Building2 },
+      { label: "Alumni", href: "/institute/alumni", icon: Award },
     ],
   },
   {

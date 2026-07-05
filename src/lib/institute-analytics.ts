@@ -18,6 +18,7 @@ export type InstituteAnalytics = {
     totalOutstanding: number;
     collectionRate: number;
     hifzCompletions: number;
+    totalAlumni: number;
   };
   attendanceTrend: { week: string; rate: number }[];
   attendanceAvg: number;
@@ -47,6 +48,7 @@ export async function getInstituteAnalytics(instituteId: string): Promise<Instit
     hifzAvg,
     feeStats,
     hifzCompletions,
+    totalAlumni,
     programGroups,
     recentStudents,
     overdueFees,
@@ -70,6 +72,7 @@ export async function getInstituteAnalytics(instituteId: string): Promise<Instit
       _count: true,
     }),
     prisma.student.count({ where: { instituteId, hifzCompletedAt: { not: null } } }),
+    prisma.instituteAlumni.count({ where: { instituteId } }),
     prisma.student.groupBy({
       by: ["programType"],
       where: { instituteId, isActive: true },
@@ -211,6 +214,7 @@ export async function getInstituteAnalytics(instituteId: string): Promise<Instit
       totalOutstanding,
       collectionRate,
       hifzCompletions,
+      totalAlumni,
     },
     attendanceTrend,
     attendanceAvg: attendanceTrend.length

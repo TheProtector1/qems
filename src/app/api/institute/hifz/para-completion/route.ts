@@ -5,6 +5,7 @@ import { HifzDirection, NotificationType, ProgramType } from "@prisma/client";
 import { getNextPara, parseHifzDirection } from "@/lib/hifz-progress";
 import { notifyParentOfStudent } from "@/lib/notifications";
 import { tryAwardBadgesForStudent } from "@/lib/badges";
+import { ensureAlumniFromHifzCompletion } from "@/lib/alumni";
 
 export const dynamic = "force-dynamic";
 
@@ -178,6 +179,9 @@ export async function POST(req: Request) {
         message: `${student.fullName} has completed the full Hifz program. MashaAllah!`,
         data: { studentId, completedAt: dateKey(result.updatedStudent.hifzCompletedAt) },
       });
+      await ensureAlumniFromHifzCompletion(studentId, instituteId).catch((err) =>
+        console.error("[ALUMNI_AUTO_CREATE]", err)
+      );
     }
 
     const completedCount = await prisma.hifzParaCompletion.count({ where: { studentId } });
