@@ -2,7 +2,7 @@
 
 import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, BookOpen, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
@@ -11,7 +11,6 @@ import { LanguageToggle } from "@/components/common/language-toggle";
 import { looksLikeEmail } from "@/lib/phone";
 
 function LoginContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
   const { t } = useI18n();
@@ -48,16 +47,24 @@ function LoginContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+
+    const identifier = form.identifier.trim();
+    const password = form.password;
+    if (!identifier || !password) return;
+
     setError("");
     setResendStatus(null);
     setLoading(true);
+    let shouldResetLoading = true;
 
     try {
       const result = await signIn("credentials", {
-        email: looksLikeEmail(form.identifier)
-          ? form.identifier.toLowerCase()
-          : form.identifier,
-        password: form.password,
+        email: looksLikeEmail(identifier)
+          ? identifier.toLowerCase()
+          : identifier,
+        password,
+        callbackUrl,
         redirect: false,
       });
 
@@ -65,12 +72,17 @@ function LoginContent() {
         setError(result.error);
         return;
       }
-      router.push(callbackUrl);
-      router.refresh();
+
+      // Use a full navigation after NextAuth sets the session cookie. This avoids
+      // a race where middleware may not see the new cookie on the first SPA push.
+      shouldResetLoading = false;
+      window.location.assign(result?.url || callbackUrl);
     } catch {
       setError("An unexpected error occurred. Please try again.");
     } finally {
-      setLoading(false);
+      if (shouldResetLoading) {
+        setLoading(false);
+      }
     }
   };
 
