@@ -12,6 +12,8 @@ import {
 } from "recharts";
 import { cn, formatCurrency } from "@/lib/utils";
 import Link from "next/link";
+import { PakistanClock } from "@/components/common/pakistan-clock";
+import { getPakistanClockSnapshot } from "@/lib/timezone";
 
 const PROGRAM_COLORS: Record<string, string> = {
   HIFZ: "#1B5E20",
@@ -143,8 +145,12 @@ export function InstituteDashboardContent({
     action: "View",
   }));
 
+  const pkToday = getPakistanClockSnapshot();
+
   return (
     <div className="space-y-6">
+      <PakistanClock variant="dashboard" />
+
       {/* ── Greeting ── */}
       <div className="page-header-row">
         <div>
@@ -152,7 +158,7 @@ export function InstituteDashboardContent({
             السَّلَامُ عَلَيْكُمْ 👋
           </h2>
           <p className="text-gray-500 text-sm mt-0.5">
-            Here's what's happening at your institute today
+            Today in Pakistan: {pkToday.longDate} — attendance and schedules follow {pkToday.timezone}
           </p>
         </div>
         <div className="page-header-actions">

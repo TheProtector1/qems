@@ -10,6 +10,7 @@ import {
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { todayDateKey, parseDateOnly } from "@/lib/timezone";
 import { StudentAvatar } from "@/components/common/student-avatar";
 import {
   ATTENDANCE_STATUS,
@@ -51,9 +52,9 @@ export function StudentAttendanceCalendar({
   readOnly?: boolean;
   compact?: boolean;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [month, setMonth] = useState(() => new Date().getMonth() + 1);
-  const [year, setYear] = useState(() => new Date().getFullYear());
+  const today = todayDateKey();
+  const [month, setMonth] = useState(() => parseDateOnly(today).getUTCMonth() + 1);
+  const [year, setYear] = useState(() => parseDateOnly(today).getUTCFullYear());
   const [selectedDate, setSelectedDate] = useState(today);
   const [records, setRecords] = useState<Record<string, DayRecord>>({});
   const [loading, setLoading] = useState(true);

@@ -16,6 +16,7 @@ import {
 } from "date-fns";
 import { Plus, Edit2, Trash2, Calendar, ChevronLeft, ChevronRight, AlertCircle, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { dateKeyInAppTz, parseDateOnly, todayDateKey } from "@/lib/timezone";
 
 type CalendarEvent = {
   id: string;
@@ -34,8 +35,8 @@ const EVENT_TYPE_COLORS = {
 };
 
 export function CalendarContent() {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(() => parseDateOnly(todayDateKey()));
+  const [selectedDate, setSelectedDate] = useState(() => parseDateOnly(todayDateKey()));
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -70,7 +71,7 @@ export function CalendarContent() {
   }, []);
 
   const openNewModal = (date?: Date) => {
-    const defaultDateStr = (date || selectedDate).toISOString().split("T")[0];
+    const defaultDateStr = date ? dateKeyInAppTz(date) : dateKeyInAppTz(selectedDate);
     setEditingEvent(null);
     setTitle("");
     setDescription("");

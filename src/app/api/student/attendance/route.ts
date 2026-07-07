@@ -1,22 +1,21 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { addDaysToDateKey, dateKeyFromStored, todayDateKey } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
 
 function dateKey(date: Date) {
-  return date.toISOString().slice(0, 10);
+  return dateKeyFromStored(date);
 }
 
 function computeStreak(dates: string[]) {
   if (!dates.length) return 0;
   const presentSet = new Set(dates);
-  const today = new Date();
+  const todayKey = todayDateKey();
   let streak = 0;
   for (let i = 0; i < 120; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const key = dateKey(d);
+    const key = addDaysToDateKey(todayKey, -i);
     if (presentSet.has(key)) streak++;
     else if (i > 0) break;
   }

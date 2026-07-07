@@ -95,13 +95,13 @@ export type DayRecord = {
 };
 
 export function buildCalendarDays(year: number, month: number) {
-  const first = new Date(year, month - 1, 1);
-  const last = new Date(year, month, 0);
+  const first = parseDateOnly(`${year}-${String(month).padStart(2, "0")}-01`);
+  const lastDay = daysInMonth(year, month);
   const days: Array<{ date: string; day: number; inMonth: boolean }> = [];
-  for (let i = 0; i < first.getDay(); i++) days.push({ date: "", day: 0, inMonth: false });
-  for (let d = 1; d <= last.getDate(); d++) {
-    const dt = new Date(year, month - 1, d);
-    days.push({ date: dt.toISOString().slice(0, 10), day: d, inMonth: true });
+  for (let i = 0; i < first.getUTCDay(); i++) days.push({ date: "", day: 0, inMonth: false });
+  for (let d = 1; d <= lastDay; d++) {
+    const date = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    days.push({ date, day: d, inMonth: true });
   }
   return days;
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, Loader2, CheckCircle2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { todayDateKey } from "@/lib/timezone";
 import type { ParaCompletionInfo } from "@/lib/hifz-progress";
 import { getNextPara } from "@/lib/hifz-progress";
 import { HifzDirection } from "@prisma/client";
@@ -28,7 +29,7 @@ export function ParaCompletionModal({
   onSubmit: (data: { daysToComplete: number; notes: string; completedAt: string }) => void;
   submitting?: boolean;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDateKey();
   const [daysToComplete, setDaysToComplete] = useState("7");
   const [notes, setNotes] = useState("");
   const [completedAt, setCompletedAt] = useState(today);

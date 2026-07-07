@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { addDaysToDateKey, todayDateKey } from "@/lib/timezone";
 
 type ReportType = "attendance" | "hifz" | "combined";
 
@@ -20,8 +21,8 @@ type StudentReportsPanelProps = {
 };
 
 export function StudentReportsPanel({ studentId, studentName, program, className }: StudentReportsPanelProps) {
-  const today = new Date().toISOString().split("T")[0];
-  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const today = todayDateKey();
+  const monthAgo = addDaysToDateKey(today, -30);
 
   const [from, setFrom] = useState(monthAgo);
   const [to, setTo] = useState(today);

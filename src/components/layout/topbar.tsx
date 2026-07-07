@@ -7,6 +7,7 @@ import { useTheme } from "next-themes";
 import { getInitials } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { LanguageToggle } from "@/components/common/language-toggle";
+import { PakistanClock } from "@/components/common/pakistan-clock";
 
 interface TopbarProps {
   title: string;
@@ -92,6 +93,7 @@ export function Topbar({ title, breadcrumbs, onMenuClick }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        <PakistanClock />
         {searchOpen && (
           <input
             type="search"

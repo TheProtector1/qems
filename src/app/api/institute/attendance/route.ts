@@ -10,11 +10,18 @@ import {
   syncHolidayAttendanceForDate,
 } from "@/lib/institute-holidays";
 import { getCachedInstituteHolidays } from "@/lib/server-cache";
+import {
+  addDaysToDateKey,
+  dateKeyFromStored,
+  formatDatePK,
+  todayDateKey,
+  weekdayIndexForDateKey,
+} from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
 
 function dateKey(date: Date) {
-  return date.toISOString().slice(0, 10);
+  return dateKeyFromStored(date);
 }
 
 export async function GET(req: Request) {
@@ -103,11 +110,10 @@ export async function GET(req: Request) {
     }
 
     const dates: string[] = [];
-    const today = new Date();
+    const todayKey = todayDateKey();
     for (let i = 0; i < historyDays; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      if (!weeklyOffDays.includes(d.getDay())) dates.push(dateKey(d));
+      const dk = addDaysToDateKey(todayKey, -i);
+      if (!weeklyOffDays.includes(weekdayIndexForDateKey(dk))) dates.push(dk);
     }
     dates.reverse();
 
@@ -161,7 +167,7 @@ export async function GET(req: Request) {
       });
     }
 
-    const todayStr = dateKey(today);
+    const todayStr = todayDateKey();
     const todayDate = parseDateOnly(todayStr);
     const todayHoliday = getHolidayForDate(holidays, todayDate);
 
@@ -296,7 +302,7 @@ export async function POST(req: Request) {
     });
 
     if (absentNotifications.length) {
-      const dateLabel = targetDate.toLocaleDateString("en-PK");
+      const dateLabel = formatDatePK(targetDate);
       void Promise.all(
         absentNotifications.map(({ studentId, fullName }) =>
           notifyParentOfStudent(studentId, {

@@ -1,5 +1,6 @@
 import { HolidayType, InstituteHoliday, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { dateKeyFromStored, parseDateOnly } from "@/lib/timezone";
 
 export type HolidayMatch = {
   id: string;
@@ -7,13 +8,10 @@ export type HolidayMatch = {
   type: HolidayType;
 };
 
-export function parseDateOnly(value: string): Date {
-  const [y, m, d] = value.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
-}
+export { parseDateOnly };
 
 export function dateKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return dateKeyFromStored(date);
 }
 
 export function eachDateInRange(start: Date, end: Date): Date[] {

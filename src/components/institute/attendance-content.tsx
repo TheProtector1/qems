@@ -7,6 +7,7 @@ import {
   Loader2, RefreshCw, Users,
 } from "lucide-react";
 import { cn, formatDate, downloadCsv } from "@/lib/utils";
+import { todayDateKey } from "@/lib/timezone";
 import { StudentAvatar } from "@/components/common/student-avatar";
 import { StudentAttendanceCalendar } from "@/components/institute/student-attendance-calendar";
 import { ATTENDANCE_STATUS, type AttStatus } from "@/lib/attendance-status";
@@ -36,7 +37,7 @@ function programLabel(type: string) {
 }
 
 export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayDateKey();
   const [selectedDate, setSelectedDate] = useState(today);
   const [programFilter, setProgramFilter] = useState("ALL");
   const [attendance, setAttendance] = useState<Record<string, AttStatus | null>>({});
@@ -313,12 +314,15 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
       {!loading && students.length > 0 && !readOnly && activeTab === "mark" && (
         <div className="dash-card overflow-hidden">
           <div className="p-5 border-b border-border flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="form-input w-44"
-            />
+            <div>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="form-input w-44"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">Pakistan time (PKT)</p>
+            </div>
             <select
               value={programFilter}
               onChange={(e) => setProgramFilter(e.target.value)}

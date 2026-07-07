@@ -4,18 +4,17 @@ import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSurahName } from "@/lib/utils";
+import { addDaysToDateKey, dateKeyFromStored, formatDatePK, todayDateKey } from "@/lib/timezone";
 
 export const metadata = { title: "Student Dashboard" };
 
 function computeStreak(dates: string[]) {
   if (!dates.length) return 0;
   const presentSet = new Set(dates);
-  const today = new Date();
+  const todayKey = todayDateKey();
   let streak = 0;
   for (let i = 0; i < 120; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
+    const key = addDaysToDateKey(todayKey, -i);
     if (presentSet.has(key)) streak++;
     else if (i > 0) break;
   }
@@ -56,7 +55,7 @@ export default async function StudentDashboard() {
     : null;
 
   const streak = student
-    ? computeStreak(student.attendance.map((a) => a.date.toISOString().slice(0, 10)))
+    ? computeStreak(student.attendance.map((a) => dateKeyFromStored(a.date)))
     : 0;
 
   const latestLesson = student?.hifzRecords[0];
@@ -67,7 +66,7 @@ export default async function StudentDashboard() {
         ayahFrom: latestLesson.ayahFrom,
         ayahTo: latestLesson.ayahTo,
         rating: latestLesson.rating,
-        date: latestLesson.date.toLocaleDateString("en-PK", { day: "numeric", month: "short" }),
+        date: formatDatePK(latestLesson.date),
         note: latestLesson.teacherNote,
       }
     : null;
@@ -75,7 +74,7 @@ export default async function StudentDashboard() {
   const badges = (student?.badges || []).map((sb) => ({
     icon: sb.badge.icon,
     name: sb.badge.name,
-    date: sb.earnedAt.toLocaleDateString("en-PK", { month: "short", day: "numeric" }),
+    date: formatDatePK(sb.earnedAt),
     color: "from-primary-500 to-emerald-600",
   }));
 
