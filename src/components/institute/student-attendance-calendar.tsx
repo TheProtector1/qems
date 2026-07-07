@@ -100,10 +100,11 @@ export function StudentAttendanceCalendar({
   };
 
   const goToday = () => {
-    const now = new Date();
-    setMonth(now.getMonth() + 1);
-    setYear(now.getFullYear());
-    setSelectedDate(today);
+    const key = todayDateKey();
+    const now = parseDateOnly(key);
+    setMonth(now.getUTCMonth() + 1);
+    setYear(now.getUTCFullYear());
+    setSelectedDate(key);
   };
 
   const days = buildCalendarDays(year, month);

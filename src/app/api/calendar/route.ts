@@ -1,8 +1,29 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { dateKeyFromStored } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
+
+function serializeEvents(
+  events: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    startDate: Date;
+    endDate: Date;
+    type: "HOLIDAY" | "EXAM" | "EVENT" | "ACADEMIC";
+  }>
+) {
+  return events.map((event) => ({
+    id: event.id,
+    title: event.title,
+    description: event.description,
+    startDate: dateKeyFromStored(event.startDate),
+    endDate: dateKeyFromStored(event.endDate),
+    type: event.type,
+  }));
+}
 
 export async function GET(req: Request) {
   try {
@@ -49,7 +70,7 @@ export async function GET(req: Request) {
       orderBy: { startDate: "asc" },
     });
 
-    return NextResponse.json(events);
+    return NextResponse.json(serializeEvents(events));
   } catch (error) {
     console.error("[CALENDAR_GET]", error);
     return new NextResponse("Internal Error", { status: 500 });

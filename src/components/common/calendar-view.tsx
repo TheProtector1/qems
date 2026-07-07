@@ -12,19 +12,17 @@ import {
   isSameDay, 
   addMonths, 
   subMonths,
-  parseISO
 } from "date-fns";
 import { Calendar, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-type CalendarEvent = {
-  id: string;
-  title: string;
-  description: string | null;
-  startDate: string;
-  endDate: string;
-  type: "HOLIDAY" | "EXAM" | "EVENT" | "ACADEMIC";
-};
+import {
+  eventSpansDate,
+  normalizeCalendarEvents,
+  parseEventDate,
+  safeFormatEventDate,
+  type CalendarEvent,
+} from "@/lib/calendar-events";
+import { parseDateOnly, todayDateKey } from "@/lib/timezone";
 
 const EVENT_TYPE_COLORS = {
   HOLIDAY: { bg: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500", label: "Holiday" },
@@ -34,8 +32,8 @@ const EVENT_TYPE_COLORS = {
 };
 
 export function CalendarView() {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(() => parseDateOnly(todayDateKey()));
+  const [selectedDate, setSelectedDate] = useState(() => parseDateOnly(todayDateKey()));
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -46,7 +44,9 @@ export function CalendarView() {
         const res = await fetch("/api/calendar");
         if (res.ok) {
           const data = await res.json();
-          setEvents(data);
+          setEvents(normalizeCalendarEvents(data));
+        } else {
+          setEvents([]);
         }
       } catch (error) {
         console.error("Failed to fetch events", error);
@@ -69,14 +69,7 @@ export function CalendarView() {
   });
 
   const getEventsForDate = (date: Date) => {
-    return events.filter(event => {
-      const start = parseISO(event.startDate);
-      const end = parseISO(event.endDate);
-      const current = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      const eventStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-      const eventEnd = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-      return current >= eventStart && current <= eventEnd;
-    });
+    return events.filter((event) => eventSpansDate(event, date));
   };
 
   const selectedDayEvents = getEventsForDate(selectedDate);
@@ -206,7 +199,7 @@ export function CalendarView() {
                 <div className="mt-3 pt-2 border-t border-black/5 flex items-center gap-1.5 text-[10px] text-gray-500 font-medium">
                   <Calendar className="h-3.5 w-3.5" />
                   <span>
-                    {format(parseISO(event.startDate), "MMM dd")} - {format(parseISO(event.endDate), "MMM dd")}
+                    {safeFormatEventDate(event.startDate, "MMM dd")} - {safeFormatEventDate(event.endDate, "MMM dd")}
                   </span>
                 </div>
               </div>

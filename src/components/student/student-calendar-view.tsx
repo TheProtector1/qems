@@ -12,10 +12,7 @@ import {
   isSameDay,
   addMonths,
   subMonths,
-  parseISO,
-  isToday,
   isBefore,
-  startOfDay,
   differenceInCalendarDays,
 } from "date-fns";
 import {
@@ -29,15 +26,14 @@ import {
   Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-type CalendarEvent = {
-  id: string;
-  title: string;
-  description: string | null;
-  startDate: string;
-  endDate: string;
-  type: "HOLIDAY" | "EXAM" | "EVENT" | "ACADEMIC";
-};
+import {
+  type CalendarEvent,
+  eventSpansDate,
+  normalizeCalendarEvents,
+  parseEventDate,
+  safeFormatEventDate,
+} from "@/lib/calendar-events";
+import { parseDateOnly, todayDateKey } from "@/lib/timezone";
 
 type EventFilter = "ALL" | CalendarEvent["type"];
 
@@ -86,13 +82,8 @@ const EVENT_META = {
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function eventSpansDate(event: CalendarEvent, date: Date) {
-  const start = parseISO(event.startDate);
-  const end = parseISO(event.endDate);
-  const current = startOfDay(date);
-  const eventStart = startOfDay(start);
-  const eventEnd = startOfDay(end);
-  return current >= eventStart && current <= eventEnd;
+function isTodayInPakistan(date: Date) {
+  return format(date, "yyyy-MM-dd") === todayDateKey();
 }
 
 function CalendarSkeleton() {
@@ -109,8 +100,8 @@ function CalendarSkeleton() {
 }
 
 export function StudentCalendarView() {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(() => parseDateOnly(todayDateKey()));
+  const [selectedDate, setSelectedDate] = useState(() => parseDateOnly(todayDateKey()));
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<EventFilter>("ALL");
@@ -120,9 +111,15 @@ export function StudentCalendarView() {
       try {
         setLoading(true);
         const res = await fetch("/api/calendar");
-        if (res.ok) setEvents(await res.json());
+        if (res.ok) {
+          const data = await res.json();
+          setEvents(normalizeCalendarEvents(data));
+        } else {
+          setEvents([]);
+        }
       } catch (error) {
         console.error("Failed to fetch events", error);
+        setEvents([]);
       } finally {
         setLoading(false);
       }
@@ -149,8 +146,8 @@ export function StudentCalendarView() {
 
   const monthStats = useMemo(() => {
     const inMonth = filteredEvents.filter((e) => {
-      const start = parseISO(e.startDate);
-      return isSameMonth(start, currentMonth) || eventSpansDate(e, monthStart);
+      const start = parseEventDate(e.startDate);
+      return start ? isSameMonth(start, currentMonth) || eventSpansDate(e, monthStart) : false;
     });
     return {
       total: inMonth.length,
@@ -161,10 +158,17 @@ export function StudentCalendarView() {
   }, [filteredEvents, currentMonth, monthStart]);
 
   const upcomingEvents = useMemo(() => {
-    const today = startOfDay(new Date());
+    const today = parseDateOnly(todayDateKey());
     return events
-      .filter((e) => !isBefore(parseISO(e.endDate), today))
-      .sort((a, b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime())
+      .filter((e) => {
+        const end = parseEventDate(e.endDate);
+        return end ? !isBefore(end, today) : false;
+      })
+      .sort((a, b) => {
+        const aStart = parseEventDate(a.startDate)?.getTime() ?? 0;
+        const bStart = parseEventDate(b.startDate)?.getTime() ?? 0;
+        return aStart - bStart;
+      })
       .slice(0, 6);
   }, [events]);
 
@@ -202,9 +206,9 @@ export function StudentCalendarView() {
               <p className="font-semibold mt-1 line-clamp-1">{nextEvent.title}</p>
               <p className="text-xs text-emerald-100/80 mt-1 flex items-center gap-1">
                 <Clock className="h-3 w-3" />
-                {format(parseISO(nextEvent.startDate), "EEE, MMM d")}
+                {safeFormatEventDate(nextEvent.startDate, "EEE, MMM d")}
                 {nextEvent.startDate !== nextEvent.endDate &&
-                  ` – ${format(parseISO(nextEvent.endDate), "MMM d")}`}
+                  ` – ${safeFormatEventDate(nextEvent.endDate, "MMM d")}`}
               </p>
             </div>
           )}
@@ -234,15 +238,20 @@ export function StudentCalendarView() {
           <div className="flex gap-3 overflow-x-auto pb-2 snap-x">
             {upcomingEvents.map((event) => {
               const meta = EVENT_META[event.type];
+              if (!meta) return null;
               const Icon = meta.icon;
-              const daysUntil = differenceInCalendarDays(parseISO(event.startDate), startOfDay(new Date()));
+              const start = parseEventDate(event.startDate);
+              const daysUntil = start
+                ? differenceInCalendarDays(start, parseDateOnly(todayDateKey()))
+                : null;
               return (
                 <button
                   key={event.id}
                   type="button"
                   onClick={() => {
-                    setSelectedDate(parseISO(event.startDate));
-                    setCurrentMonth(parseISO(event.startDate));
+                    if (!start) return;
+                    setSelectedDate(start);
+                    setCurrentMonth(start);
                   }}
                   className={cn(
                     "snap-start flex-shrink-0 w-56 text-left rounded-2xl border p-4 transition-all hover:shadow-md hover:-translate-y-0.5",
@@ -258,10 +267,11 @@ export function StudentCalendarView() {
                   </div>
                   <p className="font-semibold text-sm text-gray-900 mt-3 line-clamp-2">{event.title}</p>
                   <p className="text-[11px] text-gray-500 mt-1">
-                    {format(parseISO(event.startDate), "MMM d")}
-                    {event.startDate !== event.endDate && ` – ${format(parseISO(event.endDate), "MMM d")}`}
+                    {safeFormatEventDate(event.startDate, "MMM d")}
+                    {event.startDate !== event.endDate &&
+                      ` – ${safeFormatEventDate(event.endDate, "MMM d")}`}
                   </p>
-                  {daysUntil >= 0 && daysUntil <= 14 && (
+                  {daysUntil != null && daysUntil >= 0 && daysUntil <= 14 && (
                     <p className="text-[10px] font-semibold mt-2 text-gray-600">
                       {daysUntil === 0 ? "Today" : daysUntil === 1 ? "Tomorrow" : `In ${daysUntil} days`}
                     </p>
@@ -321,7 +331,7 @@ export function StudentCalendarView() {
               <button
                 type="button"
                 onClick={() => {
-                  const now = new Date();
+                  const now = parseDateOnly(todayDateKey());
                   setCurrentMonth(now);
                   setSelectedDate(now);
                 }}
@@ -359,7 +369,7 @@ export function StudentCalendarView() {
               const dayEvents = getEventsForDate(day);
               const selected = isSameDay(day, selectedDate);
               const inMonth = isSameMonth(day, currentMonth);
-              const today = isToday(day);
+              const today = isTodayInPakistan(day);
               const isFriday = day.getDay() === 5;
 
               return (
@@ -420,7 +430,7 @@ export function StudentCalendarView() {
                 <h3 className="font-display text-xl font-bold text-gray-900 mt-0.5">
                   {format(selectedDate, "MMMM d, yyyy")}
                 </h3>
-                {isToday(selectedDate) && (
+                {isTodayInPakistan(selectedDate) && (
                   <span className="pill pill-success text-[10px] py-0 mt-2 inline-flex">Today</span>
                 )}
               </div>
@@ -432,6 +442,7 @@ export function StudentCalendarView() {
             <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
               {selectedDayEvents.map((event) => {
                 const meta = EVENT_META[event.type];
+                if (!meta) return null;
                 const Icon = meta.icon;
                 return (
                   <div
@@ -456,9 +467,9 @@ export function StudentCalendarView() {
                         )}
                         <p className="text-[11px] text-gray-500 mt-3 flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          {format(parseISO(event.startDate), "MMM d")}
+                          {safeFormatEventDate(event.startDate, "MMM d")}
                           {event.startDate !== event.endDate &&
-                            ` – ${format(parseISO(event.endDate), "MMM d, yyyy")}`}
+                            ` – ${safeFormatEventDate(event.endDate, "MMM d, yyyy")}`}
                         </p>
                       </div>
                     </div>
