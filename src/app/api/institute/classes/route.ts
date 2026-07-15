@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { withDbRetry } from "@/lib/db-retry";
 
 export const dynamic = "force-dynamic";
 
@@ -10,14 +11,17 @@ export async function GET() {
     if (!session || !session.user.instituteId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const classes = await prisma.class.findMany({
-      where: { instituteId: session.user.instituteId },
-      include: {
-        teacher: { include: { user: { select: { name: true } } } },
-        _count: { select: { enrollments: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const instituteId = session.user.instituteId;
+    const classes = await withDbRetry("classes.list", () =>
+      prisma.class.findMany({
+        where: { instituteId },
+        include: {
+          teacher: { include: { user: { select: { name: true } } } },
+          _count: { select: { enrollments: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    );
     return NextResponse.json({ classes });
   } catch (error) {
     console.error("Get classes error:", error);

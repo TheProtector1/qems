@@ -654,7 +654,10 @@ model Student {
   @@index([studentId])
   @@index([parentId])
   @@index([instituteId, isActive])
+  @@index([instituteId, createdAt])
+  @@index([instituteId, programType])
   @@index([branchId, isActive])
+  @@index([teacherId, createdAt])
 }
 
 // ─────────────────────────────────────────────

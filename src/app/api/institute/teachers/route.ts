@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { withDbRetry } from "@/lib/db-retry";
 
 export const dynamic = "force-dynamic";
 
@@ -11,23 +12,26 @@ export async function GET() {
     if (!session || !session.user.instituteId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const instituteId = session.user.instituteId;
 
-    const teachers = await prisma.teacher.findMany({
-      where: { instituteId: session.user.instituteId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            isActive: true,
-            image: true,
+    const teachers = await withDbRetry("teachers.list", () =>
+      prisma.teacher.findMany({
+        where: { instituteId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              isActive: true,
+              image: true,
+            },
           },
+          _count: { select: { students: true } },
         },
-        _count: { select: { students: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+        orderBy: { createdAt: "desc" },
+      })
+    );
 
     return NextResponse.json({ teachers });
   } catch (error) {

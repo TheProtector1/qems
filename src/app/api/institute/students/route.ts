@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { Gender, ProgramType } from "@prisma/client";
+import { Gender, Prisma, ProgramType } from "@prisma/client";
 import { normalizePhone, parentLoginEmail } from "@/lib/phone";
 import { generateInvoiceNo } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
@@ -10,10 +10,27 @@ import { resolveInitialProgress } from "@/lib/student-progress";
 import { sendParentWelcomeEmail } from "@/lib/email";
 import { resolveInstituteClassIds, syncStudentClassEnrollments } from "@/lib/student-enrollments";
 import { createStudentDocuments, type DocumentInput } from "@/lib/student-documents-server";
+import { addDaysToDateKey, parseDateOnly, todayDateKey } from "@/lib/timezone";
+import { withDbRetry } from "@/lib/db-retry";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+const PROGRAM_FILTER: Record<string, ProgramType> = {
+  Hifz: ProgramType.HIFZ,
+  Nazra: ProgramType.NAZRA,
+  Tajweed: ProgramType.TAJWEED,
+  HIFZ: ProgramType.HIFZ,
+  NAZRA: ProgramType.NAZRA,
+  TAJWEED: ProgramType.TAJWEED,
+};
+
+function clampPageSize(value: string | null) {
+  const parsed = Number.parseInt(value || "12", 10);
+  if (!Number.isFinite(parsed)) return 12;
+  return Math.min(Math.max(parsed, 1), 50);
+}
+
+export async function GET(req: Request) {
   try {
     const session = await getAuthSession();
     if (!session) {
@@ -27,73 +44,133 @@ export async function GET() {
 
     const instituteId = session.user.instituteId;
 
-    const whereClause: { instituteId?: string; teacherId?: string; branchId?: string } = {};
+    const { searchParams } = new URL(req.url);
+    const page = Math.max(1, Number.parseInt(searchParams.get("page") || "1", 10) || 1);
+    const pageSize = clampPageSize(searchParams.get("pageSize"));
+    const search = searchParams.get("search")?.trim();
+    const program = searchParams.get("program")?.trim();
+    const className = searchParams.get("class")?.trim();
+    const status = searchParams.get("status")?.trim();
+
+    const baseWhere: Prisma.StudentWhereInput = {};
     if (isSuperAdmin && !instituteId) {
       // super admin sees all
     } else {
-      whereClause.instituteId = instituteId!;
+      baseWhere.instituteId = instituteId!;
     }
 
     if (session.user.role === "TEACHER" && instituteId) {
-      const teacher = await prisma.teacher.findFirst({
-        where: { userId: session.user.id, instituteId },
-      });
-      if (teacher) whereClause.teacherId = teacher.id;
+      const teacher = await withDbRetry("students.teacherScope", () =>
+        prisma.teacher.findFirst({
+          where: { userId: session.user.id, instituteId },
+        })
+      );
+      if (teacher) baseWhere.teacherId = teacher.id;
     }
 
     if (session.user.role === "BRANCH_MANAGER" && session.user.branchId) {
-      whereClause.branchId = session.user.branchId;
+      baseWhere.branchId = session.user.branchId;
     }
 
-    const students = await prisma.student.findMany({
-      where: whereClause,
-      select: {
-        id: true,
-        studentId: true,
-        fullName: true,
-        gender: true,
-        dateOfBirth: true,
-        city: true,
-        address: true,
-        programType: true,
-        teacherId: true,
-        currentJuz: true,
-        currentPara: true,
-        hifzDirection: true,
-        progressStartType: true,
-        previousInstitute: true,
-        isActive: true,
-        admissionDate: true,
-        parent: {
-          select: {
-            user: { select: { name: true, email: true } },
+    const whereClause: Prisma.StudentWhereInput = { ...baseWhere };
+
+    if (search) {
+      whereClause.OR = [
+        { fullName: { contains: search, mode: "insensitive" } },
+        { studentId: { contains: search, mode: "insensitive" } },
+        {
+          parent: {
+            user: { name: { contains: search, mode: "insensitive" } },
           },
         },
-        teacher: {
-          select: {
-            user: { select: { name: true } },
+        {
+          parent: {
+            user: { email: { contains: search, mode: "insensitive" } },
           },
         },
-        user: { select: { isActive: true } },
-        enrollments: {
-          where: { isActive: true },
-          select: {
-            classId: true,
-            class: { select: { id: true, name: true, programType: true } },
-          },
+      ];
+    }
+
+    if (program && program !== "All Programs" && PROGRAM_FILTER[program]) {
+      whereClause.programType = PROGRAM_FILTER[program];
+    }
+
+    if (className && className !== "All Classes") {
+      whereClause.enrollments = {
+        some: {
+          isActive: true,
+          class: { name: className },
+        },
+      };
+    }
+
+    if (status && status !== "ALL") {
+      if (status === "On Track" || status === "Excellent") whereClause.isActive = true;
+      if (status === "Needs Attention" || status === "At Risk") whereClause.isActive = false;
+    }
+
+    const select = {
+      id: true,
+      studentId: true,
+      fullName: true,
+      gender: true,
+      dateOfBirth: true,
+      city: true,
+      address: true,
+      programType: true,
+      teacherId: true,
+      currentJuz: true,
+      currentPara: true,
+      hifzDirection: true,
+      progressStartType: true,
+      previousInstitute: true,
+      isActive: true,
+      admissionDate: true,
+      parent: {
+        select: {
+          user: { select: { name: true, email: true, phone: true } },
         },
       },
-      orderBy: { createdAt: "desc" },
-    });
+      teacher: {
+        select: {
+          user: { select: { name: true } },
+        },
+      },
+      user: { select: { isActive: true } },
+      enrollments: {
+        where: { isActive: true },
+        select: {
+          classId: true,
+          class: { select: { id: true, name: true, programType: true } },
+        },
+      },
+    } satisfies Prisma.StudentSelect;
 
-    const since = new Date();
-    since.setDate(since.getDate() - 30);
+    const [students, total, totalStudents, hifzStudents, nazraStudents, inactiveStudents] =
+      await withDbRetry("students.pageAndSummary", () =>
+        Promise.all([
+          prisma.student.findMany({
+            where: whereClause,
+            select,
+            orderBy: { createdAt: "desc" },
+            skip: (page - 1) * pageSize,
+            take: pageSize,
+          }),
+          prisma.student.count({ where: whereClause }),
+          prisma.student.count({ where: baseWhere }),
+          prisma.student.count({ where: { ...baseWhere, programType: ProgramType.HIFZ } }),
+          prisma.student.count({ where: { ...baseWhere, programType: ProgramType.NAZRA } }),
+          prisma.student.count({ where: { ...baseWhere, isActive: false } }),
+        ])
+      );
+
+    const since = parseDateOnly(addDaysToDateKey(todayDateKey(), -30));
 
     const studentIds = students.map((s) => s.id);
     const attendanceGrouped =
       studentIds.length === 0
         ? []
-        : await prisma.attendance.groupBy({
+        : await withDbRetry("students.attendanceSummary", () => prisma.attendance.groupBy({
             by: ["studentId", "status"],
             where: {
               studentId: { in: studentIds },
@@ -101,7 +178,7 @@ export async function GET() {
               status: { not: "HOLIDAY" },
             },
             _count: true,
-          });
+          }));
 
     const attendancePct: Record<string, number> = {};
     const statsByStudent: Record<string, { present: number; total: number }> = {};
@@ -121,11 +198,11 @@ export async function GET() {
     const hifzRatings =
       studentIds.length === 0
         ? []
-        : await prisma.hifzRecord.groupBy({
+        : await withDbRetry("students.hifzQuality", () => prisma.hifzRecord.groupBy({
             by: ["studentId"],
             where: { studentId: { in: studentIds } },
             _avg: { rating: true },
-          });
+          }));
     const qualityScore: Record<string, number> = {};
     for (const row of hifzRatings) {
       if (row._avg.rating) qualityScore[row.studentId] = Number((row._avg.rating * 2).toFixed(1));
@@ -138,7 +215,21 @@ export async function GET() {
       qualityScore: qualityScore[s.id] ?? null,
     }));
 
-    return NextResponse.json({ students: enriched });
+    return NextResponse.json({
+      students: enriched,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+      summary: {
+        total: totalStudents,
+        hifz: hifzStudents,
+        nazra: nazraStudents,
+        atRisk: inactiveStudents,
+      },
+    });
   } catch (error) {
     console.error("Get students error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

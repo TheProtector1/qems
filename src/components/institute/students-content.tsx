@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Search, Plus, Download, Eye, Edit, Trash2,
@@ -9,7 +9,7 @@ import {
   TrendingUp, AlertTriangle, CheckCircle, User, Loader2, RefreshCw, XCircle
 } from "lucide-react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { StudentAvatar } from "@/components/common/student-avatar";
 import { StudentPhotoUpload } from "@/components/common/student-photo-upload";
 import { StudentAuditPanel } from "@/components/institute/student-audit-panel";
@@ -499,6 +499,20 @@ function StudentCard({ student, onEdit, onDelete }: { student: Student; onEdit: 
 
 type ViewMode = "grid" | "list";
 
+type StudentsPagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+type StudentsSummary = {
+  total: number;
+  hifz: number;
+  nazra: number;
+  atRisk: number;
+};
+
 interface StudentsContentProps {
   backHref?: string;
   addHref?: string;
@@ -515,6 +529,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [programFilter, setProgramFilter] = useState(
     searchParams.get("program") && ALL_PROGRAMS.includes(searchParams.get("program")!)
       ? searchParams.get("program")!
@@ -525,6 +540,19 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [page, setPage] = useState(1);
+  const perPage = viewMode === "grid" ? 9 : 8;
+  const [pagination, setPagination] = useState<StudentsPagination>({
+    page: 1,
+    pageSize: perPage,
+    total: 0,
+    totalPages: 1,
+  });
+  const [summary, setSummary] = useState<StudentsSummary>({
+    total: 0,
+    hifz: 0,
+    nazra: 0,
+    atRisk: 0,
+  });
 
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
@@ -533,69 +561,58 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
     return ["All Sections", ...Array.from(sections).sort()];
   }, [students]);
 
-  const fetchStudentsAndTeachers = async () => {
-    setLoading(true);
-    setError(null);
+  const mapStudent = useCallback((s: any): Student => {
+    let prog = "Hifz";
+    if (s.programType === "NAZRA") prog = "Nazra";
+    if (s.programType === "TAJWEED") prog = "Tajweed";
+
+    const enrollmentNames = (s.enrollments || [])
+      .map((e: { class?: { name?: string } }) => e.class?.name)
+      .filter(Boolean);
+    const enrollmentIds = (s.enrollments || []).map((e: { classId: string }) => e.classId);
+
+    return {
+      id: s.id,
+      studentId: s.studentId,
+      name: s.fullName,
+      gender: s.gender,
+      program: prog,
+      class: enrollmentNames.length ? enrollmentNames.join(", ") : "Unassigned",
+      classIds: enrollmentIds,
+      section: "Section 1",
+      teacher: s.teacher?.user?.name || "Unassigned",
+      teacherId: s.teacherId || "",
+      currentJuz: s.currentJuz,
+      currentPara: s.currentPara,
+      hifzDirection: s.hifzDirection,
+      progressStartType: s.progressStartType,
+      previousInstitute: s.previousInstitute,
+      qualityScore: s.qualityScore ?? null,
+      attendancePct: s.attendancePct ?? null,
+      status: s.isActive ? "On Track" : "Needs Attention",
+      admissionDate: formatDate(s.admissionDate),
+      parentName: s.parent?.user?.name || "Parent",
+      parentPhone: s.parent?.user?.phone || s.parent?.user?.email || "—",
+      parentEmail: s.parent?.user?.email || "",
+      dateOfBirth: s.dateOfBirth,
+      city: s.city || "Islamabad",
+      address: s.address || "",
+      photo: s.photo || "",
+    };
+  }, []);
+
+  const fetchMeta = useCallback(async () => {
     try {
-      const [resSt, resCls, resTe] = await Promise.all([
-        fetch("/api/institute/students"),
+      const [resCls, resTe] = await Promise.all([
         fetch("/api/institute/classes"),
         fetch("/api/institute/teachers"),
       ]);
-      if (!resSt.ok) throw new Error("Failed to load students database.");
-      const dataSt = await resSt.json();
-
-      const mapped: Student[] = (dataSt.students || []).map((s: any) => {
-        // Map program type to correct casing
-        let prog = "Hifz";
-        if (s.programType === "NAZRA") prog = "Nazra";
-        if (s.programType === "TAJWEED") prog = "Tajweed";
-
-        const enrollmentNames = (s.enrollments || [])
-          .map((e: { class?: { name?: string } }) => e.class?.name)
-          .filter(Boolean);
-        const enrollmentIds = (s.enrollments || []).map((e: { classId: string }) => e.classId);
-
-        return {
-          id: s.id,
-          studentId: s.studentId,
-          name: s.fullName,
-          gender: s.gender,
-          program: prog,
-          class: enrollmentNames.length ? enrollmentNames.join(", ") : "Unassigned",
-          classIds: enrollmentIds,
-          section: "Section 1",
-          teacher: s.teacher?.user?.name || "Unassigned",
-          teacherId: s.teacherId || "",
-          currentJuz: s.currentJuz,
-          currentPara: s.currentPara,
-          hifzDirection: s.hifzDirection,
-          progressStartType: s.progressStartType,
-          previousInstitute: s.previousInstitute,
-          qualityScore: s.qualityScore ?? null,
-          attendancePct: s.attendancePct ?? null,
-          status: s.isActive ? "On Track" : "Needs Attention",
-          admissionDate: s.admissionDate
-            ? new Date(s.admissionDate).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" })
-            : "—",
-          parentName: s.parent?.user?.name || "Parent",
-          parentPhone: s.parent?.user?.email || "—",
-          parentEmail: s.parent?.user?.email || "",
-          dateOfBirth: s.dateOfBirth,
-          city: s.city || "Islamabad",
-          address: s.address || "",
-          photo: s.photo || "",
-        };
-      });
-
-      setStudents(mapped);
 
       if (resCls.ok) {
         const dataCls = await resCls.json();
         const clsList: InstituteClassOption[] = dataCls.classes || [];
         setInstituteClasses(clsList);
-        const names = clsList.map((c) => c.name);
-        setClassOptions(["All Classes", ...names]);
+        setClassOptions(["All Classes", ...clsList.map((c) => c.name)]);
       }
 
       if (resTe.ok) {
@@ -607,12 +624,47 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
           }))
         );
       }
+    } catch (err) {
+      console.error("Failed to load student metadata", err);
+    }
+  }, []);
+
+  const fetchStudents = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(perPage),
+      });
+      if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+      if (programFilter !== "All Programs") params.set("program", programFilter);
+      if (classFilter !== "All Classes") params.set("class", classFilter);
+      if (statusFilter !== "ALL") params.set("status", statusFilter);
+
+      const resSt = await fetch(`/api/institute/students?${params}`, { signal });
+      if (!resSt.ok) throw new Error("Failed to load students database.");
+      const dataSt = await resSt.json();
+
+      const nextPagination = dataSt.pagination || { page, pageSize: perPage, total: 0, totalPages: 1 };
+      if (page > nextPagination.totalPages && nextPagination.totalPages > 0) {
+        setPage(nextPagination.totalPages);
+      }
+      setStudents((dataSt.students || []).map(mapStudent));
+      setPagination(nextPagination);
+      setSummary(dataSt.summary || { total: 0, hifz: 0, nazra: 0, atRisk: 0 });
     } catch (err: any) {
+      if (err?.name === "AbortError") return;
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [classFilter, debouncedSearch, mapStudent, page, perPage, programFilter, statusFilter]);
+
+  const fetchStudentsAndTeachers = useCallback(() => {
+    fetchMeta();
+    fetchStudents();
+  }, [fetchMeta, fetchStudents]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to remove this student? All login credentials will be removed.")) {
@@ -624,15 +676,26 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
         const data = await res.json();
         throw new Error(data.error || "Failed to delete student.");
       }
-      fetchStudentsAndTeachers();
+      fetchStudents();
     } catch (err: any) {
       alert(err.message);
     }
   };
 
   useEffect(() => {
-    fetchStudentsAndTeachers();
-  }, []);
+    fetchMeta();
+  }, [fetchMeta]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchStudents(controller.signal);
+    return () => controller.abort();
+  }, [fetchStudents]);
 
   useEffect(() => {
     const editId = searchParams.get("edit");
@@ -641,30 +704,25 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
     if (match) setEditingStudent(match);
   }, [searchParams, students]);
 
-  const perPage = viewMode === "grid" ? 9 : 8;
-
   const filtered = students.filter((s) => {
-    const q = search.toLowerCase();
-    const matchSearch = s.name.toLowerCase().includes(q) ||
-      s.studentId.toLowerCase().includes(q) ||
-      s.parentName.toLowerCase().includes(q);
-    const matchProgram = programFilter === "All Programs" || s.program === programFilter;
-    const matchClass =
-      classFilter === "All Classes" ||
-      s.class.split(", ").some((name) => name.trim() === classFilter);
     const matchSection = sectionFilter === "All Sections" || s.section === sectionFilter;
-    const matchStatus = statusFilter === "ALL" || s.status === statusFilter;
-    return matchSearch && matchProgram && matchClass && matchSection && matchStatus;
+    return matchSection;
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const paginated = filtered.slice((page - 1) * perPage, page * perPage);
+  const totalPages = pagination.totalPages;
+  const paginated = filtered;
+  const startItem = pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.pageSize + 1;
+  const endItem = Math.min(pagination.page * pagination.pageSize, pagination.total);
+  const visiblePages = Array.from(
+    { length: Math.min(totalPages, 7) },
+    (_, i) => Math.max(1, Math.min(totalPages - Math.min(totalPages, 7) + 1, page - 3)) + i
+  );
 
   const counts = {
-    total: students.length,
-    hifz: students.filter(s => s.program === "Hifz").length,
-    nazra: students.filter(s => s.program === "Nazra").length,
-    atRisk: students.filter(s => ["Needs Attention", "At Risk"].includes(s.status)).length,
+    total: summary.total,
+    hifz: summary.hifz,
+    nazra: summary.nazra,
+    atRisk: summary.atRisk,
   };
 
   return (
@@ -684,7 +742,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
         <div className="page-header-row">
           <div>
             <h2 className="section-heading">Students</h2>
-            <p className="text-sm text-gray-500 mt-0.5">{students.length} total students enrolled</p>
+            <p className="text-sm text-gray-500 mt-0.5">{summary.total} total students enrolled</p>
           </div>
           <div className="page-header-actions">
             <button className="btn-ghost text-sm py-2" onClick={fetchStudentsAndTeachers} disabled={loading}>
@@ -810,7 +868,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
 
         {/* Results count */}
         <p className="text-xs text-gray-500 px-0.5">
-          Showing {filtered.length} of {students.length} students
+          Showing {startItem}–{endItem} of {pagination.total} matching students
         </p>
 
         {/* Loading / Error States */}
@@ -964,12 +1022,12 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
 
                 {/* Pagination */}
                 <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between text-sm text-gray-500">
-                  <span>Showing {Math.min((page - 1) * perPage + 1, filtered.length)}–{Math.min(page * perPage, filtered.length)} of {filtered.length}</span>
+                  <span>Showing {startItem}–{endItem} of {pagination.total}</span>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
                       <ChevronLeft className="h-4 w-4" />
                     </button>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                    {visiblePages.map((p) => (
                       <button key={p} onClick={() => setPage(p)} className={cn("h-8 w-8 rounded-lg text-sm font-medium transition-colors", p === page ? "bg-primary text-white" : "hover:bg-gray-100 text-gray-600")}>{p}</button>
                     ))}
                     <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
@@ -986,7 +1044,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
                 <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 disabled:opacity-40">
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                {visiblePages.map((p) => (
                   <button key={p} onClick={() => setPage(p)} className={cn("h-9 w-9 rounded-xl text-sm font-medium transition-colors", p === page ? "bg-primary text-white" : "hover:bg-gray-100 text-gray-600")}>{p}</button>
                 ))}
                 <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 disabled:opacity-40">
