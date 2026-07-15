@@ -1,24 +1,24 @@
-# Hourly PostgreSQL backup (runs on GitHub — no Mac required).
+# Half-hourly PostgreSQL backup (runs on GitHub — no Mac required).
 #
 # Setup (one time):
 #   1. GitHub repo → Settings → Secrets and variables → Actions
 #   2. Add secret: QURAN_EDUCATION_DATABASE_URL (same value as Vercel env)
 #      (DATABASE_URL also works as a fallback name)
-#   3. Optional: disable Mac cron — crontab -e and remove the qems-hourly-backup line
+#   3. Optional: disable Mac cron — crontab -e and remove the qems-half-hour-backup line
 #
 # Backups appear under Actions → "Database backup" → latest run → Artifacts.
-# Each artifact is kept for 5 days (matches BACKUP_RETENTION_DAYS).
+# Each artifact is kept for 2 days (matches BACKUP_RETENTION_DAYS).
 
 name: Database backup
 
 on:
   schedule:
-    # Every hour at :00 UTC
-    - cron: "0 * * * *"
+    # Every 30 minutes UTC
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 env:
-  BACKUP_RETENTION_DAYS: "5"
+  BACKUP_RETENTION_DAYS: "2"
 
 jobs:
   backup:
