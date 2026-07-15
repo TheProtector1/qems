@@ -90,13 +90,23 @@ export function weekdayIndexForDateKey(dateKey: string): number {
 
 export function formatDatePK(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  const d = typeof date === "string" ? parseDateOnly(date) : date;
+  const d = typeof date === "string"
+    ? /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? parseDateOnly(date)
+      : new Date(date)
+    : date;
+  if (Number.isNaN(d.getTime())) return "—";
   return shortDateFormatter.format(d);
 }
 
 export function formatLongDatePK(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  const d = typeof date === "string" ? parseDateOnly(date) : date;
+  const d = typeof date === "string"
+    ? /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? parseDateOnly(date)
+      : new Date(date)
+    : date;
+  if (Number.isNaN(d.getTime())) return "—";
   return dateFormatter.format(d);
 }
 
@@ -114,7 +124,12 @@ export function formatDateTimePK(date: Date | string | null | undefined): string
 
 export function formatWeekdayPK(date: Date | string | null | undefined): string {
   if (!date) return "—";
-  const d = typeof date === "string" ? parseDateOnly(date) : date;
+  const d = typeof date === "string"
+    ? /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? parseDateOnly(date)
+      : new Date(date)
+    : date;
+  if (Number.isNaN(d.getTime())) return "—";
   return weekdayFormatter.format(d);
 }
 

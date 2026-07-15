@@ -16,8 +16,9 @@ import { StudentAuditPanel } from "@/components/institute/student-audit-panel";
 import { ClassAssignmentField, type InstituteClassOption } from "@/components/institute/class-assignment-field";
 import { StudentDocumentsManager } from "@/components/institute/student-documents-manager";
 import { HIFZ_DIRECTION_OPTIONS } from "@/lib/hifz-progress";
-import { HifzDirection } from "@prisma/client";
 import { getHifzCompletionPercent } from "@/lib/hifz-progress";
+
+type HifzDirectionValue = "FORWARD" | "REVERSE";
 
 type Student = {
   id: string;
@@ -426,7 +427,7 @@ function StudentCard({ student, onEdit, onDelete }: { student: Student; onEdit: 
                 className="h-full rounded-full bg-gradient-to-r from-primary-500 to-primary-700 transition-all duration-700"
                 style={{
                   width: `${getHifzCompletionPercent(
-                    (student.hifzDirection as HifzDirection) || HifzDirection.REVERSE,
+                    (student.hifzDirection as HifzDirectionValue) || "REVERSE",
                     student.currentPara ?? student.currentJuz
                   )}%`,
                 }}
@@ -965,7 +966,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
                                       className="h-full bg-gradient-primary rounded-full"
                                       style={{
                                         width: `${getHifzCompletionPercent(
-                                          (s.hifzDirection as HifzDirection) || HifzDirection.REVERSE,
+                                          (s.hifzDirection as HifzDirectionValue) || "REVERSE",
                                           s.currentPara ?? s.currentJuz
                                         )}%`,
                                       }}

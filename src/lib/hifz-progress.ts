@@ -1,4 +1,4 @@
-import { HifzDirection } from "@prisma/client";
+import type { HifzDirection } from "@prisma/client";
 
 export const HIFZ_DIRECTION_OPTIONS = [
   {
@@ -16,11 +16,11 @@ export const HIFZ_DIRECTION_OPTIONS = [
 ];
 
 export function parseHifzDirection(value?: string | null): HifzDirection {
-  return value === "FORWARD" ? HifzDirection.FORWARD : HifzDirection.REVERSE;
+  return (value === "FORWARD" ? "FORWARD" : "REVERSE") as HifzDirection;
 }
 
 export function getDefaultStartingJuz(direction: HifzDirection): number {
-  return direction === HifzDirection.REVERSE ? 30 : 1;
+  return direction === "REVERSE" ? 30 : 1;
 }
 
 export function clampJuz(n: number | null | undefined): number | null {
@@ -38,7 +38,7 @@ export function getJuzCellState(
   const current = clampJuz(currentJuz);
   if (!current) return "upcoming";
 
-  if (direction === HifzDirection.FORWARD) {
+  if (direction === "FORWARD") {
     if (juz < current) return "completed";
     if (juz === current) return "current";
     return "upcoming";
@@ -55,7 +55,7 @@ export function getCompletedJuzCount(
 ): number {
   const current = clampJuz(currentJuz);
   if (!current) return 0;
-  if (direction === HifzDirection.FORWARD) return Math.max(0, current - 1);
+  if (direction === "FORWARD") return Math.max(0, current - 1);
   return Math.max(0, 30 - current);
 }
 
@@ -72,14 +72,14 @@ export function getHifzCompletionPercent(
 }
 
 export function getNextPara(direction: HifzDirection, completedPara: number): number | null {
-  if (direction === HifzDirection.FORWARD) {
+  if (direction === "FORWARD") {
     return completedPara < 30 ? completedPara + 1 : null;
   }
   return completedPara > 1 ? completedPara - 1 : null;
 }
 
 export function isLastPara(direction: HifzDirection, para: number): boolean {
-  return direction === HifzDirection.FORWARD ? para === 30 : para === 1;
+  return direction === "FORWARD" ? para === 30 : para === 1;
 }
 
 export type ParaCompletionInfo = {
@@ -123,8 +123,8 @@ export function buildJuzGrid(
 }
 
 export function hifzDirectionLabel(direction: HifzDirection | null | undefined): string {
-  if (direction === HifzDirection.FORWARD) return "Para 1 → 30 (Baqarah first)";
-  if (direction === HifzDirection.REVERSE) return "Para 30 → 1 (Amma first)";
+  if (direction === "FORWARD") return "Para 1 → 30 (Baqarah first)";
+  if (direction === "REVERSE") return "Para 30 → 1 (Amma first)";
   return "—";
 }
 
@@ -134,7 +134,7 @@ export function currentParaLabel(
 ): string {
   const juz = clampJuz(currentJuz);
   if (!juz) return "Not set";
-  if (direction === HifzDirection.REVERSE) {
+  if (direction === "REVERSE") {
     return juz === 1 ? "Para 1 — final juz in progress" : `Para ${juz} — ${30 - juz} para(s) completed from Amma`;
   }
   return juz === 30 ? "Para 30 — final juz in progress" : `Para ${juz} — ${juz - 1} para(s) completed`;
