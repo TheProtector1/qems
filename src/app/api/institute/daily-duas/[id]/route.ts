@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  normalizeCharacterPriority,
-  pickCharacterTaskFields,
-} from "@/lib/character-building";
 
-const taskInclude = {
+const duaInclude = {
   assignments: {
     include: {
       teacher: {
@@ -38,25 +34,37 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (!instituteId) return new NextResponse("Unauthorized", { status: 401 });
 
     const body = await req.json();
-    const { title, description, dueDate, isActive, category, priority, teacherIds } = body;
-    const extra = pickCharacterTaskFields(body);
+    const {
+      title,
+      arabicText,
+      urduTranslation,
+      transliteration,
+      reference,
+      notes,
+      isActive,
+      category,
+      priority,
+      teacherIds,
+    } = body;
 
-    const existing = await prisma.characterTask.findFirst({
+    const existing = await prisma.dailyDua.findFirst({
       where: { id: params.id, instituteId },
     });
     if (!existing) return new NextResponse("Not Found", { status: 404 });
 
     await prisma.$transaction(async (tx) => {
-      await tx.characterTask.update({
+      await tx.dailyDua.update({
         where: { id: params.id },
         data: {
           ...(title !== undefined && { title }),
-          ...(description !== undefined && { description }),
-          ...(dueDate !== undefined && { dueDate: new Date(dueDate) }),
+          ...(arabicText !== undefined && { arabicText }),
+          ...(urduTranslation !== undefined && { urduTranslation }),
+          ...(transliteration !== undefined && { transliteration: transliteration || null }),
+          ...(reference !== undefined && { reference: reference || null }),
+          ...(notes !== undefined && { notes: notes || null }),
           ...(isActive !== undefined && { isActive }),
           ...(category !== undefined && { category }),
-          ...(priority !== undefined && { priority: normalizeCharacterPriority(priority) }),
-          ...extra,
+          ...(priority !== undefined && { priority }),
         },
       });
 
@@ -68,24 +76,24 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         const allowedIds = new Set(instituteTeachers.map((t) => t.id));
         const validIds = teacherIds.filter((id: string) => allowedIds.has(id));
 
-        await tx.characterTaskAssignment.deleteMany({ where: { taskId: params.id } });
+        await tx.dailyDuaAssignment.deleteMany({ where: { duaId: params.id } });
         if (validIds.length) {
-          await tx.characterTaskAssignment.createMany({
-            data: validIds.map((teacherId: string) => ({ taskId: params.id, teacherId })),
+          await tx.dailyDuaAssignment.createMany({
+            data: validIds.map((teacherId: string) => ({ duaId: params.id, teacherId })),
             skipDuplicates: true,
           });
         }
       }
     });
 
-    const task = await prisma.characterTask.findUnique({
+    const dua = await prisma.dailyDua.findUnique({
       where: { id: params.id },
-      include: taskInclude,
+      include: duaInclude,
     });
 
-    return NextResponse.json(task);
+    return NextResponse.json(dua);
   } catch (error) {
-    console.error("[CHARACTER_TASKS_PATCH]", error);
+    console.error("[DAILY_DUAS_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }
 }
@@ -95,13 +103,13 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     const instituteId = authorizeInstitute(await getAuthSession());
     if (!instituteId) return new NextResponse("Unauthorized", { status: 401 });
 
-    const task = await prisma.characterTask.delete({
+    const dua = await prisma.dailyDua.delete({
       where: { id: params.id, instituteId },
     });
 
-    return NextResponse.json(task);
+    return NextResponse.json(dua);
   } catch (error) {
-    console.error("[CHARACTER_TASKS_DELETE]", error);
+    console.error("[DAILY_DUAS_DELETE]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }
 }

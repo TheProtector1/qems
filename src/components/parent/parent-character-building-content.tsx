@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import {
   BookOpen, CalendarDays, CheckCircle2, Loader2, AlertTriangle, Target, Clock, Eye,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import {
   getCategoryMeta,
   getPriorityMeta,
@@ -230,7 +230,7 @@ export function ParentCharacterBuildingContent() {
                       <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-gray-400">
                         <span className="flex items-center gap-1">
                           <CalendarDays className="h-3.5 w-3.5" />
-                          Due {new Date(task.dueDate + "T00:00:00").toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}
+                          Due {formatDate(task.dueDate)}
                         </span>
                         <span>{cat.label}</span>
                       </div>

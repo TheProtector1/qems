@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { HolidayType } from "@prisma/client";
+import { revalidateTag } from "next/cache";
 import {
   clearHolidayAttendanceForRange,
   clearWeeklyHolidayAttendance,
@@ -93,8 +94,15 @@ export async function PATCH(
         await syncHolidayAttendanceForRange(instituteId, syncStart, syncEnd);
       } else if (holiday.startDate && holiday.endDate && holiday.isActive) {
         await syncHolidayAttendanceForRange(instituteId, holiday.startDate, holiday.endDate);
+      } else if (holiday.type === "WEEKLY" && holiday.dayOfWeek !== null && holiday.isActive === false) {
+        const today = new Date();
+        const from = new Date(Date.UTC(today.getUTCFullYear() - 1, 0, 1));
+        const to = new Date(Date.UTC(today.getUTCFullYear() + 1, 11, 31));
+        await clearWeeklyHolidayAttendance(instituteId, holiday.dayOfWeek, from, to);
       }
     }
+
+    revalidateTag(`holidays-${instituteId}`);
 
     return NextResponse.json(serializeHoliday(holiday));
   } catch (error) {
@@ -133,6 +141,8 @@ export async function DELETE(
     } else if (existing.startDate && existing.endDate) {
       await clearHolidayAttendanceForRange(instituteId, existing.startDate, existing.endDate);
     }
+
+    revalidateTag(`holidays-${instituteId}`);
 
     return NextResponse.json({ success: true });
   } catch (error) {

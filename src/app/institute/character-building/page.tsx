@@ -1,14 +1,15 @@
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { CharacterBuildingContent } from "@/components/institute/character-building-content";
+import { CharacterBuildingTabs } from "@/components/institute/character-building-tabs";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-export const metadata = { title: "Character Building Tasks - QEMS" };
+export const metadata = { title: "Character Building & Daily Duas - QEMS" };
 
 export default async function CharacterBuildingPage() {
   const session = await getAuthSession();
   if (!session) redirect("/auth/login");
-  if (session.user.role !== "INSTITUTE_OWNER") redirect("/dashboard");
+  const allowed = ["INSTITUTE_OWNER", "BRANCH_MANAGER", "SUPER_ADMIN"];
+  if (!allowed.includes(session.user.role)) redirect("/dashboard");
 
   return (
     <DashboardShell
@@ -18,7 +19,7 @@ export default async function CharacterBuildingPage() {
         { label: "Character Building" }
       ]}
     >
-      <CharacterBuildingContent />
+      <CharacterBuildingTabs />
     </DashboardShell>
   );
 }

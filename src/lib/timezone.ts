@@ -58,8 +58,16 @@ export function parseDateOnly(value: string): Date {
   return new Date(Date.UTC(y, m - 1, d));
 }
 
-/** Read a stored @db.Date value back as YYYY-MM-DD. */
-export function dateKeyFromStored(date: Date): string {
+/** Read a stored @db.Date / ISO / YYYY-MM-DD value back as YYYY-MM-DD. */
+export function dateKeyFromStored(date: Date | string | null | undefined): string {
+  if (!date) return "";
+  if (typeof date === "string") {
+    if (/^\d{4}-\d{2}-\d{2}/.test(date)) return date.slice(0, 10);
+    const parsed = new Date(date);
+    if (Number.isNaN(parsed.getTime())) return "";
+    return parsed.toISOString().slice(0, 10);
+  }
+  if (Number.isNaN(date.getTime())) return "";
   return date.toISOString().slice(0, 10);
 }
 

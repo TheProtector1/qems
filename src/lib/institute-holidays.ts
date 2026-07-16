@@ -24,8 +24,24 @@ export function eachDateInRange(start: Date, end: Date): Date[] {
   return dates;
 }
 
+function coerceHolidayDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value === "string") {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return parseDateOnly(value);
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
 export function getHolidayForDate(
-  holidays: InstituteHoliday[],
+  holidays: Array<
+    Pick<InstituteHoliday, "id" | "name" | "type" | "isActive" | "dayOfWeek"> & {
+      startDate?: Date | string | null;
+      endDate?: Date | string | null;
+    }
+  >,
   date: Date
 ): HolidayMatch | null {
   const dayOfWeek = date.getUTCDay();
@@ -39,8 +55,11 @@ export function getHolidayForDate(
     }
 
     if ((h.type === "PUBLIC" || h.type === "SCHEDULED") && h.startDate && h.endDate) {
-      const start = dateKey(h.startDate);
-      const end = dateKey(h.endDate);
+      const startDate = coerceHolidayDate(h.startDate);
+      const endDate = coerceHolidayDate(h.endDate);
+      if (!startDate || !endDate) continue;
+      const start = dateKey(startDate);
+      const end = dateKey(endDate);
       if (dk >= start && dk <= end) {
         return { id: h.id, name: h.name, type: h.type };
       }
@@ -180,12 +199,27 @@ export async function clearWeeklyHolidayAttendance(
   return result.count;
 }
 
-export const WEEKDAY_LABELS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-] as const;
+/** Remove HOLIDAY attendance rows for dates that are no longer holidays under current rules. */
+export async function clearStaleHolidayAttendance(
+  instituteId: string,
+  fromDate: Date,
+  toDate: Date
+): Promise<number> {
+  const holidays = await fetchActiveHolidays(instituteId);
+  const staleDates = eachDateInRange(fromDate, toDate).filter(
+    (date) => !getHolidayForDate(holidays, date)
+  );
+  if (staleDates.length === 0) return 0;
+
+  const result = await prisma.attendance.deleteMany({
+    where: {
+      status: "HOLIDAY",
+      date: { in: staleDates },
+      classId: null,
+      student: { instituteId },
+    },
+  });
+  return result.count;
+}
+
+export { WEEKDAY_LABELS } from "@/lib/weekday-labels";

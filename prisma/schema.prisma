@@ -293,6 +293,7 @@ model Institute {
   notifications     Notification[]
   auditLogs         AuditLog[]
   characterTasks    CharacterTask[]
+  dailyDuas         DailyDua[]
   salaryPayments    SalaryPayment[]
   profileChangeRequests ProfileChangeRequest[]
   calendarEvents    CalendarEvent[]
@@ -543,6 +544,8 @@ model Teacher {
   characterTaskProgress CharacterTaskProgress[]
   characterTaskAssignments CharacterTaskAssignment[]
   characterTaskClassProgress CharacterTaskClassProgress[]
+  dailyDuaAssignments DailyDuaAssignment[]
+  dailyDuaClassProgress DailyDuaClassProgress[]
 
   @@index([instituteId])
   @@index([branchId])
@@ -743,6 +746,7 @@ model Class {
   attendance  Attendance[]
   assessments Assessment[]
   characterTaskClassProgress CharacterTaskClassProgress[]
+  dailyDuaClassProgress DailyDuaClassProgress[]
 
   @@index([instituteId])
   @@index([branchId])
@@ -1298,17 +1302,29 @@ model SupportTicket {
 // ─────────────────────────────────────────────
 
 model CharacterTask {
-  id          String   @id @default(cuid())
-  title       String
-  description String?
-  category    String   @default("AKHLAAQ") // AKHLAAQ, ADAB, RESPONSIBILITY, WORSHIP, SOCIAL
-  priority    String   @default("NORMAL")  // HIGH, NORMAL, LOW
-  dueDate     DateTime @db.Date
-  isActive    Boolean  @default(true)
-  instituteId String
-  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                        String   @id @default(cuid())
+  title                     String
+  description               String?
+  islamicObjective          String?
+  quranEvidence             String?
+  hadithEvidence            String?
+  teacherDeliveryNotes      String?
+  practicalClassroomActivity String?
+  dailyObservationChecklist String?
+  homePractice              String?
+  assessmentMethod          String?  // OBSERVED, PARENT_CONFIRMATION, STUDENT_REFLECTION
+  duration                  String?  // ONE_WEEK, TWO_WEEKS, ONE_MONTH
+  ageGroup                  String?
+  repeatCycle               String?  // ONE_TIME, WEEKLY, MONTHLY, CONTINUOUS
+  completionCriteria        String?
+  category                  String   @default("AKHLAAQ") // AKHLAAQ, ADAB, RESPONSIBILITY, WORSHIP, SOCIAL
+  priority                  String   @default("MEDIUM")  // CRITICAL, HIGH, MEDIUM, OPTIONAL (legacy: NORMAL/LOW)
+  dueDate                   DateTime @db.Date
+  isActive                  Boolean  @default(true)
+  instituteId               String
+  institute                 Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
   progress      CharacterTaskProgress[]
   classProgress CharacterTaskClassProgress[]
@@ -1374,6 +1390,67 @@ model CharacterTaskProgress {
   @@unique([taskId, studentId])
   @@index([taskId])
   @@index([studentId])
+}
+
+// ─────────────────────────────────────────────
+// DAILY DUAS
+// ─────────────────────────────────────────────
+
+model DailyDua {
+  id              String   @id @default(cuid())
+  title           String
+  arabicText      String
+  urduTranslation String
+  transliteration String?
+  reference       String?
+  notes           String?
+  category        String   @default("DAILY") // DAILY, MORNING, EVENING, FOOD, TRAVEL, SLEEP, OTHER
+  priority        String   @default("MEDIUM") // CRITICAL, HIGH, MEDIUM, OPTIONAL
+  isActive        Boolean  @default(true)
+  instituteId     String
+  institute       Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  assignments   DailyDuaAssignment[]
+  classProgress DailyDuaClassProgress[]
+
+  @@index([instituteId])
+  @@index([instituteId, isActive])
+}
+
+model DailyDuaAssignment {
+  id         String   @id @default(cuid())
+  duaId      String
+  dua        DailyDua @relation(fields: [duaId], references: [id], onDelete: Cascade)
+  teacherId  String
+  teacher    Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  assignedAt DateTime @default(now())
+
+  @@unique([duaId, teacherId])
+  @@index([duaId])
+  @@index([teacherId])
+}
+
+model DailyDuaClassProgress {
+  id          String   @id @default(cuid())
+  status      String   @default("PENDING") // PENDING, TAUGHT, COMPLETED
+  notes       String?
+  taughtAt    DateTime?
+  completedAt DateTime?
+  duaId       String
+  dua         DailyDua @relation(fields: [duaId], references: [id], onDelete: Cascade)
+  classId     String
+  class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacherId   String
+  teacher     Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([duaId, classId])
+  @@index([duaId])
+  @@index([classId])
+  @@index([teacherId])
 }
 
 // ─────────────────────────────────────────────

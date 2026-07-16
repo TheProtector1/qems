@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertParentOwnsStudent } from "@/lib/parent-portal-data";
-import { computeClassProgressStats, getTaskRollupStatus, isTaskOverdue } from "@/lib/character-task-stats";
+import { computeClassProgressStats } from "@/lib/character-task-stats";
+import { getDuaRollupStatus } from "@/lib/daily-dua";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
     });
 
     if (!parent?.students.length) {
-      return NextResponse.json({ students: [], tasks: [], summary: null });
+      return NextResponse.json({ students: [], duas: [], summary: null });
     }
 
     if (studentId && !(await assertParentOwnsStudent(session.user.id, studentId))) {
@@ -47,13 +48,13 @@ export async function GET(req: Request) {
     }));
 
     const instituteId = parent.students[0].instituteId;
-    const allClassIds = [
-      ...new Set(parent.students.flatMap((s) => s.enrollments.map((e) => e.classId))),
-    ];
+    const allClassIds = Array.from(
+      new Set(parent.students.flatMap((s) => s.enrollments.map((e) => e.classId)))
+    );
 
-    const tasks = await prisma.characterTask.findMany({
+    const duas = await prisma.dailyDua.findMany({
       where: { instituteId, isActive: true },
-      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+      orderBy: [{ createdAt: "desc" }],
       include: {
         classProgress: allClassIds.length
           ? {
@@ -67,22 +68,22 @@ export async function GET(req: Request) {
       },
     });
 
-    const enrichedTasks = tasks.map((task) => {
-      const progress = task.classProgress || [];
+    const enrichedDuas = duas.map((dua) => {
+      const progress = dua.classProgress || [];
       const classIds = progress.map((p) => p.classId);
       const stats = computeClassProgressStats(classIds, progress);
-      const overdue = isTaskOverdue(task.dueDate, task.isActive);
-      const rollup = getTaskRollupStatus(stats, task.dueDate, task.isActive);
+      const rollup = getDuaRollupStatus(stats, dua.isActive);
 
       return {
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        islamicObjective: task.islamicObjective,
-        category: task.category,
-        priority: task.priority,
-        dueDate: task.dueDate.toISOString().slice(0, 10),
-        overdue,
+        id: dua.id,
+        title: dua.title,
+        arabicText: dua.arabicText,
+        urduTranslation: dua.urduTranslation,
+        transliteration: dua.transliteration,
+        reference: dua.reference,
+        notes: dua.notes,
+        category: dua.category,
+        priority: dua.priority,
         rollup,
         stats,
         classProgress: progress.map((p) => ({
@@ -97,22 +98,21 @@ export async function GET(req: Request) {
       };
     });
 
-    const visibleTasks = enrichedTasks.filter((t) => t.classProgress.length > 0);
+    const visibleDuas = enrichedDuas.filter((d) => d.classProgress.length > 0);
 
     const summary = {
-      totalTasks: visibleTasks.length,
-      completedTasks: visibleTasks.filter((t) => t.rollup === "DONE").length,
-      inProgressTasks: visibleTasks.filter((t) => t.rollup === "IN_PROGRESS" || t.rollup === "PENDING").length,
-      overdueTasks: visibleTasks.filter((t) => t.overdue).length,
+      totalDuas: visibleDuas.length,
+      completedDuas: visibleDuas.filter((d) => d.rollup === "DONE").length,
+      inProgressDuas: visibleDuas.filter((d) => d.rollup === "IN_PROGRESS" || d.rollup === "PENDING").length,
     };
 
     return NextResponse.json({
       students: studentsPayload,
-      tasks: visibleTasks,
+      duas: visibleDuas,
       summary,
     });
   } catch (error) {
-    console.error("[PARENT_CHARACTER_BUILDING_GET]", error);
+    console.error("[PARENT_DAILY_DUAS_GET]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -2,19 +2,16 @@
 
 import { useState, useEffect, useMemo } from "react";
 import {
-  CalendarDays, CheckCircle2, BookOpen, Loader2,
-  AlertTriangle, Target, Clock, Filter,
+  CheckCircle2, BookOpen, Loader2, Target, Clock, Filter, Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  getAssessmentMethodMeta,
-  getCategoryMeta,
-  getDurationMeta,
-  getPriorityMeta,
-  getRepeatCycleMeta,
-  getStatusMeta,
-} from "@/lib/character-building";
-import { ROLLUP_LABELS, type TaskRollupStatus } from "@/lib/character-task-stats";
+  getDuaCategoryMeta,
+  getDuaPriorityMeta,
+  getDuaStatusMeta,
+  DUA_ROLLUP_LABELS,
+  type DuaRollupStatus,
+} from "@/lib/daily-dua";
 
 type ClassProgress = {
   id: string;
@@ -26,7 +23,7 @@ type ClassProgress = {
   class: { id: string; name: string; programType: string };
 };
 
-type TaskStats = {
+type DuaStats = {
   completed: number;
   taught: number;
   pending: number;
@@ -34,29 +31,19 @@ type TaskStats = {
   percent: number;
 };
 
-type Task = {
+type Dua = {
   id: string;
   title: string;
-  description: string | null;
+  arabicText: string;
+  urduTranslation: string;
+  transliteration: string | null;
+  reference: string | null;
+  notes: string | null;
   category: string;
   priority: string;
-  dueDate: string;
-  islamicObjective?: string | null;
-  quranEvidence?: string | null;
-  hadithEvidence?: string | null;
-  teacherDeliveryNotes?: string | null;
-  practicalClassroomActivity?: string | null;
-  dailyObservationChecklist?: string | null;
-  homePractice?: string | null;
-  assessmentMethod?: string | null;
-  duration?: string | null;
-  ageGroup?: string | null;
-  repeatCycle?: string | null;
-  completionCriteria?: string | null;
   classProgress?: ClassProgress[];
-  stats: TaskStats;
-  overdue: boolean;
-  rollup: TaskRollupStatus;
+  stats: DuaStats;
+  rollup: DuaRollupStatus;
 };
 
 type TeacherClass = {
@@ -67,82 +54,81 @@ type TeacherClass = {
 };
 
 type Summary = {
-  totalTasks: number;
+  totalDuas: number;
   classesCount: number;
-  overdueTasks: number;
-  completedTasks: number;
-  pendingTasks: number;
+  completedDuas: number;
+  pendingDuas: number;
   classSlotsCompleted: number;
   classSlotsTotal: number;
 };
 
-type TaskFilter = "ALL" | "PENDING" | "OVERDUE" | "DONE";
+type DuaFilter = "ALL" | "PENDING" | "DONE";
 
 function ProgressBar({ percent, className }: { percent: number; className?: string }) {
   return (
     <div className={cn("h-1.5 rounded-full bg-gray-100 overflow-hidden", className)}>
       <div
-        className="h-full rounded-full bg-green-600 transition-all duration-500"
+        className="h-full rounded-full bg-indigo-600 transition-all duration-500"
         style={{ width: `${Math.min(100, percent)}%` }}
       />
     </div>
   );
 }
 
-export function TeacherCharacterBuildingContent() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+export function TeacherDailyDuasContent() {
+  const [duas, setDuas] = useState<Dua[]>([]);
   const [classes, setClasses] = useState<TeacherClass[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>("ALL");
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [duaFilter, setDuaFilter] = useState<DuaFilter>("ALL");
+  const [selectedDua, setSelectedDua] = useState<Dua | null>(null);
   const [selectedClass, setSelectedClass] = useState<TeacherClass | null>(null);
   const [notes, setNotes] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
-  const fetchData = async (keepTaskId?: string) => {
+  const fetchData = async (keepDuaId?: string) => {
     try {
       setLoading(true);
       setLoadError(null);
-      const res = await fetch("/api/teacher/character-tasks");
+      const res = await fetch("/api/teacher/daily-duas");
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setLoadError(data.error || `Could not load tasks (${res.status})`);
-        setTasks([]);
+        setLoadError(data.error || `Could not load duas (${res.status})`);
+        setDuas([]);
         setClasses([]);
         return;
       }
       const data = await res.json();
-      const nextTasks: Task[] = (data.tasks || []).map((t: Task) => ({
-        ...t,
-        classProgress: t.classProgress || [],
+      const nextDuas: Dua[] = (data.duas || []).map((d: Dua) => ({
+        ...d,
+        classProgress: d.classProgress || [],
       }));
       const clsList: TeacherClass[] = data.classes || [];
-      setTasks(nextTasks);
+      setDuas(nextDuas);
       setClasses(clsList);
       setSummary(data.summary || null);
 
-      const taskId = keepTaskId || selectedTask?.id;
-      const nextTask = taskId ? nextTasks.find((t) => t.id === taskId) : nextTasks[0];
-      if (nextTask) {
-        setSelectedTask(nextTask);
+      const duaId = keepDuaId || selectedDua?.id;
+      const nextDua = duaId ? nextDuas.find((d) => d.id === duaId) : nextDuas[0];
+      if (nextDua) {
+        setSelectedDua(nextDua);
         const firstPending = clsList.find((cls) => {
-          const prog = (nextTask.classProgress || []).find((p) => p.classId === cls.id);
+          const prog = (nextDua.classProgress || []).find((p) => p.classId === cls.id);
           return !prog || prog.status === "PENDING";
         });
         const pick = firstPending || clsList[0];
-        if (pick && (!selectedClass || keepTaskId)) {
-          const prog = (nextTask.classProgress || []).find((p) => p.classId === pick.id);
+        if (pick && (!selectedClass || keepDuaId)) {
+          const prog = (nextDua.classProgress || []).find((p) => p.classId === pick.id);
           setSelectedClass(pick);
           setNotes(prog?.notes || "");
         }
       } else {
-        setSelectedTask(null);
+        setSelectedDua(null);
       }
     } catch {
-      setLoadError("Failed to load character building tasks.");
+      setLoadError("Failed to load daily duas.");
     } finally {
       setLoading(false);
     }
@@ -150,20 +136,19 @@ export function TeacherCharacterBuildingContent() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((t) => {
-      if (taskFilter === "ALL") return true;
-      if (taskFilter === "DONE") return t.rollup === "DONE";
-      if (taskFilter === "OVERDUE") return t.rollup === "OVERDUE";
-      if (taskFilter === "PENDING") return t.rollup === "PENDING" || t.rollup === "IN_PROGRESS";
+  const filteredDuas = useMemo(() => {
+    return duas.filter((d) => {
+      if (duaFilter === "ALL") return true;
+      if (duaFilter === "DONE") return d.rollup === "DONE";
+      if (duaFilter === "PENDING") return d.rollup === "PENDING" || d.rollup === "IN_PROGRESS";
       return true;
     });
-  }, [tasks, taskFilter]);
+  }, [duas, duaFilter]);
 
   const selectedProgress = useMemo(() => {
-    if (!selectedTask || !selectedClass) return null;
-    return (selectedTask.classProgress || []).find((p) => p.classId === selectedClass.id) || null;
-  }, [selectedTask, selectedClass]);
+    if (!selectedDua || !selectedClass) return null;
+    return (selectedDua.classProgress || []).find((p) => p.classId === selectedClass.id) || null;
+  }, [selectedDua, selectedClass]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -174,22 +159,22 @@ export function TeacherCharacterBuildingContent() {
     status: "PENDING" | "TAUGHT" | "COMPLETED",
     classIds?: string[]
   ) => {
-    if (!selectedTask) return;
+    if (!selectedDua) return;
     setSaving(true);
     try {
       const isBulk = classIds && classIds.length > 1;
       const res = await fetch(
         isBulk
-          ? "/api/teacher/character-tasks/class-progress/bulk"
-          : "/api/teacher/character-tasks/class-progress",
+          ? "/api/teacher/daily-duas/class-progress/bulk"
+          : "/api/teacher/daily-duas/class-progress",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
             isBulk
-              ? { taskId: selectedTask.id, status, notes, classIds }
+              ? { duaId: selectedDua.id, status, notes, classIds }
               : {
-                  taskId: selectedTask.id,
+                  duaId: selectedDua.id,
                   classId: classIds?.[0] || selectedClass?.id,
                   status,
                   notes,
@@ -201,7 +186,7 @@ export function TeacherCharacterBuildingContent() {
         const label =
           status === "COMPLETED" ? "Completed" : status === "TAUGHT" ? "Marked taught" : "Reset";
         showToast(isBulk ? `${label} for all classes ✓` : `${label} ✓`);
-        await fetchData(selectedTask.id);
+        await fetchData(selectedDua.id);
       } else {
         const data = await res.json().catch(() => ({}));
         showToast(data.error || "Update failed");
@@ -215,14 +200,14 @@ export function TeacherCharacterBuildingContent() {
     cls: TeacherClass,
     status: "TAUGHT" | "COMPLETED"
   ) => {
-    if (!selectedTask) return;
+    if (!selectedDua) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/teacher/character-tasks/class-progress", {
+      const res = await fetch("/api/teacher/daily-duas/class-progress", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          taskId: selectedTask.id,
+          duaId: selectedDua.id,
           classId: cls.id,
           status,
           notes: selectedClass?.id === cls.id ? notes : undefined,
@@ -230,7 +215,7 @@ export function TeacherCharacterBuildingContent() {
       });
       if (res.ok) {
         showToast(`${cls.name}: ${status === "COMPLETED" ? "Completed" : "Taught"} ✓`);
-        await fetchData(selectedTask.id);
+        await fetchData(selectedDua.id);
       }
     } finally {
       setSaving(false);
@@ -238,22 +223,22 @@ export function TeacherCharacterBuildingContent() {
   };
 
   const completeAllPending = () => {
-    if (!selectedTask) return;
+    if (!selectedDua) return;
     const pendingIds = classes
       .filter((cls) => {
-        const prog = (selectedTask.classProgress || []).find((p) => p.classId === cls.id);
+        const prog = (selectedDua.classProgress || []).find((p) => p.classId === cls.id);
         return !prog || prog.status !== "COMPLETED";
       })
       .map((c) => c.id);
     if (!pendingIds.length) return;
-    if (!confirm(`Mark ${pendingIds.length} class(es) as completed for this task?`)) return;
+    if (!confirm(`Mark ${pendingIds.length} class(es) as completed for this dua?`)) return;
     markStatus("COMPLETED", pendingIds);
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24 text-gray-400">
-        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading your assigned tasks…
+        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading your assigned duas…
       </div>
     );
   }
@@ -269,43 +254,25 @@ export function TeacherCharacterBuildingContent() {
     );
   }
 
-  if (!tasks.length) {
+  if (!duas.length) {
     return (
       <div className="dash-card p-12 text-center max-w-lg mx-auto">
-        <span className="text-5xl">📋</span>
-        <h3 className="font-display font-bold text-gray-900 mt-4">No tasks assigned yet</h3>
+        <span className="text-5xl">🤲</span>
+        <h3 className="font-display font-bold text-gray-900 mt-4">No duas assigned yet</h3>
         <p className="text-sm text-gray-500 mt-2">
-          Your institute owner will assign character building tasks to you. Check back soon.
+          Your institute owner will assign daily duas to you. Check back soon.
         </p>
       </div>
     );
   }
 
-  const cat = selectedTask ? getCategoryMeta(selectedTask.category) : null;
-  const statusMeta = selectedProgress ? getStatusMeta(selectedProgress.status) : null;
-  const durationMeta = selectedTask ? getDurationMeta(selectedTask.duration) : null;
-  const assessmentMeta = selectedTask ? getAssessmentMethodMeta(selectedTask.assessmentMethod) : null;
-  const repeatMeta = selectedTask ? getRepeatCycleMeta(selectedTask.repeatCycle) : null;
-
-  const taskDetailSections = selectedTask
-    ? (
-        [
-          { label: "Islamic Objective", value: selectedTask.islamicObjective },
-          { label: "Qur'an Evidence", value: selectedTask.quranEvidence },
-          { label: "Hadith Evidence", value: selectedTask.hadithEvidence },
-          { label: "Teacher Delivery Notes", value: selectedTask.teacherDeliveryNotes },
-          { label: "Practical Classroom Activity", value: selectedTask.practicalClassroomActivity },
-          { label: "Daily Observation Checklist", value: selectedTask.dailyObservationChecklist },
-          { label: "Home Practice", value: selectedTask.homePractice },
-          { label: "Completion Criteria", value: selectedTask.completionCriteria },
-        ] as const
-      ).filter((s) => s.value)
-    : [];
+  const cat = selectedDua ? getDuaCategoryMeta(selectedDua.category) : null;
+  const statusMeta = selectedProgress ? getDuaStatusMeta(selectedProgress.status) : null;
 
   return (
     <div className="space-y-6">
       {toast && (
-        <div className="fixed top-20 sm:top-6 left-4 right-4 sm:left-auto sm:right-6 z-50 bg-green-800 text-white px-4 py-2 rounded-xl shadow-lg text-sm font-medium text-center sm:text-left">
+        <div className="fixed top-20 sm:top-6 left-4 right-4 sm:left-auto sm:right-6 z-50 bg-indigo-800 text-white px-4 py-2 rounded-xl shadow-lg text-sm font-medium text-center sm:text-left">
           {toast}
         </div>
       )}
@@ -314,9 +281,9 @@ export function TeacherCharacterBuildingContent() {
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Assigned tasks", value: summary.totalTasks, icon: Target, color: "text-blue-700 bg-blue-50" },
-            { label: "Overdue", value: summary.overdueTasks, icon: AlertTriangle, color: "text-red-700 bg-red-50" },
-            { label: "Fully done", value: summary.completedTasks, icon: CheckCircle2, color: "text-green-700 bg-green-50" },
+            { label: "Assigned duas", value: summary.totalDuas, icon: Target, color: "text-indigo-700 bg-indigo-50" },
+            { label: "My classes", value: summary.classesCount, icon: Moon, color: "text-violet-700 bg-violet-50" },
+            { label: "Fully done", value: summary.completedDuas, icon: CheckCircle2, color: "text-green-700 bg-green-50" },
             {
               label: "Class slots done",
               value: `${summary.classSlotsCompleted}/${summary.classSlotsTotal}`,
@@ -337,7 +304,7 @@ export function TeacherCharacterBuildingContent() {
 
       {!classes.length && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <p className="font-semibold">Tasks are assigned, but no classes are linked to your account.</p>
+          <p className="font-semibold">Duas are assigned, but no classes are linked to your account.</p>
           <p className="text-xs mt-1 text-amber-800">
             Ask your institute to assign you to classes under Students → Classes before you can mark progress.
           </p>
@@ -347,14 +314,14 @@ export function TeacherCharacterBuildingContent() {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <Filter className="h-4 w-4 text-gray-400" />
-        {(["ALL", "PENDING", "OVERDUE", "DONE"] as const).map((f) => (
+        {(["ALL", "PENDING", "DONE"] as const).map((f) => (
           <button
             key={f}
             type="button"
-            onClick={() => setTaskFilter(f)}
+            onClick={() => setDuaFilter(f)}
             className={cn(
               "px-3 py-1 rounded-lg text-xs font-semibold transition-colors",
-              taskFilter === f ? "bg-green-700 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              duaFilter === f ? "bg-indigo-700 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             )}
           >
             {f === "ALL" ? "All" : f.charAt(0) + f.slice(1).toLowerCase()}
@@ -363,59 +330,50 @@ export function TeacherCharacterBuildingContent() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Task list */}
+        {/* Dua list */}
         <div className="lg:col-span-1 space-y-3">
           <h3 className="font-semibold text-gray-900 text-sm uppercase tracking-wider">
-            Assigned Tasks ({filteredTasks.length})
+            Assigned Duas ({filteredDuas.length})
           </h3>
-          {filteredTasks.map((task) => {
-            const meta = getCategoryMeta(task.category);
-            const pri = getPriorityMeta(task.priority);
-            const rollup = ROLLUP_LABELS[task.rollup];
-            const dur = getDurationMeta(task.duration);
-            const assess = getAssessmentMethodMeta(task.assessmentMethod);
+          {filteredDuas.map((dua) => {
+            const meta = getDuaCategoryMeta(dua.category);
+            const pri = getDuaPriorityMeta(dua.priority);
+            const rollup = DUA_ROLLUP_LABELS[dua.rollup];
             return (
               <button
-                key={task.id}
+                key={dua.id}
                 type="button"
                 onClick={() => {
-                  setSelectedTask(task);
+                  setSelectedDua(dua);
                   const first = classes[0];
                   if (first) {
                     setSelectedClass(first);
-                    const prog = (task.classProgress || []).find((p) => p.classId === first.id);
+                    const prog = (dua.classProgress || []).find((p) => p.classId === first.id);
                     setNotes(prog?.notes || "");
                   }
                 }}
                 className={cn(
                   "w-full text-left dash-card p-4 transition-all",
-                  selectedTask?.id === task.id && "ring-2 ring-green-600",
-                  task.overdue && "border-red-200"
+                  selectedDua?.id === dua.id && "ring-2 ring-indigo-600"
                 )}
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <span className={cn("pill text-[10px] py-0.5", meta.bg, meta.text)}>{meta.label}</span>
                   <span className={cn("pill text-[9px] py-0.5", rollup.pill)}>{rollup.label}</span>
                 </div>
-                <p className="font-semibold text-gray-900 text-sm leading-snug">{task.title}</p>
+                <p className="font-semibold text-gray-900 text-sm leading-snug">{dua.title}</p>
+                <p dir="rtl" lang="ar" className="font-arabic text-sm text-gray-500 mt-1 text-right line-clamp-1">
+                  {dua.arabicText}
+                </p>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   <span className={cn("pill text-[9px] py-0", pri.pill)}>{pri.label}</span>
-                  {dur && <span className="pill text-[9px] py-0 bg-violet-50 text-violet-700">{dur.label}</span>}
-                  {assess && <span className="pill text-[9px] py-0 bg-sky-50 text-sky-700">{assess.label}</span>}
-                  <span className={cn(
-                    "text-[10px] flex items-center gap-0.5",
-                    task.overdue ? "text-red-600 font-semibold" : "text-gray-400"
-                  )}>
-                    <CalendarDays className="h-3 w-3" />
-                    {new Date(task.dueDate).toLocaleDateString()}
-                  </span>
                 </div>
                 <div className="mt-3">
                   <div className="flex justify-between text-[10px] text-gray-500 mb-1">
-                    <span>{task.stats.completed}/{task.stats.total} classes done</span>
-                    <span>{task.stats.percent}%</span>
+                    <span>{dua.stats.completed}/{dua.stats.total} classes done</span>
+                    <span>{dua.stats.percent}%</span>
                   </div>
-                  <ProgressBar percent={task.stats.percent} />
+                  <ProgressBar percent={dua.stats.percent} />
                 </div>
               </button>
             );
@@ -424,34 +382,20 @@ export function TeacherCharacterBuildingContent() {
 
         {/* Detail panel */}
         <div className="lg:col-span-2 space-y-4">
-          {selectedTask && classes.length > 0 ? (
+          {selectedDua && classes.length > 0 ? (
             <>
-              <div className="dash-card p-5 bg-gradient-to-r from-primary-50 to-emerald-50 border-primary-100">
+              <div className="dash-card p-5 bg-gradient-to-r from-indigo-50 to-violet-50 border-indigo-100">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
                     <span className="text-2xl">{cat?.icon}</span>
-                    <div>
-                      <h3 className="font-display text-xl font-bold text-gray-900">{selectedTask.title}</h3>
-                      {selectedTask.description && (
-                        <p className="text-sm text-gray-600 mt-1">{selectedTask.description}</p>
+                    <div className="min-w-0">
+                      <h3 className="font-display text-xl font-bold text-gray-900">{selectedDua.title}</h3>
+                      {selectedDua.notes && (
+                        <p className="text-sm text-gray-600 mt-1">{selectedDua.notes}</p>
                       )}
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {durationMeta && (
-                          <span className="pill text-[10px] py-0 bg-violet-50 text-violet-700">{durationMeta.label}</span>
-                        )}
-                        {assessmentMeta && (
-                          <span className="pill text-[10px] py-0 bg-sky-50 text-sky-700">{assessmentMeta.label}</span>
-                        )}
-                        {repeatMeta && (
-                          <span className="pill text-[10px] py-0 bg-gray-100 text-gray-600">{repeatMeta.label}</span>
-                        )}
-                        {selectedTask.ageGroup && (
-                          <span className="pill text-[10px] py-0 bg-amber-50 text-amber-700">{selectedTask.ageGroup}</span>
-                        )}
-                      </div>
                     </div>
                   </div>
-                  {selectedTask.stats.pending > 0 && (
+                  {selectedDua.stats.pending > 0 && (
                     <button
                       type="button"
                       disabled={saving}
@@ -462,23 +406,23 @@ export function TeacherCharacterBuildingContent() {
                     </button>
                   )}
                 </div>
-              </div>
 
-              {taskDetailSections.length > 0 && (
-                <div className="dash-card p-5 space-y-4">
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Task guidance</h4>
-                  <div className="space-y-3">
-                    {taskDetailSections.map((section) => (
-                      <div key={section.label}>
-                        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5">
-                          {section.label}
-                        </p>
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{section.value}</p>
-                      </div>
-                    ))}
-                  </div>
+                {/* Dua text for teaching */}
+                <div className="mt-4 rounded-xl bg-white/80 border border-indigo-100 p-4">
+                  <p dir="rtl" lang="ar" className="font-arabic text-2xl leading-loose text-gray-900 text-right">
+                    {selectedDua.arabicText}
+                  </p>
+                  {selectedDua.transliteration && (
+                    <p className="text-sm text-gray-500 italic mt-3">{selectedDua.transliteration}</p>
+                  )}
+                  <p dir="rtl" lang="ur" className="font-urdu text-base leading-loose text-gray-700 text-right mt-3">
+                    {selectedDua.urduTranslation}
+                  </p>
+                  {selectedDua.reference && (
+                    <p className="text-xs text-gray-400 mt-3">— {selectedDua.reference}</p>
+                  )}
                 </div>
-              )}
+              </div>
 
               {/* Class grid with quick actions */}
               <div>
@@ -487,15 +431,15 @@ export function TeacherCharacterBuildingContent() {
                 </p>
                 <div className="grid sm:grid-cols-2 gap-3">
                   {classes.map((cls) => {
-                    const prog = (selectedTask.classProgress || []).find((p) => p.classId === cls.id);
-                    const sm = prog ? getStatusMeta(prog.status) : getStatusMeta("PENDING");
+                    const prog = (selectedDua.classProgress || []).find((p) => p.classId === cls.id);
+                    const sm = prog ? getDuaStatusMeta(prog.status) : getDuaStatusMeta("PENDING");
                     const isSelected = selectedClass?.id === cls.id;
                     return (
                       <div
                         key={cls.id}
                         className={cn(
                           "rounded-xl border p-4 transition-all",
-                          isSelected ? "border-green-600 bg-green-50/50 ring-1 ring-green-500/30" : "border-gray-200 bg-white"
+                          isSelected ? "border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-500/30" : "border-gray-200 bg-white"
                         )}
                       >
                         <button
@@ -562,7 +506,7 @@ export function TeacherCharacterBuildingContent() {
                   <textarea
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Discussion points, homework, or observations for this class…"
+                    placeholder="Memorization progress, recitation notes, or observations for this class…"
                     rows={3}
                     className="form-input resize-none mb-4"
                   />
@@ -582,10 +526,10 @@ export function TeacherCharacterBuildingContent() {
                 </div>
               )}
             </>
-          ) : selectedTask && !classes.length ? (
+          ) : selectedDua && !classes.length ? (
             <div className="dash-card p-8 text-center text-gray-500 text-sm">
-              <p className="font-medium text-gray-800">{selectedTask.title}</p>
-              <p className="mt-2">Link classes to your teacher account to start marking this task.</p>
+              <p className="font-medium text-gray-800">{selectedDua.title}</p>
+              <p className="mt-2">Link classes to your teacher account to start marking this dua.</p>
             </div>
           ) : null}
         </div>

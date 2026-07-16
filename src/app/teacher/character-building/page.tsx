@@ -1,9 +1,9 @@
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { TeacherCharacterBuildingContent } from "@/components/teacher/teacher-character-building-content";
+import { TeacherCharacterBuildingTabs } from "@/components/teacher/teacher-character-building-tabs";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-export const metadata = { title: "Character Building - Teacher Hub" };
+export const metadata = { title: "Character Building & Daily Duas - Teacher Hub" };
 
 export default async function TeacherCharacterBuildingPage() {
   const session = await getAuthSession();
@@ -18,7 +18,7 @@ export default async function TeacherCharacterBuildingPage() {
         { label: "Character Building" }
       ]}
     >
-      <TeacherCharacterBuildingContent />
+      <TeacherCharacterBuildingTabs />
     </DashboardShell>
   );
 }

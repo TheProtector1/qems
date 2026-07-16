@@ -3,29 +3,20 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import {
-  Plus, Edit2, Trash2, CalendarDays, X, Users, Sparkles, Target,
-  Loader2, Search, ChevronRight,
+  Plus, Edit2, Trash2, X, Users, Sparkles, BookOpen,
+  Loader2, Search, ChevronRight, Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  CHARACTER_ASSESSMENT_METHODS,
-  CHARACTER_CATEGORIES,
-  CHARACTER_DURATIONS,
-  CHARACTER_PRIORITIES,
-  CHARACTER_REPEAT_CYCLES,
-  CHARACTER_STATUSES,
-  getAssessmentMethodMeta,
-  getCategoryMeta,
-  getDurationMeta,
-  getPriorityMeta,
-  getStatusMeta,
-  normalizeCharacterPriority,
-} from "@/lib/character-building";
-import { ROLLUP_LABELS, type TaskRollupStatus } from "@/lib/character-task-stats";
-
-const FORM_PRIORITIES = CHARACTER_PRIORITIES.filter((p) =>
-  ["CRITICAL", "HIGH", "MEDIUM", "OPTIONAL"].includes(p.value)
-);
+  DUA_CATEGORIES,
+  DUA_PRIORITIES,
+  DUA_STATUSES,
+  getDuaCategoryMeta,
+  getDuaPriorityMeta,
+  getDuaStatusMeta,
+  DUA_ROLLUP_LABELS,
+  type DuaRollupStatus,
+} from "@/lib/daily-dua";
 
 type TeacherOption = {
   id: string;
@@ -50,7 +41,7 @@ type ClassProgress = {
   teacher?: { user: { name: string } } | null;
 };
 
-type TaskStats = {
+type DuaStats = {
   completed: number;
   taught: number;
   pending: number;
@@ -58,37 +49,26 @@ type TaskStats = {
   percent: number;
 };
 
-type Task = {
+type Dua = {
   id: string;
   title: string;
-  description: string | null;
+  arabicText: string;
+  urduTranslation: string;
+  transliteration: string | null;
+  reference: string | null;
+  notes: string | null;
   category: string;
   priority: string;
-  dueDate: string;
   isActive: boolean;
-  islamicObjective: string | null;
-  quranEvidence: string | null;
-  hadithEvidence: string | null;
-  teacherDeliveryNotes: string | null;
-  practicalClassroomActivity: string | null;
-  dailyObservationChecklist: string | null;
-  homePractice: string | null;
-  assessmentMethod: string | null;
-  duration: string | null;
-  ageGroup: string | null;
-  repeatCycle: string | null;
-  completionCriteria: string | null;
   classProgress: ClassProgress[];
   assignments: Assignment[];
-  stats: TaskStats;
-  overdue: boolean;
-  rollup: TaskRollupStatus;
+  stats: DuaStats;
+  rollup: DuaRollupStatus;
   expectedClassCount: number;
 };
 
 type ApiSummary = {
-  activeTasks: number;
-  overdueTasks: number;
+  activeDuas: number;
   fullyComplete: number;
   teachersInvolved: number;
   classCompletionRate: number;
@@ -117,35 +97,26 @@ function ProgressRing({ percent, size = 48 }: { percent: number; size?: number }
   );
 }
 
-export function CharacterBuildingContent() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+export function DailyDuasContent() {
+  const [duas, setDuas] = useState<Dua[]>([]);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [apiSummary, setApiSummary] = useState<ApiSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "OVERDUE" | "DONE">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "DONE">("ALL");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [viewingProgressTask, setViewingProgressTask] = useState<Task | null>(null);
+  const [editingDua, setEditingDua] = useState<Dua | null>(null);
+  const [viewingProgressDua, setViewingProgressDua] = useState<Dua | null>(null);
   const [progressSearch, setProgressSearch] = useState("");
 
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [islamicObjective, setIslamicObjective] = useState("");
-  const [quranEvidence, setQuranEvidence] = useState("");
-  const [hadithEvidence, setHadithEvidence] = useState("");
-  const [teacherDeliveryNotes, setTeacherDeliveryNotes] = useState("");
-  const [practicalClassroomActivity, setPracticalClassroomActivity] = useState("");
-  const [dailyObservationChecklist, setDailyObservationChecklist] = useState("");
-  const [homePractice, setHomePractice] = useState("");
-  const [assessmentMethod, setAssessmentMethod] = useState("");
-  const [duration, setDuration] = useState("");
-  const [ageGroup, setAgeGroup] = useState("");
-  const [repeatCycle, setRepeatCycle] = useState("");
-  const [completionCriteria, setCompletionCriteria] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [category, setCategory] = useState("AKHLAAQ");
+  const [arabicText, setArabicText] = useState("");
+  const [urduTranslation, setUrduTranslation] = useState("");
+  const [transliteration, setTransliteration] = useState("");
+  const [reference, setReference] = useState("");
+  const [notes, setNotes] = useState("");
+  const [category, setCategory] = useState("DAILY");
   const [priority, setPriority] = useState("MEDIUM");
   const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -184,13 +155,13 @@ export function CharacterBuildingContent() {
     }
   }, []);
 
-  const fetchTasks = async () => {
+  const fetchDuas = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/institute/character-tasks");
+      const res = await fetch("/api/institute/daily-duas");
       if (res.ok) {
         const data = await res.json();
-        setTasks(data.tasks || []);
+        setDuas(data.duas || []);
         setApiSummary(data.summary || null);
         if (Array.isArray(data.teachers) && data.teachers.length > 0) {
           setTeachers(data.teachers);
@@ -204,50 +175,39 @@ export function CharacterBuildingContent() {
   };
 
   useEffect(() => {
-    fetchTasks();
+    fetchDuas();
     loadTeachers();
   }, [loadTeachers]);
 
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((t) => {
-      const catOk = categoryFilter === "ALL" || t.category === categoryFilter;
+  const filteredDuas = useMemo(() => {
+    return duas.filter((d) => {
+      const catOk = categoryFilter === "ALL" || d.category === categoryFilter;
       const statusOk =
         statusFilter === "ALL" ||
-        (statusFilter === "ACTIVE" && t.isActive) ||
-        (statusFilter === "OVERDUE" && t.overdue && t.isActive) ||
-        (statusFilter === "DONE" && t.rollup === "DONE");
+        (statusFilter === "ACTIVE" && d.isActive) ||
+        (statusFilter === "DONE" && d.rollup === "DONE");
       return catOk && statusOk;
     });
-  }, [tasks, categoryFilter, statusFilter]);
+  }, [duas, categoryFilter, statusFilter]);
 
   const stats = apiSummary || {
-    activeTasks: tasks.filter((t) => t.isActive).length,
-    overdueTasks: tasks.filter((t) => t.overdue).length,
-    fullyComplete: tasks.filter((t) => t.rollup === "DONE").length,
-    teachersInvolved: new Set(tasks.flatMap((t) => t.assignments.map((a) => a.teacherId))).size,
+    activeDuas: duas.filter((d) => d.isActive).length,
+    fullyComplete: duas.filter((d) => d.rollup === "DONE").length,
+    teachersInvolved: new Set(duas.flatMap((d) => d.assignments.map((a) => a.teacherId))).size,
     classCompletionRate: 0,
   };
 
   const resetForm = () => {
     setTitle("");
-    setDescription("");
-    setIslamicObjective("");
-    setQuranEvidence("");
-    setHadithEvidence("");
-    setTeacherDeliveryNotes("");
-    setPracticalClassroomActivity("");
-    setDailyObservationChecklist("");
-    setHomePractice("");
-    setAssessmentMethod("");
-    setDuration("");
-    setAgeGroup("");
-    setRepeatCycle("");
-    setCompletionCriteria("");
-    setDueDate("");
-    setCategory("AKHLAAQ");
+    setArabicText("");
+    setUrduTranslation("");
+    setTransliteration("");
+    setReference("");
+    setNotes("");
+    setCategory("DAILY");
     setPriority("MEDIUM");
     setSelectedTeacherIds([]);
-    setEditingTask(null);
+    setEditingDua(null);
   };
 
   const openNewModal = () => {
@@ -256,26 +216,17 @@ export function CharacterBuildingContent() {
     setIsModalOpen(true);
   };
 
-  const openEditModal = (task: Task) => {
-    setEditingTask(task);
-    setTitle(task.title);
-    setDescription(task.description || "");
-    setIslamicObjective(task.islamicObjective || "");
-    setQuranEvidence(task.quranEvidence || "");
-    setHadithEvidence(task.hadithEvidence || "");
-    setTeacherDeliveryNotes(task.teacherDeliveryNotes || "");
-    setPracticalClassroomActivity(task.practicalClassroomActivity || "");
-    setDailyObservationChecklist(task.dailyObservationChecklist || "");
-    setHomePractice(task.homePractice || "");
-    setAssessmentMethod(task.assessmentMethod || "");
-    setDuration(task.duration || "");
-    setAgeGroup(task.ageGroup || "");
-    setRepeatCycle(task.repeatCycle || "");
-    setCompletionCriteria(task.completionCriteria || "");
-    setDueDate(task.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : "");
-    setCategory(task.category || "AKHLAAQ");
-    setPriority(normalizeCharacterPriority(task.priority));
-    setSelectedTeacherIds(task.assignments.map((a) => a.teacherId));
+  const openEditModal = (dua: Dua) => {
+    setEditingDua(dua);
+    setTitle(dua.title);
+    setArabicText(dua.arabicText);
+    setUrduTranslation(dua.urduTranslation);
+    setTransliteration(dua.transliteration || "");
+    setReference(dua.reference || "");
+    setNotes(dua.notes || "");
+    setCategory(dua.category || "DAILY");
+    setPriority(dua.priority || "MEDIUM");
+    setSelectedTeacherIds(dua.assignments.map((a) => a.teacherId));
     loadTeachers();
     setIsModalOpen(true);
   };
@@ -290,74 +241,65 @@ export function CharacterBuildingContent() {
     setSelectedTeacherIds(teachers.map((t) => t.id));
   };
 
-  const saveTask = async (e: React.FormEvent) => {
+  const saveDua = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTeacherIds.length) return;
     setSaving(true);
     try {
       const payload = {
         title,
-        description: description || null,
-        islamicObjective: islamicObjective || null,
-        quranEvidence: quranEvidence || null,
-        hadithEvidence: hadithEvidence || null,
-        teacherDeliveryNotes: teacherDeliveryNotes || null,
-        practicalClassroomActivity: practicalClassroomActivity || null,
-        dailyObservationChecklist: dailyObservationChecklist || null,
-        homePractice: homePractice || null,
-        assessmentMethod: assessmentMethod || null,
-        duration: duration || null,
-        ageGroup: ageGroup || null,
-        repeatCycle: repeatCycle || null,
-        completionCriteria: completionCriteria || null,
-        dueDate,
+        arabicText,
+        urduTranslation,
+        transliteration,
+        reference,
+        notes,
         category,
         priority,
         teacherIds: selectedTeacherIds,
       };
-      const res = editingTask
-        ? await fetch(`/api/institute/character-tasks/${editingTask.id}`, {
+      const res = editingDua
+        ? await fetch(`/api/institute/daily-duas/${editingDua.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           })
-        : await fetch("/api/institute/character-tasks", {
+        : await fetch("/api/institute/daily-duas", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
       if (res.ok) {
-        fetchTasks();
+        fetchDuas();
         setIsModalOpen(false);
         resetForm();
       } else {
         const data = await res.json().catch(() => ({}));
-        alert(data.error || "Failed to save task. Make sure teachers are selected.");
+        alert(data.error || "Failed to save dua. Make sure required fields are filled and teachers selected.");
       }
     } finally {
       setSaving(false);
     }
   };
 
-  const toggleStatus = async (task: Task) => {
-    await fetch(`/api/institute/character-tasks/${task.id}`, {
+  const toggleStatus = async (dua: Dua) => {
+    await fetch(`/api/institute/daily-duas/${dua.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive: !task.isActive }),
+      body: JSON.stringify({ isActive: !dua.isActive }),
     });
-    fetchTasks();
+    fetchDuas();
   };
 
-  const deleteTask = async (id: string) => {
-    if (!confirm("Delete this character building task?")) return;
-    await fetch(`/api/institute/character-tasks/${id}`, { method: "DELETE" });
-    fetchTasks();
+  const deleteDua = async (id: string) => {
+    if (!confirm("Delete this dua?")) return;
+    await fetch(`/api/institute/daily-duas/${id}`, { method: "DELETE" });
+    fetchDuas();
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24 text-gray-400">
-        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading character building program…
+        <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading daily duas…
       </div>
     );
   }
@@ -365,33 +307,33 @@ export function CharacterBuildingContent() {
   return (
     <div className="space-y-8">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-800 via-green-700 to-teal-800 p-6 md:p-8 text-white">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-800 via-violet-700 to-purple-800 p-6 md:p-8 text-white">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.12),transparent_55%)]" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
           <div>
-            <div className="flex items-center gap-2 text-emerald-100 text-sm font-medium mb-2">
-              <Sparkles className="h-4 w-4" /> Character Development Program
+            <div className="flex items-center gap-2 text-indigo-100 text-sm font-medium mb-2">
+              <Moon className="h-4 w-4" /> Daily Duas Program
             </div>
-            <h2 className="font-display text-2xl md:text-3xl font-bold">Build Akhlaaq, Assign Teachers</h2>
-            <p className="text-emerald-100/90 text-sm mt-2 max-w-xl">
-              Create virtue-based tasks, assign teachers, and track class-level completion across your institute.
+            <h2 className="font-display text-2xl md:text-3xl font-bold">Teach Duas, Track Every Class</h2>
+            <p className="text-indigo-100/90 text-sm mt-2 max-w-xl">
+              Add duas with Arabic text and Urdu translation, assign teachers, and track class-level completion.
             </p>
           </div>
-          <button onClick={openNewModal} className="btn-primary bg-white text-green-800 hover:bg-emerald-50 flex items-center gap-2 self-start md:self-auto">
-            <Plus className="h-4 w-4" /> New Task
+          <button onClick={openNewModal} className="btn-primary bg-white text-indigo-800 hover:bg-indigo-50 flex items-center gap-2 self-start md:self-auto">
+            <Plus className="h-4 w-4" /> New Dua
           </button>
         </div>
         <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-3 mt-8">
           {[
-            { label: "Active Tasks", value: stats.activeTasks, icon: Target },
+            { label: "Active Duas", value: stats.activeDuas, icon: BookOpen },
             { label: "Teachers Involved", value: stats.teachersInvolved, icon: Users },
-            { label: "Overdue", value: stats.overdueTasks, icon: Sparkles },
+            { label: "Fully Complete", value: stats.fullyComplete, icon: Sparkles },
             { label: "Class Completion", value: `${stats.classCompletionRate}%`, icon: ChevronRight },
           ].map((s) => (
             <div key={s.label} className="rounded-xl bg-white/10 backdrop-blur border border-white/15 p-4">
-              <s.icon className="h-4 w-4 text-emerald-200 mb-2" />
+              <s.icon className="h-4 w-4 text-indigo-200 mb-2" />
               <p className="text-2xl font-bold">{s.value}</p>
-              <p className="text-xs text-emerald-100/80 mt-0.5">{s.label}</p>
+              <p className="text-xs text-indigo-100/80 mt-0.5">{s.label}</p>
             </div>
           ))}
         </div>
@@ -405,7 +347,7 @@ export function CharacterBuildingContent() {
         >
           All categories
         </button>
-        {CHARACTER_CATEGORIES.map((cat) => (
+        {DUA_CATEGORIES.map((cat) => (
           <button
             key={cat.value}
             onClick={() => setCategoryFilter(cat.value)}
@@ -418,7 +360,7 @@ export function CharacterBuildingContent() {
           </button>
         ))}
         <span className="w-px h-6 bg-gray-200 mx-1 hidden sm:block" />
-        {(["ALL", "ACTIVE", "OVERDUE", "DONE"] as const).map((s) => (
+        {(["ALL", "ACTIVE", "DONE"] as const).map((s) => (
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
@@ -432,26 +374,23 @@ export function CharacterBuildingContent() {
         ))}
       </div>
 
-      {/* Task grid */}
+      {/* Dua grid */}
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {filteredTasks.map((task) => {
-          const cat = getCategoryMeta(task.category);
-          const pri = getPriorityMeta(task.priority);
-          const durationMeta = getDurationMeta(task.duration);
-          const assessmentMeta = getAssessmentMethodMeta(task.assessmentMethod);
-          const pct = task.stats?.percent ?? 0;
-          const rollup = ROLLUP_LABELS[task.rollup] || ROLLUP_LABELS.PENDING;
-          const completed = task.stats?.completed ?? 0;
-          const taught = task.stats?.taught ?? 0;
-          const pending = task.stats?.pending ?? 0;
+        {filteredDuas.map((dua) => {
+          const cat = getDuaCategoryMeta(dua.category);
+          const pri = getDuaPriorityMeta(dua.priority);
+          const pct = dua.stats?.percent ?? 0;
+          const rollup = DUA_ROLLUP_LABELS[dua.rollup] || DUA_ROLLUP_LABELS.PENDING;
+          const completed = dua.stats?.completed ?? 0;
+          const taught = dua.stats?.taught ?? 0;
+          const pending = dua.stats?.pending ?? 0;
 
           return (
             <div
-              key={task.id}
+              key={dua.id}
               className={cn(
                 "dash-card overflow-hidden flex flex-col transition-all hover:shadow-md",
-                !task.isActive && "opacity-60",
-                task.overdue && task.isActive && "border-red-200"
+                !dua.isActive && "opacity-60"
               )}
             >
               <div className={cn("h-1.5 bg-gradient-to-r", cat.color)} />
@@ -461,7 +400,7 @@ export function CharacterBuildingContent() {
                     <span className={cn("pill text-[10px] py-0 mb-2 inline-flex", cat.bg, cat.text)}>
                       {cat.icon} {cat.label}
                     </span>
-                    <h3 className="font-display font-bold text-gray-900 leading-snug">{task.title}</h3>
+                    <h3 className="font-display font-bold text-gray-900 leading-snug">{dua.title}</h3>
                   </div>
                   <div className="relative flex-shrink-0">
                     <ProgressRing percent={pct} />
@@ -471,33 +410,31 @@ export function CharacterBuildingContent() {
                   </div>
                 </div>
 
-                <p className="text-sm text-gray-600 line-clamp-2 mb-4 flex-1">
-                  {task.description || task.islamicObjective || "No description provided."}
-                </p>
+                <div className="rounded-xl bg-gray-50 border border-gray-100 p-3 mb-3">
+                  <p dir="rtl" lang="ar" className="font-arabic text-lg leading-loose text-gray-900 text-right">
+                    {dua.arabicText}
+                  </p>
+                  <p dir="rtl" lang="ur" className="font-urdu text-sm leading-loose text-gray-600 text-right mt-2 line-clamp-2">
+                    {dua.urduTranslation}
+                  </p>
+                  {dua.reference && (
+                    <p className="text-[10px] text-gray-400 mt-2">— {dua.reference}</p>
+                  )}
+                </div>
 
-                <div className="space-y-3">
+                <div className="space-y-3 mt-auto">
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className={cn("pill text-[10px] py-0", pri.pill)}>{pri.label}</span>
                     <span className={cn("pill text-[10px] py-0", rollup.pill)}>{rollup.label}</span>
-                    {durationMeta && (
-                      <span className="pill text-[10px] py-0 bg-violet-50 text-violet-700">{durationMeta.label}</span>
-                    )}
-                    {assessmentMeta && (
-                      <span className="pill text-[10px] py-0 bg-sky-50 text-sky-700">{assessmentMeta.label}</span>
-                    )}
-                    <span className={cn("flex items-center gap-1 text-gray-500", task.overdue && "text-red-600 font-semibold")}>
-                      <CalendarDays className="h-3.5 w-3.5" />
-                      Due {new Date(task.dueDate).toLocaleDateString("en-PK", { day: "numeric", month: "short" })}
-                    </span>
                   </div>
 
                   <div>
                     <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Assigned Teachers</p>
-                    {task.assignments.length ? (
+                    {dua.assignments.length ? (
                       <div className="flex flex-wrap gap-1.5">
-                        {task.assignments.map((a) => (
+                        {dua.assignments.map((a) => (
                           <span key={a.id} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700">
-                            <span className="h-4 w-4 rounded-full bg-green-700 text-white flex items-center justify-center text-[8px] font-bold">
+                            <span className="h-4 w-4 rounded-full bg-indigo-700 text-white flex items-center justify-center text-[8px] font-bold">
                               {a.teacher.user.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                             </span>
                             {a.teacher.user.name}
@@ -513,26 +450,26 @@ export function CharacterBuildingContent() {
                     <span><strong className="text-green-700">{completed}</strong> classes done</span>
                     <span><strong className="text-blue-700">{taught}</strong> taught</span>
                     <span><strong className="text-gray-700">{pending}</strong> pending</span>
-                    <span className="text-gray-400">/ {task.stats?.total ?? task.expectedClassCount} classes</span>
+                    <span className="text-gray-400">/ {dua.stats?.total ?? dua.expectedClassCount} classes</span>
                   </div>
                 </div>
               </div>
 
               <div className="px-5 py-3 bg-gray-50/80 border-t border-gray-100 flex items-center justify-between gap-2">
                 <button
-                  onClick={() => toggleStatus(task)}
-                  className={cn("pill text-[10px] cursor-pointer", task.isActive ? "pill-success" : "bg-gray-200 text-gray-500")}
+                  onClick={() => toggleStatus(dua)}
+                  className={cn("pill text-[10px] cursor-pointer", dua.isActive ? "pill-success" : "bg-gray-200 text-gray-500")}
                 >
-                  {task.isActive ? "Active" : "Paused"}
+                  {dua.isActive ? "Active" : "Paused"}
                 </button>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => setViewingProgressTask(task)} className="text-xs font-semibold text-primary-700 hover:underline">
+                  <button onClick={() => setViewingProgressDua(dua)} className="text-xs font-semibold text-primary-700 hover:underline">
                     Progress
                   </button>
-                  <button onClick={() => openEditModal(task)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-md">
+                  <button onClick={() => openEditModal(dua)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-md">
                     <Edit2 className="h-4 w-4" />
                   </button>
-                  <button onClick={() => deleteTask(task.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-md">
+                  <button onClick={() => deleteDua(dua.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-md">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -541,15 +478,15 @@ export function CharacterBuildingContent() {
           );
         })}
 
-        {filteredTasks.length === 0 && (
+        {filteredDuas.length === 0 && (
           <div className="col-span-full py-16 text-center dash-card border-dashed">
-            <span className="text-5xl">🌟</span>
-            <h3 className="mt-4 font-display font-bold text-gray-900">No tasks yet</h3>
+            <span className="text-5xl">🤲</span>
+            <h3 className="mt-4 font-display font-bold text-gray-900">No duas yet</h3>
             <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
-              Create your first character building task and assign teachers who will teach it to students.
+              Add your first daily dua with Arabic text and Urdu translation, then assign teachers to teach it.
             </p>
             <button onClick={openNewModal} className="btn-primary mt-4 inline-flex items-center gap-2">
-              <Plus className="h-4 w-4" /> Create First Task
+              <Plus className="h-4 w-4" /> Add First Dua
             </button>
           </div>
         )}
@@ -558,111 +495,74 @@ export function CharacterBuildingContent() {
       {/* Create / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl max-h-[90vh] flex flex-col">
-            <div className="p-6 border-b border-gray-100 flex-shrink-0">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-100">
               <h3 className="font-display text-xl font-bold text-gray-900">
-                {editingTask ? "Edit Character Task" : "Create Character Task"}
+                {editingDua ? "Edit Dua" : "Add Daily Dua"}
               </h3>
-              <p className="text-sm text-gray-500 mt-1">Define the virtue and assign teachers who will deliver it.</p>
+              <p className="text-sm text-gray-500 mt-1">Enter the dua with translation and assign teachers who will teach it.</p>
             </div>
-            <form onSubmit={saveTask} className="p-6 space-y-4 overflow-y-auto flex-1">
+            <form onSubmit={saveDua} className="p-6 space-y-4">
               <div>
-                <label className="form-label">Task Title</label>
-                <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} className="form-input" placeholder="e.g., Speak truthfully at all times" />
+                <label className="form-label">Title <span className="text-red-500">*</span></label>
+                <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} className="form-input" placeholder="e.g., Dua before eating" />
               </div>
               <div>
-                <label className="form-label">Short summary</label>
-                <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} className="form-input" placeholder="Brief overview shown on task cards (optional)" />
+                <label className="form-label">Arabic Text <span className="text-red-500">*</span></label>
+                <textarea
+                  rows={3}
+                  required
+                  dir="rtl"
+                  lang="ar"
+                  value={arabicText}
+                  onChange={(e) => setArabicText(e.target.value)}
+                  className="form-input font-arabic text-lg leading-loose text-right"
+                  placeholder="بِسْمِ اللَّهِ..."
+                />
               </div>
               <div>
-                <label className="form-label">Islamic Objective</label>
-                <textarea rows={2} value={islamicObjective} onChange={(e) => setIslamicObjective(e.target.value)} className="form-input" placeholder="What Islamic virtue or habit should students develop?" />
+                <label className="form-label">Urdu Translation <span className="text-red-500">*</span></label>
+                <textarea
+                  rows={2}
+                  required
+                  dir="rtl"
+                  lang="ur"
+                  value={urduTranslation}
+                  onChange={(e) => setUrduTranslation(e.target.value)}
+                  className="form-input font-urdu leading-loose text-right"
+                  placeholder="اردو ترجمہ..."
+                />
               </div>
-              <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="form-label">Transliteration</label>
+                <input type="text" value={transliteration} onChange={(e) => setTransliteration(e.target.value)} className="form-input" placeholder="Bismillah..." />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="form-label">Qur&apos;an Evidence</label>
-                  <textarea rows={3} value={quranEvidence} onChange={(e) => setQuranEvidence(e.target.value)} className="form-input" placeholder="Relevant ayah(s) or references" />
+                  <label className="form-label">Reference</label>
+                  <input type="text" value={reference} onChange={(e) => setReference(e.target.value)} className="form-input" placeholder="e.g., Sahih Muslim 2018" />
                 </div>
                 <div>
-                  <label className="form-label">Hadith Evidence</label>
-                  <textarea rows={3} value={hadithEvidence} onChange={(e) => setHadithEvidence(e.target.value)} className="form-input" placeholder="Relevant hadith or references" />
-                </div>
-              </div>
-              <div>
-                <label className="form-label">Teacher Delivery Notes</label>
-                <textarea rows={3} value={teacherDeliveryNotes} onChange={(e) => setTeacherDeliveryNotes(e.target.value)} className="form-input" placeholder="How should teachers explain and guide this with students?" />
-              </div>
-              <div>
-                <label className="form-label">Practical Classroom Activity</label>
-                <textarea rows={2} value={practicalClassroomActivity} onChange={(e) => setPracticalClassroomActivity(e.target.value)} className="form-input" placeholder="In-class activity or practice" />
-              </div>
-              <div>
-                <label className="form-label">Daily Observation Checklist</label>
-                <textarea rows={2} value={dailyObservationChecklist} onChange={(e) => setDailyObservationChecklist(e.target.value)} className="form-input" placeholder="What to look for day to day" />
-              </div>
-              <div>
-                <label className="form-label">Home Practice</label>
-                <textarea rows={2} value={homePractice} onChange={(e) => setHomePractice(e.target.value)} className="form-input" placeholder="Practice for students at home with parents" />
-              </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">Assessment Method</label>
-                  <select value={assessmentMethod} onChange={(e) => setAssessmentMethod(e.target.value)} className="form-input">
-                    <option value="">Select method</option>
-                    {CHARACTER_ASSESSMENT_METHODS.map((m) => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Duration</label>
-                  <select value={duration} onChange={(e) => setDuration(e.target.value)} className="form-input">
-                    <option value="">Select duration</option>
-                    {CHARACTER_DURATIONS.map((d) => (
-                      <option key={d.value} value={d.value}>{d.label}</option>
+                  <label className="form-label">Category</label>
+                  <select value={category} onChange={(e) => setCategory(e.target.value)} className="form-input">
+                    {DUA_CATEGORIES.map((c) => (
+                      <option key={c.value} value={c.value}>{c.icon} {c.label}</option>
                     ))}
                   </select>
                 </div>
               </div>
-              <div className="grid sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="form-label">Priority</label>
                   <select value={priority} onChange={(e) => setPriority(e.target.value)} className="form-input">
-                    {FORM_PRIORITIES.map((p) => (
+                    {DUA_PRIORITIES.map((p) => (
                       <option key={p.value} value={p.value}>{p.label}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="form-label">Age Group</label>
-                  <input type="text" value={ageGroup} onChange={(e) => setAgeGroup(e.target.value)} className="form-input" placeholder="e.g., Ages 7–10, All ages" />
-                </div>
-              </div>
-              <div>
-                <label className="form-label">Repeat Cycle</label>
-                <select value={repeatCycle} onChange={(e) => setRepeatCycle(e.target.value)} className="form-input">
-                  <option value="">Select cycle</option>
-                  {CHARACTER_REPEAT_CYCLES.map((r) => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="form-label">Completion Criteria</label>
-                <textarea rows={2} value={completionCriteria} onChange={(e) => setCompletionCriteria(e.target.value)} className="form-input" placeholder="What must be true before marking completed?" />
-              </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">Category</label>
-                  <select value={category} onChange={(e) => setCategory(e.target.value)} className="form-input">
-                    {CHARACTER_CATEGORIES.map((c) => (
-                      <option key={c.value} value={c.value}>{c.icon} {c.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Due Date</label>
-                  <input type="date" required value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="form-input" />
+                  <label className="form-label">Teaching Notes</label>
+                  <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className="form-input" placeholder="Optional notes for teachers" />
                 </div>
               </div>
               <div>
@@ -674,7 +574,7 @@ export function CharacterBuildingContent() {
                     </button>
                   )}
                 </div>
-                <p className="text-xs text-gray-400 mb-2">Assigned teachers mark this task once per class.</p>
+                <p className="text-xs text-gray-400 mb-2">Assigned teachers mark this dua once per class.</p>
                 <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-3 rounded-xl border border-gray-200 bg-gray-50">
                   {teachers.length === 0 ? (
                     <div className="text-sm text-gray-500 w-full">
@@ -693,8 +593,8 @@ export function CharacterBuildingContent() {
                         className={cn(
                           "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium border transition-all",
                           selectedTeacherIds.includes(t.id)
-                            ? "bg-green-700 text-white border-green-700"
-                            : "bg-white text-gray-700 border-gray-200 hover:border-green-300"
+                            ? "bg-indigo-700 text-white border-indigo-700"
+                            : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300"
                         )}
                       >
                         {t.user.name}
@@ -707,10 +607,10 @@ export function CharacterBuildingContent() {
                   <p className="text-xs text-amber-600 mt-1">Select at least one teacher.</p>
                 )}
               </div>
-              <div className="flex gap-3 justify-end pt-2 sticky bottom-0 bg-white pb-1">
+              <div className="flex gap-3 justify-end pt-2">
                 <button type="button" onClick={() => { setIsModalOpen(false); resetForm(); }} className="btn-ghost">Cancel</button>
                 <button type="submit" disabled={saving || !selectedTeacherIds.length} className="btn-primary">
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingTask ? "Save Changes" : "Create & Assign"}
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingDua ? "Save Changes" : "Create & Assign"}
                 </button>
               </div>
             </form>
@@ -719,28 +619,31 @@ export function CharacterBuildingContent() {
       )}
 
       {/* Progress Modal */}
-      {viewingProgressTask && (
+      {viewingProgressDua && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-gray-100 flex justify-between items-start">
               <div>
-                <span className={cn("pill text-[10px] py-0 mb-2", getCategoryMeta(viewingProgressTask.category).bg, getCategoryMeta(viewingProgressTask.category).text)}>
-                  {getCategoryMeta(viewingProgressTask.category).icon} {getCategoryMeta(viewingProgressTask.category).label}
+                <span className={cn("pill text-[10px] py-0 mb-2", getDuaCategoryMeta(viewingProgressDua.category).bg, getDuaCategoryMeta(viewingProgressDua.category).text)}>
+                  {getDuaCategoryMeta(viewingProgressDua.category).icon} {getDuaCategoryMeta(viewingProgressDua.category).label}
                 </span>
-                <h3 className="font-display text-lg font-bold text-gray-900">{viewingProgressTask.title}</h3>
+                <h3 className="font-display text-lg font-bold text-gray-900">{viewingProgressDua.title}</h3>
+                <p dir="rtl" lang="ar" className="font-arabic text-base text-gray-600 mt-1 text-right">
+                  {viewingProgressDua.arabicText}
+                </p>
               </div>
-              <button onClick={() => { setViewingProgressTask(null); setProgressSearch(""); }} className="p-1 text-gray-400 hover:text-gray-600">
+              <button onClick={() => { setViewingProgressDua(null); setProgressSearch(""); }} className="p-1 text-gray-400 hover:text-gray-600">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 sm:p-6 pb-0">
-              {CHARACTER_STATUSES.map((st) => {
+              {DUA_STATUSES.map((st) => {
                 const count = st.value === "PENDING"
-                  ? (viewingProgressTask.stats?.pending ?? 0)
+                  ? (viewingProgressDua.stats?.pending ?? 0)
                   : st.value === "COMPLETED"
-                    ? (viewingProgressTask.stats?.completed ?? 0)
-                    : (viewingProgressTask.stats?.taught ?? 0);
+                    ? (viewingProgressDua.stats?.completed ?? 0)
+                    : (viewingProgressDua.stats?.taught ?? 0);
                 return (
                   <div key={st.value} className="rounded-xl border border-gray-100 p-3 text-center">
                     <p className="text-lg">{st.icon}</p>
@@ -751,7 +654,7 @@ export function CharacterBuildingContent() {
               })}
               <div className="rounded-xl border border-gray-100 p-3 text-center">
                 <p className="text-lg">🏫</p>
-                <p className="text-xl font-bold text-gray-900">{viewingProgressTask.stats?.total ?? 0}</p>
+                <p className="text-xl font-bold text-gray-900">{viewingProgressDua.stats?.total ?? 0}</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">Classes</p>
               </div>
             </div>
@@ -762,12 +665,12 @@ export function CharacterBuildingContent() {
                 <input type="text" placeholder="Search classes or teachers…" value={progressSearch} onChange={(e) => setProgressSearch(e.target.value)} className="form-input pl-9 text-sm" />
               </div>
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {(viewingProgressTask.classProgress || []).length === 0 ? (
+                {(viewingProgressDua.classProgress || []).length === 0 ? (
                   <p className="text-center text-sm text-gray-400 py-8">
-                    No class progress recorded yet. Teachers will mark tasks per class from their portal.
+                    No class progress recorded yet. Teachers will mark duas per class from their portal.
                   </p>
                 ) : (
-                  (viewingProgressTask.classProgress || [])
+                  (viewingProgressDua.classProgress || [])
                     .filter((p) => {
                       const q = progressSearch.toLowerCase();
                       return (
@@ -776,7 +679,7 @@ export function CharacterBuildingContent() {
                       );
                     })
                     .map((prog) => {
-                      const meta = getStatusMeta(prog.status);
+                      const meta = getDuaStatusMeta(prog.status);
                       return (
                         <div key={prog.id} className={cn("p-3 rounded-xl border flex items-start justify-between gap-3", prog.status === "COMPLETED" ? "border-green-200 bg-green-50/30" : "border-gray-200")}>
                           <div>

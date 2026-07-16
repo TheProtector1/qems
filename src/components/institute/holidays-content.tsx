@@ -12,7 +12,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
-import { WEEKDAY_LABELS } from "@/lib/institute-holidays";
+import { WEEKDAY_LABELS } from "@/lib/weekday-labels";
 
 type HolidayRow = {
   id: string;

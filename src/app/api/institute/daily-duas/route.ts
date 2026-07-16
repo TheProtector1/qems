@@ -2,15 +2,8 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getClassIdsByTeacherIds } from "@/lib/teacher-classes";
-import {
-  computeClassProgressStats,
-  getTaskRollupStatus,
-  isTaskOverdue,
-} from "@/lib/character-task-stats";
-import {
-  normalizeCharacterPriority,
-  pickCharacterTaskFields,
-} from "@/lib/character-building";
+import { computeClassProgressStats } from "@/lib/character-task-stats";
+import { getDuaRollupStatus } from "@/lib/daily-dua";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +14,7 @@ function authorizeInstitute(session: Awaited<ReturnType<typeof getAuthSession>>)
   return session.user.instituteId;
 }
 
-const taskInclude = {
+const duaInclude = {
   assignments: {
     include: {
       teacher: {
@@ -45,11 +38,11 @@ export async function GET() {
     const instituteId = authorizeInstitute(await getAuthSession());
     if (!instituteId) return new NextResponse("Unauthorized", { status: 401 });
 
-    const [tasks, teachers] = await Promise.all([
-      prisma.characterTask.findMany({
+    const [duas, teachers] = await Promise.all([
+      prisma.dailyDua.findMany({
         where: { instituteId },
-        include: taskInclude,
-        orderBy: [{ isActive: "desc" }, { dueDate: "asc" }],
+        include: duaInclude,
+        orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
       }),
       prisma.teacher.findMany({
         where: {
@@ -65,11 +58,11 @@ export async function GET() {
       }),
     ]);
 
-    const allTeacherIds = [...new Set(tasks.flatMap((t) => t.assignments.map((a) => a.teacherId)))];
+    const allTeacherIds = Array.from(new Set(duas.flatMap((d) => d.assignments.map((a) => a.teacherId))));
     const classIdsByTeacher = await getClassIdsByTeacherIds(allTeacherIds, instituteId);
 
-    const enrichedTasks = tasks.map((task) => {
-      const assignedTeacherIds = task.assignments.map((a) => a.teacherId);
+    const enrichedDuas = duas.map((dua) => {
+      const assignedTeacherIds = dua.assignments.map((a) => a.teacherId);
       const expectedClassIds = new Set<string>();
       for (const tid of assignedTeacherIds) {
         for (const cid of classIdsByTeacher.get(tid) || []) {
@@ -77,35 +70,31 @@ export async function GET() {
         }
       }
       const expectedIds = Array.from(expectedClassIds);
-      const stats = computeClassProgressStats(expectedIds, task.classProgress);
-      const overdue = isTaskOverdue(task.dueDate, task.isActive);
-      const rollup = getTaskRollupStatus(stats, task.dueDate, task.isActive);
+      const stats = computeClassProgressStats(expectedIds, dua.classProgress);
+      const rollup = getDuaRollupStatus(stats, dua.isActive);
 
       return {
-        ...task,
-        priority: normalizeCharacterPriority(task.priority),
+        ...dua,
         expectedClassCount: expectedIds.length,
         stats,
-        overdue,
         rollup,
       };
     });
 
     const summary = {
-      activeTasks: enrichedTasks.filter((t) => t.isActive).length,
-      overdueTasks: enrichedTasks.filter((t) => t.overdue && t.isActive).length,
-      fullyComplete: enrichedTasks.filter((t) => t.rollup === "DONE").length,
+      activeDuas: enrichedDuas.filter((d) => d.isActive).length,
+      fullyComplete: enrichedDuas.filter((d) => d.rollup === "DONE").length,
       teachersInvolved: allTeacherIds.length,
       classCompletionRate: (() => {
-        const total = enrichedTasks.reduce((s, t) => s + t.stats.total, 0);
-        const done = enrichedTasks.reduce((s, t) => s + t.stats.completed, 0);
+        const total = enrichedDuas.reduce((s, d) => s + d.stats.total, 0);
+        const done = enrichedDuas.reduce((s, d) => s + d.stats.completed, 0);
         return total ? Math.round((done / total) * 100) : 0;
       })(),
     };
 
-    return NextResponse.json({ tasks: enrichedTasks, teachers, summary });
+    return NextResponse.json({ duas: enrichedDuas, teachers, summary });
   } catch (error) {
-    console.error("[CHARACTER_TASKS_GET]", error);
+    console.error("[DAILY_DUAS_GET]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }
 }
@@ -116,11 +105,23 @@ export async function POST(req: Request) {
     if (!instituteId) return new NextResponse("Unauthorized", { status: 401 });
 
     const body = await req.json();
-    const { title, description, dueDate, category, priority, teacherIds } = body;
-    const extra = pickCharacterTaskFields(body);
+    const {
+      title,
+      arabicText,
+      urduTranslation,
+      transliteration,
+      reference,
+      notes,
+      category,
+      priority,
+      teacherIds,
+    } = body;
 
-    if (!title || !dueDate) {
-      return new NextResponse("Missing required fields", { status: 400 });
+    if (!title || !arabicText || !urduTranslation) {
+      return NextResponse.json(
+        { error: "Title, Arabic text and Urdu translation are required" },
+        { status: 400 }
+      );
     }
 
     const validTeacherIds = Array.isArray(teacherIds)
@@ -144,25 +145,27 @@ export async function POST(req: Request) {
       );
     }
 
-    const task = await prisma.characterTask.create({
+    const dua = await prisma.dailyDua.create({
       data: {
         title,
-        description: description || null,
-        dueDate: new Date(dueDate),
-        category: category || "AKHLAAQ",
-        priority: normalizeCharacterPriority(priority),
+        arabicText,
+        urduTranslation,
+        transliteration: transliteration || null,
+        reference: reference || null,
+        notes: notes || null,
+        category: category || "DAILY",
+        priority: priority || "MEDIUM",
         instituteId,
-        ...extra,
         assignments: {
           create: validTeacherIds.map((teacherId: string) => ({ teacherId })),
         },
       },
-      include: taskInclude,
+      include: duaInclude,
     });
 
-    return NextResponse.json(task);
+    return NextResponse.json(dua);
   } catch (error) {
-    console.error("[CHARACTER_TASKS_POST]", error);
+    console.error("[DAILY_DUAS_POST]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }
 }

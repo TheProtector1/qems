@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { AttendanceStatus, NotificationType } from "@prisma/client";
 import { notifyParentOfStudent } from "@/lib/notifications";
 import {
+  clearStaleHolidayAttendance,
   getHolidayForDate,
   getWeeklyOffDays,
   parseDateOnly,
@@ -117,8 +118,18 @@ export async function GET(req: Request) {
     }
     dates.reverse();
 
+    // Always include at least today so history queries never crash on empty ranges.
+    if (dates.length === 0) dates.push(todayKey);
+
     const startHistory = parseDateOnly(dates[0]);
     const endHistory = parseDateOnly(dates[dates.length - 1]);
+
+    // Clear stale weekly/public HOLIDAY rows (e.g. Thursday still marked after Sunday-only weekly off).
+    try {
+      await clearStaleHolidayAttendance(instituteId, startHistory, endHistory);
+    } catch (err) {
+      console.warn("[ATTENDANCE_STALE_HOLIDAY_CLEANUP]", err);
+    }
 
     const historyRecords = await prisma.attendance.findMany({
       where: {

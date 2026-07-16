@@ -3,6 +3,7 @@ import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { HolidayType } from "@prisma/client";
 import {
+  clearWeeklyHolidayAttendance,
   dateKey,
   fetchActiveHolidays,
   getWeeklyOffDays,
@@ -11,6 +12,7 @@ import {
   WEEKDAY_LABELS,
 } from "@/lib/institute-holidays";
 import { buildPakistanPublicHolidayDates } from "@/lib/pakistan-public-holidays";
+import { revalidateTag } from "next/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -121,6 +123,8 @@ export async function POST(req: Request) {
         await syncHolidayAttendanceForRange(instituteId, start, end);
       }
 
+      revalidateTag(`holidays-${instituteId}`);
+
       return NextResponse.json({
         imported: created.length,
         holidays: created.map(serializeHoliday),
@@ -140,6 +144,7 @@ export async function POST(req: Request) {
 
       const existingByDay = new Map(existing.map((h) => [h.dayOfWeek, h]));
       const results = [];
+      const removedDays: number[] = [];
 
       for (let day = 0; day <= 6; day++) {
         const shouldBeOff = validDays.includes(day);
@@ -170,13 +175,22 @@ export async function POST(req: Request) {
             where: { id: current.id },
             data: { isActive: false },
           });
+          removedDays.push(day);
         }
       }
 
       const today = new Date();
       const syncStart = new Date(Date.UTC(today.getUTCFullYear() - 1, 0, 1));
       const syncEnd = new Date(Date.UTC(today.getUTCFullYear() + 1, 11, 31));
+
+      // Clear stale HOLIDAY rows for weekdays that are no longer weekly offs
+      // (e.g. Thursday was briefly selected, then Sunday became the only off day).
+      for (const day of removedDays) {
+        await clearWeeklyHolidayAttendance(instituteId, day, syncStart, syncEnd);
+      }
+
       await syncHolidayAttendanceForRange(instituteId, syncStart, syncEnd);
+      revalidateTag(`holidays-${instituteId}`);
 
       const holidays = await fetchActiveHolidays(instituteId);
       return NextResponse.json({
@@ -230,6 +244,8 @@ export async function POST(req: Request) {
         await syncHolidayAttendanceForRange(instituteId, syncStart, syncEnd);
       }
 
+      revalidateTag(`holidays-${instituteId}`);
+
       return NextResponse.json(serializeHoliday(holiday), { status: 201 });
     }
 
@@ -257,6 +273,8 @@ export async function POST(req: Request) {
     if (syncAttendance !== false) {
       await syncHolidayAttendanceForRange(instituteId, start, end);
     }
+
+    revalidateTag(`holidays-${instituteId}`);
 
     return NextResponse.json(serializeHoliday(holiday), { status: 201 });
   } catch (error) {
