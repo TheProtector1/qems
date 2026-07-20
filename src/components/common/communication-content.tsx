@@ -15,7 +15,6 @@ import {
   Send,
   Sparkles,
   Check,
-  CheckCheck,
   Search,
   PlusCircle,
   Loader2,
@@ -27,6 +26,9 @@ import {
   Inbox,
 } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
+import { ChatMessageBubble } from "@/components/common/chat-message-bubble";
+import { ChatComposerToolbar } from "@/components/common/chat-composer-toolbar";
+import { getSticker, type ChatContentType, type ReactionMap } from "@/lib/chat-enrichment";
 
 type Thread = {
   id: string;
@@ -58,6 +60,9 @@ type ChatMessage = {
   self: boolean;
   isRead?: boolean;
   readAt?: string | null;
+  contentType?: ChatContentType;
+  stickerId?: string | null;
+  reactions?: ReactionMap;
 };
 
 type Announcement = {
@@ -72,7 +77,8 @@ type Announcement = {
 
 type TargetOption = { value: string; label: string };
 
-const POLL_MS = 8000;
+const POLL_MS = 12000;
+const CONV_POLL_MS = 5000;
 
 export function CommunicationContent() {
   const { data: session } = useSession();
@@ -137,6 +143,11 @@ export function CommunicationContent() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatMessagesRef = useRef<ChatMessage[]>([]);
+
+  useEffect(() => {
+    chatMessagesRef.current = chatMessages;
+  }, [chatMessages]);
 
   useEffect(() => {
     selectedRef.current = selectedThreadId;
@@ -187,25 +198,52 @@ export function CommunicationContent() {
   }, [isParent]);
 
   const loadMessages = useCallback(
-    async (partnerId: string, opts?: { quiet?: boolean }) => {
+    async (partnerId: string, opts?: { quiet?: boolean; incremental?: boolean }) => {
       if (!canChat) return;
       if (!opts?.quiet) setMessagesLoading(true);
       try {
-        const res = await fetch(`${messagesApi}?partnerId=${partnerId}`);
+        const params = new URLSearchParams({ partnerId });
+        if (opts?.incremental) {
+          const last = chatMessagesRef.current[chatMessagesRef.current.length - 1];
+          if (last?.createdAt && !String(last.id || "").startsWith("tmp-")) {
+            params.set("after", last.createdAt);
+          }
+        }
+        const res = await fetch(`${messagesApi}?${params}`);
         if (!res.ok) return;
         const data = await res.json();
         const next: ChatMessage[] = data.messages || [];
-        setChatMessages((prev) => {
-          if (
-            opts?.quiet &&
-            prev.length === next.length &&
-            prev[prev.length - 1]?.id === next[next.length - 1]?.id &&
-            prev[prev.length - 1]?.isRead === next[next.length - 1]?.isRead
-          ) {
-            return prev;
+
+        if (opts?.incremental) {
+          if (next.length) {
+            setChatMessages((prev) => {
+              const ids = new Set(prev.map((m) => m.id));
+              const merged = [...prev];
+              for (const m of next) {
+                if (m.id && !ids.has(m.id)) merged.push(m);
+                else if (m.id) {
+                  const i = merged.findIndex((x) => x.id === m.id);
+                  if (i >= 0) merged[i] = { ...merged[i], ...m };
+                }
+              }
+              return merged;
+            });
           }
-          return next;
-        });
+        } else {
+          setChatMessages((prev) => {
+            if (
+              opts?.quiet &&
+              prev.length === next.length &&
+              prev[prev.length - 1]?.id === next[next.length - 1]?.id &&
+              prev[prev.length - 1]?.isRead === next[next.length - 1]?.isRead &&
+              JSON.stringify(prev[prev.length - 1]?.reactions) ===
+                JSON.stringify(next[next.length - 1]?.reactions)
+            ) {
+              return prev;
+            }
+            return next;
+          });
+        }
         setThreads((prev) =>
           prev.map((t) =>
             t.id === partnerId ? { ...t, unread: false, unreadCount: 0 } : t
@@ -267,16 +305,21 @@ export function CommunicationContent() {
     if (chatMessages.length) scrollToBottom(true);
   }, [chatMessages.length, scrollToBottom]);
 
-  // Live polling for threads + active conversation
+  // Live polling — threads less often; conversation uses incremental after=
   useEffect(() => {
     if (!canChat || activeMode !== "chat") return;
-    const id = window.setInterval(() => {
+    const threadsId = window.setInterval(() => {
       loadThreads({ quiet: true, q: deferredSearch || undefined });
-      if (selectedRef.current) {
-        loadMessages(selectedRef.current, { quiet: true });
-      }
     }, POLL_MS);
-    return () => window.clearInterval(id);
+    const convId = window.setInterval(() => {
+      if (selectedRef.current) {
+        loadMessages(selectedRef.current, { quiet: true, incremental: true });
+      }
+    }, CONV_POLL_MS);
+    return () => {
+      window.clearInterval(threadsId);
+      window.clearInterval(convId);
+    };
   }, [canChat, activeMode, deferredSearch, loadThreads, loadMessages]);
 
   useEffect(() => {
@@ -315,6 +358,8 @@ export function CommunicationContent() {
       createdAt: new Date().toISOString(),
       self: true,
       isRead: false,
+      contentType: "RICH",
+      reactions: {},
     };
     setChatMessages((prev) => [...prev, optimistic]);
     setInputMsg("");
@@ -324,7 +369,11 @@ export function CommunicationContent() {
       const res = await fetch(messagesApi, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ receiverId: selectedThreadId, content: text }),
+        body: JSON.stringify({
+          receiverId: selectedThreadId,
+          content: text,
+          contentType: "RICH",
+        }),
       });
 
       if (res.ok) {
@@ -366,6 +415,128 @@ export function CommunicationContent() {
     } finally {
       setSending(false);
     }
+  };
+
+  const handleSendSticker = async (stickerId: string) => {
+    if (!selectedThreadId || sending) return;
+    const sticker = getSticker(stickerId);
+    if (!sticker) return;
+
+    setSending(true);
+    const optimistic: ChatMessage = {
+      id: `tmp-${Date.now()}`,
+      sender: getInitials(session?.user?.name || "Me"),
+      name: session?.user?.name || "You",
+      text: sticker.label,
+      time: "Just now",
+      createdAt: new Date().toISOString(),
+      self: true,
+      isRead: false,
+      contentType: "STICKER",
+      stickerId,
+      reactions: {},
+    };
+    setChatMessages((prev) => [...prev, optimistic]);
+
+    try {
+      const res = await fetch(messagesApi, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receiverId: selectedThreadId, stickerId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChatMessages((prev) =>
+          prev.map((m) => (m.id === optimistic.id ? data.message : m))
+        );
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === selectedThreadId
+              ? {
+                  ...t,
+                  lastMsg: `${sticker.emoji} ${sticker.label}`,
+                  time: "Just now",
+                  unread: false,
+                  unreadCount: 0,
+                }
+              : t
+          )
+        );
+      } else {
+        setChatMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      }
+    } catch {
+      setChatMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleReact = async (messageId: string, emoji: string) => {
+    const userId = session?.user?.id;
+    if (!userId || messageId.startsWith("tmp-")) return;
+
+    setChatMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const reactions = { ...(m.reactions || {}) };
+        const list = [...(reactions[emoji] || [])];
+        const idx = list.indexOf(userId);
+        if (idx >= 0) list.splice(idx, 1);
+        else list.push(userId);
+        if (list.length) reactions[emoji] = list;
+        else delete reactions[emoji];
+        return { ...m, reactions };
+      })
+    );
+
+    try {
+      await fetch(messagesApi, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId, emoji }),
+      });
+    } catch {
+      // revert on next poll
+      if (selectedThreadId) loadMessages(selectedThreadId, { quiet: true });
+    }
+  };
+
+  const insertEmoji = (emoji: string) => {
+    const el = textareaRef.current;
+    if (!el) {
+      setInputMsg((v) => v + emoji);
+      return;
+    }
+    const start = el.selectionStart ?? inputMsg.length;
+    const end = el.selectionEnd ?? inputMsg.length;
+    const next = inputMsg.slice(0, start) + emoji + inputMsg.slice(end);
+    setInputMsg(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + emoji.length;
+      el.setSelectionRange(pos, pos);
+      autoGrow(el);
+    });
+  };
+
+  const wrapSelection = (before: string, after: string) => {
+    const el = textareaRef.current;
+    if (!el) {
+      setInputMsg((v) => `${before}${v}${after}`);
+      return;
+    }
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    const selected = inputMsg.slice(start, end) || "text";
+    const next =
+      inputMsg.slice(0, start) + before + selected + after + inputMsg.slice(end);
+    setInputMsg(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + before.length, start + before.length + selected.length);
+      autoGrow(el);
+    });
   };
 
   const handleCreateAnnouncement = async (e: React.FormEvent) => {
@@ -755,37 +926,11 @@ export function CommunicationContent() {
                               </span>
                             </div>
                           )}
-                          <div
-                            className={cn(
-                              "flex flex-col max-w-[85%] sm:max-w-[72%]",
-                              msg.self ? "ml-auto items-end" : "mr-auto items-start"
-                            )}
-                          >
-                            <div
-                              className={cn(
-                                "rounded-2xl px-3.5 py-2.5 text-sm shadow-sm",
-                                msg.self
-                                  ? "bg-gradient-primary text-white rounded-br-md"
-                                  : "bg-white text-gray-800 border border-gray-100 rounded-bl-md"
-                              )}
-                            >
-                              <p className="leading-relaxed whitespace-pre-wrap break-words">
-                                {msg.text}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-1 mt-1 px-1">
-                              <span className="text-[9px] text-gray-400">{msg.time}</span>
-                              {msg.self && (
-                                <span className="text-primary-600" title={msg.isRead ? "Read" : "Sent"}>
-                                  {msg.isRead ? (
-                                    <CheckCheck className="h-3 w-3" />
-                                  ) : (
-                                    <Check className="h-3 w-3 text-gray-400" />
-                                  )}
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                          <ChatMessageBubble
+                            msg={msg}
+                            currentUserId={session?.user?.id}
+                            onReact={handleReact}
+                          />
                         </div>
                       );
                     })
@@ -795,32 +940,40 @@ export function CommunicationContent() {
 
                 <form
                   onSubmit={handleSendMessage}
-                  className="p-3 sm:p-4 border-t border-border bg-white flex items-end gap-2 shrink-0"
+                  className="p-3 sm:p-4 border-t border-border bg-white shrink-0 space-y-2"
                 >
-                  <textarea
-                    ref={textareaRef}
-                    rows={1}
-                    placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
-                    value={inputMsg}
-                    onChange={(e) => {
-                      setInputMsg(e.target.value);
-                      autoGrow(e.target);
-                    }}
-                    onKeyDown={onComposerKeyDown}
-                    className="form-input flex-1 text-xs py-2.5 min-h-[40px] max-h-[140px] resize-none"
+                  <ChatComposerToolbar
+                    onInsertEmoji={insertEmoji}
+                    onSendSticker={handleSendSticker}
+                    onWrap={wrapSelection}
+                    disabled={sending || !selectedThreadId}
                   />
-                  <button
-                    type="submit"
-                    disabled={!inputMsg.trim() || sending}
-                    className="btn-primary p-2.5 h-10 w-10 flex items-center justify-center rounded-xl disabled:opacity-50"
-                    aria-label="Send message"
-                  >
-                    {sending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                  </button>
+                  <div className="flex items-end gap-2">
+                    <textarea
+                      ref={textareaRef}
+                      rows={1}
+                      placeholder="Message… **bold** *italic* · Enter to send"
+                      value={inputMsg}
+                      onChange={(e) => {
+                        setInputMsg(e.target.value);
+                        autoGrow(e.target);
+                      }}
+                      onKeyDown={onComposerKeyDown}
+                      className="form-input flex-1 text-xs py-2.5 min-h-[40px] max-h-[140px] resize-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!inputMsg.trim() || sending}
+                      className="btn-primary p-2.5 h-10 w-10 flex items-center justify-center rounded-xl disabled:opacity-50"
+                      aria-label="Send message"
+                    >
+                      {sending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </form>
               </>
             ) : (

@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getInitials } from "@/lib/utils";
-import { formatMessageTime, roleLabel } from "@/lib/communication";
-import { notifyUser } from "@/lib/notifications";
-import { NotificationType, Role } from "@prisma/client";
+import { roleLabel } from "@/lib/communication";
+import { getSticker, type ChatContentType } from "@/lib/chat-enrichment";
+import {
+  listConversation,
+  listThreadsForUser,
+  sendMessages,
+} from "@/lib/messages-service";
+import { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -18,16 +23,25 @@ function canUseInstituteMessages(role: string) {
   return STAFF_ROLES.includes(role as Role) || role === Role.TEACHER;
 }
 
-async function getInstituteDirectory(instituteId: string, currentUserId: string) {
+async function getInstituteDirectory(instituteId: string, currentUserId: string, q?: string) {
   const users = await prisma.user.findMany({
     where: {
       instituteId,
       isActive: true,
       id: { not: currentUserId },
       role: { in: [Role.TEACHER, Role.PARENT, Role.BRANCH_MANAGER, Role.INSTITUTE_OWNER, Role.STAFF] },
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              { email: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
     },
     select: { id: true, name: true, role: true, email: true },
     orderBy: [{ role: "asc" }, { name: "asc" }],
+    take: 100,
   });
 
   return users.map((u) => ({
@@ -55,19 +69,37 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const partnerId = searchParams.get("partnerId");
     const directory = searchParams.get("directory");
-    const q = searchParams.get("q")?.trim().toLowerCase();
+    const forStudent = searchParams.get("forStudent");
+    const q = searchParams.get("q")?.trim();
+    const after = searchParams.get("after");
 
-    if (directory === "1") {
-      const contacts = await getInstituteDirectory(instituteId, userId);
-      const filtered = q
-        ? contacts.filter(
-            (c) =>
-              c.name.toLowerCase().includes(q) ||
-              c.role.toLowerCase().includes(q) ||
-              (c.email || "").toLowerCase().includes(q)
-          )
-        : contacts;
-      return NextResponse.json({ contacts: filtered });
+    if (directory === "1" || forStudent) {
+      const [contacts, parentRow] = await Promise.all([
+        getInstituteDirectory(instituteId, userId, q || undefined),
+        forStudent
+          ? prisma.student.findFirst({
+              where: { id: forStudent, instituteId },
+              select: {
+                parent: {
+                  select: { user: { select: { id: true, name: true } } },
+                },
+              },
+            })
+          : Promise.resolve(null),
+      ]);
+
+      let parent: { id: string; name: string; role: string; avatar: string } | null = null;
+      const parentUser = parentRow?.parent?.user;
+      if (parentUser && parentUser.id !== userId) {
+        parent = {
+          id: parentUser.id,
+          name: parentUser.name,
+          role: "Parent",
+          avatar: getInitials(parentUser.name),
+        };
+      }
+
+      return NextResponse.json({ contacts, parent });
     }
 
     if (partnerId) {
@@ -79,114 +111,21 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "Partner not found" }, { status: 404 });
       }
 
-      const messages = await prisma.message.findMany({
-        where: {
-          OR: [
-            { senderId: userId, receiverId: partnerId },
-            { senderId: partnerId, receiverId: userId },
-          ],
-        },
-        include: {
-          sender: { select: { id: true, name: true } },
-        },
-        orderBy: { createdAt: "asc" },
+      const data = await listConversation({
+        userId,
+        partnerId,
+        after,
+        markRead: !after,
       });
-
-      await prisma.message.updateMany({
-        where: { senderId: partnerId, receiverId: userId, isRead: false },
-        data: { isRead: true, readAt: new Date() },
-      });
-
-      return NextResponse.json({
-        messages: messages.map((m) => ({
-          id: m.id,
-          sender: getInitials(m.sender.name),
-          name: m.sender.name,
-          text: m.content,
-          time: formatMessageTime(m.createdAt),
-          createdAt: m.createdAt.toISOString(),
-          self: m.senderId === userId,
-          isRead: m.isRead,
-          readAt: m.readAt?.toISOString() ?? null,
-        })),
-      });
+      return NextResponse.json(data);
     }
 
-    const allMessages = await prisma.message.findMany({
-      where: {
-        OR: [{ senderId: userId }, { receiverId: userId }],
-        AND: [
-          {
-            OR: [
-              { sender: { instituteId } },
-              { receiver: { instituteId } },
-            ],
-          },
-        ],
-      },
-      include: {
-        sender: { select: { id: true, name: true, role: true } },
-        receiver: { select: { id: true, name: true, role: true } },
-      },
-      orderBy: { createdAt: "desc" },
+    const data = await listThreadsForUser({
+      userId,
+      instituteId,
+      q: q?.toLowerCase(),
     });
-
-    const unreadCounts = await prisma.message.groupBy({
-      by: ["senderId"],
-      where: { receiverId: userId, isRead: false },
-      _count: true,
-    });
-    const unreadBySender = new Map(unreadCounts.map((r) => [r.senderId, r._count]));
-
-    const threadMap = new Map<
-      string,
-      {
-        id: string;
-        name: string;
-        role: string;
-        lastMsg: string;
-        time: string;
-        unread: boolean;
-        unreadCount: number;
-        avatar: string;
-        createdAt: string;
-      }
-    >();
-
-    for (const m of allMessages) {
-      const partner = m.senderId === userId ? m.receiver : m.sender;
-      if (!partner) continue;
-
-      if (!threadMap.has(partner.id)) {
-        const unreadCount = unreadBySender.get(partner.id) || 0;
-        threadMap.set(partner.id, {
-          id: partner.id,
-          name: partner.name,
-          role: roleLabel(partner.role),
-          lastMsg: m.content.slice(0, 120),
-          time: formatMessageTime(m.createdAt),
-          unread: unreadCount > 0,
-          unreadCount,
-          avatar: getInitials(partner.name),
-          createdAt: m.createdAt.toISOString(),
-        });
-      }
-    }
-
-    let threads = Array.from(threadMap.values());
-    if (q) {
-      threads = threads.filter(
-        (t) =>
-          t.name.toLowerCase().includes(q) ||
-          t.role.toLowerCase().includes(q) ||
-          t.lastMsg.toLowerCase().includes(q)
-      );
-    }
-
-    return NextResponse.json({
-      threads,
-      unreadTotal: threads.reduce((s, t) => s + t.unreadCount, 0),
-    });
+    return NextResponse.json(data);
   } catch (error) {
     console.error("Get messages error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -204,55 +143,98 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { receiverId, content } = body;
+    const { receiverId, receiverIds, content, subject, contentType, stickerId } = body as {
+      receiverId?: string;
+      receiverIds?: string[];
+      content?: string;
+      subject?: string;
+      contentType?: ChatContentType;
+      stickerId?: string;
+    };
 
-    if (!receiverId || !content?.trim()) {
+    const targets = Array.from(
+      new Set(
+        (Array.isArray(receiverIds) && receiverIds.length
+          ? receiverIds
+          : receiverId
+            ? [receiverId]
+            : []
+        ).filter(Boolean)
+      )
+    );
+
+    let text = (content || "").trim();
+    let type: ChatContentType = contentType || "TEXT";
+    let sticker: string | null = stickerId || null;
+
+    if (sticker) {
+      const def = getSticker(sticker);
+      if (!def) {
+        return NextResponse.json({ error: "Unknown sticker" }, { status: 400 });
+      }
+      type = "STICKER";
+      text = def.label;
+    }
+
+    if (!targets.length || !text) {
       return NextResponse.json({ error: "Receiver and content are required" }, { status: 400 });
     }
 
-    const receiver = await prisma.user.findFirst({
-      where: { id: receiverId, instituteId: session.user.instituteId, isActive: true },
-      select: { id: true, name: true },
+    const receivers = await prisma.user.findMany({
+      where: {
+        id: { in: targets },
+        instituteId: session.user.instituteId,
+        isActive: true,
+      },
+      select: { id: true },
     });
-    if (!receiver) {
+    if (!receivers.length) {
       return NextResponse.json({ error: "Receiver not found in this institute" }, { status: 404 });
     }
 
-    const message = await prisma.message.create({
-      data: {
-        senderId: session.user.id,
-        receiverId,
-        content: content.trim(),
-      },
-      include: {
-        sender: { select: { name: true } },
-      },
-    });
-
-    await notifyUser(receiverId, {
+    const result = await sendMessages({
+      senderId: session.user.id,
+      senderName: session.user.name || "Staff",
       instituteId: session.user.instituteId,
-      type: NotificationType.MESSAGE,
-      title: `Message from ${message.sender.name}`,
-      message: content.trim().slice(0, 140),
-      data: { senderId: session.user.id, messageId: message.id },
+      receiverIds: receivers.map((r) => r.id),
+      content: text,
+      subject,
+      contentType: type,
+      stickerId: sticker,
     });
 
-    return NextResponse.json({
-      success: true,
-      message: {
-        id: message.id,
-        sender: getInitials(message.sender.name),
-        name: message.sender.name,
-        text: message.content,
-        time: "Just now",
-        createdAt: message.createdAt.toISOString(),
-        self: true,
-        isRead: false,
-        readAt: null,
-      },
-    });
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("Send message error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const session = await getAuthSession();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { messageId, emoji } = body as { messageId?: string; emoji?: string };
+    if (!messageId || !emoji) {
+      return NextResponse.json({ error: "messageId and emoji required" }, { status: 400 });
+    }
+
+    const { reactToMessage } = await import("@/lib/messages-service");
+    const result = await reactToMessage({
+      userId: session.user.id,
+      messageId,
+      emoji,
+    });
+    if (!result) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json({ success: true, ...result });
+  } catch (error) {
+    console.error("React message error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

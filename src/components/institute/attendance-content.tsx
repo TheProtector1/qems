@@ -4,13 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarCheck, Save, CheckCircle2, X, Clock,
   AlertTriangle, Download, Palmtree,
-  Loader2, RefreshCw, Users,
+  Loader2, RefreshCw, Users, Share2,
 } from "lucide-react";
 import { cn, formatDate, downloadCsv } from "@/lib/utils";
 import { todayDateKey } from "@/lib/timezone";
 import { StudentAvatar } from "@/components/common/student-avatar";
 import { StudentAttendanceCalendar } from "@/components/institute/student-attendance-calendar";
 import { ATTENDANCE_STATUS, type AttStatus } from "@/lib/attendance-status";
+import { useShareToChat } from "@/components/common/share-to-chat";
+import { buildAttendanceShare } from "@/lib/share-templates";
+import { toast } from "sonner";
+import { useSession } from "next-auth/react";
 
 type StudentRow = {
   id: string;
@@ -37,6 +41,7 @@ function programLabel(type: string) {
 }
 
 export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) {
+  const { data: session } = useSession();
   const today = todayDateKey();
   const [selectedDate, setSelectedDate] = useState(today);
   const [programFilter, setProgramFilter] = useState("ALL");
@@ -50,6 +55,12 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
   const [error, setError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"mark" | "history" | "calendar">(readOnly ? "history" : "mark");
+  const [pendingAbsentNotify, setPendingAbsentNotify] = useState<StudentRow[]>([]);
+  const [notifyingParents, setNotifyingParents] = useState(false);
+  const { share, modal: shareModal } = useShareToChat();
+
+  const messagesApi =
+    session?.user?.role === "TEACHER" ? "/api/teacher/messages" : "/api/institute/messages";
 
   const [leaveDetails, setLeaveDetails] = useState<Record<string, { reason: string; requestedBy: string }>>({});
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -165,12 +176,95 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
 
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+      const absentees = students.filter((s) => attendance[s.id] === "ABSENT");
+      setPendingAbsentNotify(absentees);
       loadAttendance();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to save.");
     } finally {
       setSaving(false);
     }
+  };
+
+  const notifyAbsentParents = async () => {
+    if (!pendingAbsentNotify.length || notifyingParents) return;
+    setNotifyingParents(true);
+    let sent = 0;
+    let skipped = 0;
+    try {
+      for (const student of pendingAbsentNotify) {
+        const dirRes = await fetch(
+          `${messagesApi}?directory=1&forStudent=${encodeURIComponent(student.id)}`
+        );
+        if (!dirRes.ok) {
+          skipped += 1;
+          continue;
+        }
+        const dirData = await dirRes.json();
+        const parentId = dirData.parent?.id as string | undefined;
+        if (!parentId) {
+          skipped += 1;
+          continue;
+        }
+        const draft = buildAttendanceShare({
+          date: selectedDate,
+          absentees: [{ name: student.fullName, studentCode: student.studentId }],
+        });
+        const content = [
+          `📌 ${draft.title}`,
+          "",
+          draft.body,
+          "",
+          `— ${session?.user?.name || "Institute staff"}`,
+          "Sent via QEMS Communication",
+        ].join("\n");
+
+        const res = await fetch(messagesApi, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            receiverId: parentId,
+            content,
+            subject: draft.title,
+          }),
+        });
+        if (res.ok) sent += 1;
+        else skipped += 1;
+      }
+      if (sent > 0) {
+        toast.success(
+          sent === 1
+            ? "Absence notice sent to parent"
+            : `Absence notices sent to ${sent} parents`
+        );
+      }
+      if (skipped > 0) {
+        toast.message(`${skipped} student(s) skipped — no linked parent portal account`);
+      }
+      setPendingAbsentNotify([]);
+    } catch {
+      toast.error("Failed to notify some parents");
+    } finally {
+      setNotifyingParents(false);
+    }
+  };
+
+  const shareAbsenceSummary = () => {
+    const absentees = pendingAbsentNotify.length
+      ? pendingAbsentNotify
+      : students.filter((s) => attendance[s.id] === "ABSENT");
+    if (!absentees.length) {
+      toast.message("No absences to share");
+      return;
+    }
+    share(
+      buildAttendanceShare({
+        date: selectedDate,
+        absentees: absentees.map((s) => ({ name: s.fullName, studentCode: s.studentId })),
+        presentCount: summary.present + summary.late,
+        totalCount: summary.total,
+      })
+    );
   };
 
   const handleExport = () => {
@@ -220,6 +314,15 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
               Export
             </button>
             <button
+              type="button"
+              className="btn-ghost text-sm py-2"
+              onClick={shareAbsenceSummary}
+              disabled={!students.some((s) => attendance[s.id] === "ABSENT") && !pendingAbsentNotify.length}
+            >
+              <Share2 className="h-4 w-4" />
+              Share summary
+            </button>
+            <button
               onClick={handleSave}
               disabled={saving || !students.length || isHoliday}
               id="btn-save-attendance"
@@ -242,6 +345,56 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
           {error}
         </div>
       )}
+
+      {!readOnly && pendingAbsentNotify.length > 0 && (
+        <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-start gap-2 flex-1 min-w-0">
+            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                {pendingAbsentNotify.length} absence
+                {pendingAbsentNotify.length === 1 ? "" : "s"} saved
+              </p>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Notify linked parents in chat, or share a summary with staff.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setPendingAbsentNotify([])}
+              className="btn-ghost text-xs py-1.5 px-2.5"
+            >
+              Dismiss
+            </button>
+            <button
+              type="button"
+              onClick={shareAbsenceSummary}
+              className="btn-ghost text-xs py-1.5 px-2.5"
+            >
+              <Share2 className="h-3.5 w-3.5" /> Share summary
+            </button>
+            <button
+              type="button"
+              onClick={notifyAbsentParents}
+              disabled={notifyingParents}
+              className="btn-primary text-xs py-1.5 px-2.5"
+            >
+              {notifyingParents ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending…
+                </>
+              ) : (
+                <>
+                  <Share2 className="h-3.5 w-3.5" /> Notify parents
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+      {shareModal}
 
       {isHoliday && holidayInfo && (
         <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex items-start gap-3">

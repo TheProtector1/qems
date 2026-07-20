@@ -8,8 +8,16 @@ import { cn, formatDate, getSurahName } from "@/lib/utils";
 import { StudentAvatar } from "@/components/common/student-avatar";
 import { HifzJuzGrid, ParaCompletionHistory } from "@/components/common/hifz-juz-grid";
 import { HifzDirection } from "@prisma/client";
-import { getHifzCompletionPercent, hifzDirectionLabel, type JuzCellState, type ParaCompletionInfo } from "@/lib/hifz-progress";
+import {
+  getHifzCompletionPercent,
+  getNextPara,
+  hifzDirectionLabel,
+  type JuzCellState,
+  type ParaCompletionInfo,
+} from "@/lib/hifz-progress";
 import { ParaCompletionModal } from "@/components/institute/para-completion-modal";
+import { ShareToChatButton, useShareToChat } from "@/components/common/share-to-chat";
+import { buildHifzMilestoneShare, buildStudentProgressShare } from "@/lib/share-templates";
 
 const SABAQ_TYPES = [
   { value: "SABAQ", label: "Sabaq (New Lesson)", color: "text-green-600 bg-green-50 border-green-200" },
@@ -83,6 +91,7 @@ export function HifzContent({
     completion: ParaCompletionInfo | null;
   }>({ open: false, mode: "complete", para: 1, completion: null });
   const [paraSaving, setParaSaving] = useState(false);
+  const { share, modal: shareModal } = useShareToChat();
 
   const [form, setForm] = useState({
     type: "SABAQ",
@@ -179,6 +188,27 @@ export function HifzContent({
 
       setParaModal((m) => ({ ...m, open: false }));
       await loadData();
+
+      if (student) {
+        const nextPara = getNextPara(direction, paraModal.para);
+        const hifzComplete = body.hifzCompleted === true || nextPara === null;
+        share(
+          buildHifzMilestoneShare({
+            studentName: student.fullName,
+            studentCode: student.studentId,
+            para: paraModal.para,
+            daysToComplete: data.daysToComplete,
+            notes: data.notes,
+            completionPct: getHifzCompletionPercent(direction, nextPara ?? paraModal.para, {
+              completedCount: (student.paraCompletions?.length || 0) + 1,
+              hifzCompleted: hifzComplete,
+            }),
+            nextPara: hifzComplete ? null : nextPara,
+            hifzComplete,
+          }),
+          { studentId: student.id }
+        );
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to mark para complete.");
     } finally {
@@ -285,6 +315,22 @@ export function HifzContent({
                 {hifzCompleted ? "Hifz Complete" : `Para ${currentJuz || 0} / 30`}
               </p>
               <p className="text-xs text-gray-400 mb-4">{hifzDirectionLabel(direction)}</p>
+              {!readOnly && (
+                <div className="mb-4">
+                  <ShareToChatButton
+                    draft={buildStudentProgressShare({
+                      studentName: student.fullName,
+                      studentCode: student.studentId,
+                      program: "Hifz",
+                      progress: hifzCompleted
+                        ? "Hifz complete"
+                        : `Para ${currentJuz || 0}/30 · ${completionPct}%`,
+                    })}
+                    studentId={student.id}
+                    label="Share progress"
+                  />
+                </div>
+              )}
               <div className="flex items-center gap-6 flex-wrap">
                 <div>
                   <p className="text-xs text-gray-400">Progress</p>
@@ -370,6 +416,7 @@ export function HifzContent({
         onSubmit={handleParaComplete}
         submitting={paraSaving}
       />
+      {shareModal}
 
       {activeTab === "entry" && (
         <div className="dash-card p-6">

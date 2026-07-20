@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ClipboardList, Award, Plus, CheckCircle2, Clock, Calendar, BarChart3, Star, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { useShareToChat } from "@/components/common/share-to-chat";
+import { buildAssessmentShare } from "@/lib/share-templates";
 
 type Exam = { id: string; name: string; date: string; type: string; status: string; examiner: string };
 type Student = { id: string; name: string; class: string };
@@ -17,6 +19,7 @@ export function AssessmentsContent() {
   const [chartData, setChartData] = useState<{ student: string; score: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const { share, modal: shareModal } = useShareToChat();
 
   // Grade Form State
   const [form, setForm] = useState({
@@ -67,8 +70,22 @@ export function AssessmentsContent() {
     });
 
     if (res.ok) {
+      const student = students.find((s) => s.id === form.studentId);
+      const exam = exams.find((e) => e.id === form.examId);
+      const scoreTotal = form.fluency + form.tajweed;
       setSaved(true);
       await loadData();
+      if (student) {
+        share(
+          buildAssessmentShare({
+            studentName: student.name,
+            examTitle: exam?.name,
+            score: `${scoreTotal}/20 (fluency ${form.fluency}, tajweed ${form.tajweed}) · mistakes ${form.mistakes}`,
+            remarks: form.remarks || undefined,
+          }),
+          { studentId: student.id }
+        );
+      }
       setTimeout(() => {
         setSaved(false);
         setForm({ studentId: "", examId: "", mistakes: 0, fluency: 9, tajweed: 8, remarks: "" });
@@ -87,6 +104,7 @@ export function AssessmentsContent() {
 
   return (
     <div className="space-y-6">
+      {shareModal}
       {/* ── Tabs ── */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {[

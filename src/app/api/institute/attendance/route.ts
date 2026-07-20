@@ -39,7 +39,7 @@ export async function GET(req: Request) {
     const year = searchParams.get("year");
     const studentId = searchParams.get("studentId");
     const program = searchParams.get("program");
-    const historyDays = Math.min(parseInt(searchParams.get("days") || "14", 10), 60);
+    const historyDays = Math.min(parseInt(searchParams.get("days") || "7", 10), 30);
 
     const holidays = await getCachedInstituteHolidays(instituteId);
     const weeklyOffDays = getWeeklyOffDays(holidays);
@@ -124,12 +124,10 @@ export async function GET(req: Request) {
     const startHistory = parseDateOnly(dates[0]);
     const endHistory = parseDateOnly(dates[dates.length - 1]);
 
-    // Clear stale weekly/public HOLIDAY rows (e.g. Thursday still marked after Sunday-only weekly off).
-    try {
-      await clearStaleHolidayAttendance(instituteId, startHistory, endHistory);
-    } catch (err) {
-      console.warn("[ATTENDANCE_STALE_HOLIDAY_CLEANUP]", err);
-    }
+    // Stale holiday cleanup is expensive — run async and don't block the response
+    void clearStaleHolidayAttendance(instituteId, startHistory, endHistory).catch((err) =>
+      console.warn("[ATTENDANCE_STALE_HOLIDAY_CLEANUP]", err)
+    );
 
     const historyRecords = await prisma.attendance.findMany({
       where: {
@@ -152,7 +150,9 @@ export async function GET(req: Request) {
       const holidayInfo = getHolidayForDate(holidays, targetDate);
 
       if (holidayInfo) {
-        await syncHolidayAttendanceForDate(instituteId, targetDate);
+        void syncHolidayAttendanceForDate(instituteId, targetDate).catch((err) =>
+          console.warn("[ATTENDANCE_HOLIDAY_SYNC]", err)
+        );
       }
 
       const dayRecords = await prisma.attendance.findMany({
@@ -183,7 +183,9 @@ export async function GET(req: Request) {
     const todayHoliday = getHolidayForDate(holidays, todayDate);
 
     if (todayHoliday) {
-      await syncHolidayAttendanceForDate(instituteId, todayDate);
+      void syncHolidayAttendanceForDate(instituteId, todayDate).catch((err) =>
+        console.warn("[ATTENDANCE_HOLIDAY_SYNC]", err)
+      );
     }
 
     const todayRecords = await prisma.attendance.findMany({
@@ -254,7 +256,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true });
     }
 
-    const recordStudentIds = [...new Set(validRecords.map((r) => r.studentId))];
+    const recordStudentIds = Array.from(new Set(validRecords.map((r) => r.studentId)));
     const [students, existingRows] = await Promise.all([
       prisma.student.findMany({
         where: { id: { in: recordStudentIds }, instituteId },
@@ -272,45 +274,91 @@ export async function POST(req: Request) {
     const studentMap = new Map(students.map((s) => [s.id, s]));
     const existingMap = new Map(existingRows.map((r) => [r.studentId, r]));
     const absentNotifications: Array<{ studentId: string; fullName: string }> = [];
+    const toUpdate: Array<{
+      id: string;
+      status: string;
+      markedById: string | null;
+      leaveReason: string | null;
+      leaveRequestedBy: string | null;
+      prevStatus: string;
+      studentId: string;
+      fullName: string;
+    }> = [];
+    const toCreate: Array<{
+      studentId: string;
+      date: Date;
+      status: string;
+      markedById: string | null;
+      leaveReason: string | null;
+      leaveRequestedBy: string | null;
+      fullName: string;
+    }> = [];
 
-    await prisma.$transaction(async (tx) => {
-      for (const rec of validRecords) {
-        const student = studentMap.get(rec.studentId);
-        if (!student) continue;
-
-        const existing = existingMap.get(rec.studentId);
-        if (existing) {
-          const prevStatus = existing.status;
-          await tx.attendance.update({
-            where: { id: existing.id },
-            data: {
-              status: rec.status,
-              markedById: teacher?.id ?? existing.markedById,
-              leaveReason: rec.status === "LEAVE" ? rec.leaveReason : null,
-              leaveRequestedBy: rec.status === "LEAVE" ? rec.leaveRequestedBy : null,
-            },
-          });
-          if (rec.status === "ABSENT" && prevStatus !== "ABSENT") {
-            absentNotifications.push({ studentId: rec.studentId, fullName: student.fullName });
-          }
-        } else {
-          await tx.attendance.create({
-            data: {
-              studentId: rec.studentId,
-              date: targetDate,
-              status: rec.status,
-              classId: null,
-              markedById: teacher?.id ?? null,
-              leaveReason: rec.status === "LEAVE" ? rec.leaveReason : null,
-              leaveRequestedBy: rec.status === "LEAVE" ? rec.leaveRequestedBy : null,
-            },
-          });
-          if (rec.status === "ABSENT") {
-            absentNotifications.push({ studentId: rec.studentId, fullName: student.fullName });
-          }
-        }
+    for (const rec of validRecords) {
+      const student = studentMap.get(rec.studentId);
+      if (!student) continue;
+      const existing = existingMap.get(rec.studentId);
+      const leaveReason = rec.status === "LEAVE" ? rec.leaveReason ?? null : null;
+      const leaveRequestedBy = rec.status === "LEAVE" ? rec.leaveRequestedBy ?? null : null;
+      if (existing) {
+        toUpdate.push({
+          id: existing.id,
+          status: rec.status,
+          markedById: teacher?.id ?? existing.markedById,
+          leaveReason,
+          leaveRequestedBy,
+          prevStatus: existing.status,
+          studentId: rec.studentId,
+          fullName: student.fullName,
+        });
+      } else {
+        toCreate.push({
+          studentId: rec.studentId,
+          date: targetDate,
+          status: rec.status,
+          markedById: teacher?.id ?? null,
+          leaveReason,
+          leaveRequestedBy,
+          fullName: student.fullName,
+        });
       }
-    });
+    }
+
+    await prisma.$transaction([
+      ...toUpdate.map((u) =>
+        prisma.attendance.update({
+          where: { id: u.id },
+          data: {
+            status: u.status as never,
+            markedById: u.markedById,
+            leaveReason: u.leaveReason,
+            leaveRequestedBy: u.leaveRequestedBy,
+          },
+        })
+      ),
+      ...(toCreate.length
+        ? [
+            prisma.attendance.createMany({
+              data: toCreate.map(({ fullName: _n, ...row }) => ({
+                ...row,
+                status: row.status as never,
+                classId: null,
+              })),
+            }),
+          ]
+        : []),
+    ]);
+
+    for (const u of toUpdate) {
+      if (u.status === "ABSENT" && u.prevStatus !== "ABSENT") {
+        absentNotifications.push({ studentId: u.studentId, fullName: u.fullName });
+      }
+    }
+    for (const c of toCreate) {
+      if (c.status === "ABSENT") {
+        absentNotifications.push({ studentId: c.studentId, fullName: c.fullName });
+      }
+    }
 
     if (absentNotifications.length) {
       const dateLabel = formatDatePK(targetDate);

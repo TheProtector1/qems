@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { addDaysToDateKey, todayDateKey } from "@/lib/timezone";
+import { ShareToChatButton } from "@/components/common/share-to-chat";
+import { buildReportShare } from "@/lib/share-templates";
 
 type ReportType = "attendance" | "hifz" | "combined";
 
@@ -60,7 +62,7 @@ export function StudentReportsPanel({ studentId, studentName, program, className
         <div>
           <h3 className="font-display font-bold text-gray-900">PDF Reports for Parents</h3>
           <p className="text-xs text-gray-500">
-            Download structured reports to share with {studentName}&apos;s parent/guardian
+            Download or share structured reports for {studentName}&apos;s parent/guardian
             {program ? ` · ${program}` : ""}
           </p>
         </div>
@@ -83,25 +85,45 @@ export function StudentReportsPanel({ studentId, studentName, program, className
         </div>
 
         <div className="space-y-2">
-          {REPORT_OPTIONS.map((opt) => (
-            <button
-              key={opt.type}
-              type="button"
-              disabled={downloading !== null || !!(opt.type === "hifz" && program && program !== "Hifz")}
-              onClick={() => downloadReport(opt.type)}
-              className="w-full flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-primary-200 hover:bg-primary-50/50 transition-all text-left disabled:opacity-50"
-            >
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{opt.description}</p>
+          {REPORT_OPTIONS.map((opt) => {
+            const disabled = downloading !== null || !!(opt.type === "hifz" && program && program !== "Hifz");
+            return (
+              <div
+                key={opt.type}
+                className="flex items-stretch gap-2 p-3 sm:p-4 rounded-xl border border-gray-100 hover:border-primary-200 hover:bg-primary-50/30 transition-all"
+              >
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => downloadReport(opt.type)}
+                  className="flex-1 flex items-center justify-between text-left disabled:opacity-50 min-w-0"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{opt.description}</p>
+                  </div>
+                  {downloading === opt.type ? (
+                    <Loader2 className="h-5 w-5 text-primary-600 animate-spin flex-shrink-0 ml-2" />
+                  ) : (
+                    <Download className="h-5 w-5 text-primary-600 flex-shrink-0 ml-2" />
+                  )}
+                </button>
+                <ShareToChatButton
+                  draft={buildReportShare({
+                    studentName,
+                    reportLabel: opt.label,
+                    dateFrom: from,
+                    dateTo: to,
+                  })}
+                  studentId={studentId}
+                  variant="icon"
+                  label={`Share ${opt.label}`}
+                  disabled={disabled}
+                  className="shrink-0 self-center"
+                />
               </div>
-              {downloading === opt.type ? (
-                <Loader2 className="h-5 w-5 text-primary-600 animate-spin flex-shrink-0" />
-              ) : (
-                <Download className="h-5 w-5 text-primary-600 flex-shrink-0" />
-              )}
-            </button>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

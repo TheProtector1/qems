@@ -273,7 +273,15 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                   <div className="flex justify-center lg:justify-end">
                     <StudentProfileActions
                       studentId={student.id}
+                      studentName={student.fullName}
+                      studentCode={student.studentId}
+                      program={program}
+                      progress={progressSummaryLabel(student.programType, student)}
+                      teacherName={teacherName}
+                      attendanceRate={attendancePct ?? undefined}
                       parentEmail={parentEmail}
+                      parentUserId={student.parent?.user?.id ?? null}
+                      parentName={parentName}
                       backHref={backHref}
                     />
                   </div>

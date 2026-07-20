@@ -2,9 +2,15 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getInitials } from "@/lib/utils";
-import { formatMessageTime, roleLabel } from "@/lib/communication";
-import { notifyUser } from "@/lib/notifications";
-import { NotificationType, Role } from "@prisma/client";
+import { roleLabel } from "@/lib/communication";
+import { getSticker, type ChatContentType } from "@/lib/chat-enrichment";
+import {
+  listConversation,
+  listThreadsForUser,
+  reactToMessage,
+  sendMessages,
+} from "@/lib/messages-service";
+import { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +19,14 @@ async function getParentPartners(parentUserId: string, instituteId: string | nul
 
   const parent = await prisma.parent.findUnique({
     where: { userId: parentUserId },
-    include: {
+    select: {
+      id: true,
       students: {
         where: { isActive: true },
-        include: {
+        select: {
+          instituteId: true,
           teacher: {
-            include: { user: { select: { id: true, name: true, role: true } } },
+            select: { user: { select: { id: true, name: true } } },
           },
         },
       },
@@ -36,14 +44,7 @@ async function getParentPartners(parentUserId: string, instituteId: string | nul
     }
   }
 
-  let instId = instituteId;
-  if (!instId && parent?.id) {
-    const student = await prisma.student.findFirst({
-      where: { parentId: parent.id, isActive: true },
-      select: { instituteId: true },
-    });
-    instId = student?.instituteId ?? null;
-  }
+  const instId = instituteId || parent?.students[0]?.instituteId || null;
 
   if (instId) {
     const staff = await prisma.user.findMany({
@@ -54,6 +55,7 @@ async function getParentPartners(parentUserId: string, instituteId: string | nul
         role: { in: [Role.INSTITUTE_OWNER, Role.BRANCH_MANAGER] },
       },
       select: { id: true, name: true, role: true },
+      take: 50,
     });
     for (const u of staff) {
       map.set(u.id, { id: u.id, name: u.name, role: roleLabel(u.role) });
@@ -61,15 +63,6 @@ async function getParentPartners(parentUserId: string, instituteId: string | nul
   }
 
   return map;
-}
-
-async function canParentMessage(
-  parentUserId: string,
-  partnerUserId: string,
-  instituteId: string | null | undefined
-) {
-  const partners = await getParentPartners(parentUserId, instituteId);
-  return partners.has(partnerUserId);
 }
 
 export async function GET(req: Request) {
@@ -84,155 +77,51 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const partnerId = searchParams.get("partnerId");
     const directory = searchParams.get("directory");
+    const forStudent = searchParams.get("forStudent");
     const q = searchParams.get("q")?.trim().toLowerCase();
+    const after = searchParams.get("after");
 
     const allowedPartners = await getParentPartners(userId, instituteId);
+    const allowedIds = Array.from(allowedPartners.keys());
 
-    if (directory === "1") {
+    if (directory === "1" || forStudent) {
       let contacts = Array.from(allowedPartners.values()).map((p) => ({
         ...p,
         avatar: getInitials(p.name),
       }));
       if (q) {
         contacts = contacts.filter(
-          (c) =>
-            c.name.toLowerCase().includes(q) ||
-            c.role.toLowerCase().includes(q)
+          (c) => c.name.toLowerCase().includes(q) || c.role.toLowerCase().includes(q)
         );
       }
-      return NextResponse.json({ contacts });
+      return NextResponse.json({ contacts, parent: null });
     }
 
     if (partnerId) {
-      if (!(await canParentMessage(userId, partnerId, instituteId))) {
+      if (!allowedPartners.has(partnerId)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-
-      const messages = await prisma.message.findMany({
-        where: {
-          OR: [
-            { senderId: userId, receiverId: partnerId },
-            { senderId: partnerId, receiverId: userId },
-          ],
-        },
-        include: { sender: { select: { id: true, name: true } } },
-        orderBy: { createdAt: "asc" },
+      const data = await listConversation({
+        userId,
+        partnerId,
+        after,
+        markRead: !after,
       });
-
-      await prisma.message.updateMany({
-        where: { senderId: partnerId, receiverId: userId, isRead: false },
-        data: { isRead: true, readAt: new Date() },
-      });
-
-      return NextResponse.json({
-        messages: messages.map((m) => ({
-          id: m.id,
-          sender: getInitials(m.sender.name),
-          name: m.sender.name,
-          text: m.content,
-          time: formatMessageTime(m.createdAt),
-          createdAt: m.createdAt.toISOString(),
-          self: m.senderId === userId,
-          isRead: m.isRead,
-          readAt: m.readAt?.toISOString() ?? null,
-        })),
-      });
+      return NextResponse.json(data);
     }
 
-    const allowedIds = Array.from(allowedPartners.keys());
-    if (!allowedIds.length) {
-      return NextResponse.json({ threads: [], unreadTotal: 0 });
-    }
-
-    const allMessages = await prisma.message.findMany({
-      where: {
-        OR: [
-          { senderId: userId, receiverId: { in: allowedIds } },
-          { senderId: { in: allowedIds }, receiverId: userId },
-        ],
-      },
-      include: {
-        sender: { select: { id: true, name: true, role: true } },
-        receiver: { select: { id: true, name: true, role: true } },
-      },
-      orderBy: { createdAt: "desc" },
+    const data = await listThreadsForUser({
+      userId,
+      partnerIds: allowedIds,
+      q: q || undefined,
     });
 
-    const unreadCounts = await prisma.message.groupBy({
-      by: ["senderId"],
-      where: { receiverId: userId, isRead: false, senderId: { in: allowedIds } },
-      _count: true,
-    });
-    const unreadBySender = new Map(unreadCounts.map((r) => [r.senderId, r._count]));
+    const threads = data.threads.map((t) => ({
+      ...t,
+      role: allowedPartners.get(t.id)?.role || t.role,
+    }));
 
-    const threadMap = new Map<
-      string,
-      {
-        id: string;
-        name: string;
-        role: string;
-        lastMsg: string;
-        time: string;
-        unread: boolean;
-        unreadCount: number;
-        avatar: string;
-        createdAt: string;
-      }
-    >();
-
-    Array.from(allowedPartners.values()).forEach((partner) => {
-      threadMap.set(partner.id, {
-        id: partner.id,
-        name: partner.name,
-        role: partner.role,
-        lastMsg: "Start a conversation",
-        time: "",
-        unread: false,
-        unreadCount: 0,
-        avatar: getInitials(partner.name),
-        createdAt: "",
-      });
-    });
-
-    for (const m of allMessages) {
-      const partner = m.senderId === userId ? m.receiver : m.sender;
-      if (!partner || !allowedPartners.has(partner.id)) continue;
-
-      const existing = threadMap.get(partner.id);
-      if (!existing || existing.lastMsg === "Start a conversation") {
-        const unreadCount = unreadBySender.get(partner.id) || 0;
-        threadMap.set(partner.id, {
-          id: partner.id,
-          name: partner.name,
-          role: allowedPartners.get(partner.id)?.role || roleLabel(partner.role),
-          lastMsg: m.content.slice(0, 120),
-          time: formatMessageTime(m.createdAt),
-          unread: unreadCount > 0,
-          unreadCount,
-          avatar: getInitials(partner.name),
-          createdAt: m.createdAt.toISOString(),
-        });
-      }
-    }
-
-    let threads = Array.from(threadMap.values()).sort((a, b) => {
-      if (a.unread !== b.unread) return a.unread ? -1 : 1;
-      return (b.createdAt || "").localeCompare(a.createdAt || "");
-    });
-
-    if (q) {
-      threads = threads.filter(
-        (t) =>
-          t.name.toLowerCase().includes(q) ||
-          t.role.toLowerCase().includes(q) ||
-          t.lastMsg.toLowerCase().includes(q)
-      );
-    }
-
-    return NextResponse.json({
-      threads,
-      unreadTotal: threads.reduce((s, t) => s + t.unreadCount, 0),
-    });
+    return NextResponse.json({ threads, unreadTotal: data.unreadTotal });
   } catch (error) {
     console.error("[PARENT_MESSAGES_GET]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -247,52 +136,88 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { receiverId, content } = body;
+    const { receiverId, receiverIds, content, subject, contentType, stickerId } = body as {
+      receiverId?: string;
+      receiverIds?: string[];
+      content?: string;
+      subject?: string;
+      contentType?: ChatContentType;
+      stickerId?: string;
+    };
 
-    if (!receiverId || !content?.trim()) {
+    const targets = Array.from(
+      new Set(
+        (Array.isArray(receiverIds) && receiverIds.length
+          ? receiverIds
+          : receiverId
+            ? [receiverId]
+            : []
+        ).filter(Boolean)
+      )
+    );
+
+    const partners = await getParentPartners(session.user.id, session.user.instituteId);
+    for (const id of targets) {
+      if (!partners.has(id)) {
+        return NextResponse.json(
+          { error: "You can only message your child's teachers or institute leadership" },
+          { status: 403 }
+        );
+      }
+    }
+
+    let text = (content || "").trim();
+    let type: ChatContentType = contentType || "TEXT";
+    let sticker: string | null = stickerId || null;
+    if (sticker) {
+      const def = getSticker(sticker);
+      if (!def) return NextResponse.json({ error: "Unknown sticker" }, { status: 400 });
+      type = "STICKER";
+      text = def.label;
+    }
+
+    if (!targets.length || !text) {
       return NextResponse.json({ error: "Receiver and content are required" }, { status: 400 });
     }
 
-    if (!(await canParentMessage(session.user.id, receiverId, session.user.instituteId))) {
-      return NextResponse.json(
-        { error: "You can only message your child's teachers or institute leadership" },
-        { status: 403 }
-      );
-    }
-
-    const message = await prisma.message.create({
-      data: {
-        senderId: session.user.id,
-        receiverId,
-        content: content.trim(),
-      },
-      include: { sender: { select: { name: true } } },
-    });
-
-    await notifyUser(receiverId, {
-      type: NotificationType.MESSAGE,
-      title: `Message from ${session.user.name || "Parent"}`,
-      message: content.trim().slice(0, 140),
+    const result = await sendMessages({
+      senderId: session.user.id,
+      senderName: session.user.name || "Parent",
       instituteId: session.user.instituteId,
-      data: { messageId: message.id, senderId: session.user.id },
+      receiverIds: targets,
+      content: text,
+      subject,
+      contentType: type,
+      stickerId: sticker,
     });
 
-    return NextResponse.json({
-      success: true,
-      message: {
-        id: message.id,
-        sender: getInitials(message.sender.name),
-        name: message.sender.name,
-        text: message.content,
-        time: "Just now",
-        createdAt: message.createdAt.toISOString(),
-        self: true,
-        isRead: false,
-        readAt: null,
-      },
-    });
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("[PARENT_MESSAGES_POST]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const session = await getAuthSession();
+    if (!session || session.user.role !== "PARENT") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const body = await req.json();
+    const { messageId, emoji } = body as { messageId?: string; emoji?: string };
+    if (!messageId || !emoji) {
+      return NextResponse.json({ error: "messageId and emoji required" }, { status: 400 });
+    }
+    const result = await reactToMessage({
+      userId: session.user.id,
+      messageId,
+      emoji,
+    });
+    if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ success: true, ...result });
+  } catch (error) {
+    console.error("[PARENT_MESSAGES_PATCH]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

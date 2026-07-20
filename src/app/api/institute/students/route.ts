@@ -165,20 +165,32 @@ export async function GET(req: Request) {
       );
 
     const since = parseDateOnly(addDaysToDateKey(todayDateKey(), -30));
-
     const studentIds = students.map((s) => s.id);
-    const attendanceGrouped =
+
+    const [attendanceGrouped, hifzRatings] = await Promise.all([
       studentIds.length === 0
-        ? []
-        : await withDbRetry("students.attendanceSummary", () => prisma.attendance.groupBy({
-            by: ["studentId", "status"],
-            where: {
-              studentId: { in: studentIds },
-              date: { gte: since },
-              status: { not: "HOLIDAY" },
-            },
-            _count: true,
-          }));
+        ? Promise.resolve([])
+        : withDbRetry("students.attendanceSummary", () =>
+            prisma.attendance.groupBy({
+              by: ["studentId", "status"],
+              where: {
+                studentId: { in: studentIds },
+                date: { gte: since },
+                status: { not: "HOLIDAY" },
+              },
+              _count: true,
+            })
+          ),
+      studentIds.length === 0
+        ? Promise.resolve([])
+        : withDbRetry("students.hifzQuality", () =>
+            prisma.hifzRecord.groupBy({
+              by: ["studentId"],
+              where: { studentId: { in: studentIds } },
+              _avg: { rating: true },
+            })
+          ),
+    ]);
 
     const attendancePct: Record<string, number> = {};
     const statsByStudent: Record<string, { present: number; total: number }> = {};
@@ -195,14 +207,6 @@ export async function GET(req: Request) {
       attendancePct[sid] = stats.total ? Math.round((stats.present / stats.total) * 100) : 0;
     }
 
-    const hifzRatings =
-      studentIds.length === 0
-        ? []
-        : await withDbRetry("students.hifzQuality", () => prisma.hifzRecord.groupBy({
-            by: ["studentId"],
-            where: { studentId: { in: studentIds } },
-            _avg: { rating: true },
-          }));
     const qualityScore: Record<string, number> = {};
     for (const row of hifzRatings) {
       if (row._avg.rating) qualityScore[row.studentId] = Number((row._avg.rating * 2).toFixed(1));

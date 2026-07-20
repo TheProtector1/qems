@@ -1123,6 +1123,11 @@ model Message {
   id          String    @id @default(cuid())
   subject     String?
   content     String    @db.Text
+  /// TEXT | STICKER | RICH — kept as String for flexible client payloads
+  contentType String    @default("TEXT")
+  stickerId   String?
+  /// Map of emoji -> array of userIds who reacted, e.g. { "❤️": ["cuid1"] }
+  reactions   Json?
   isRead      Boolean   @default(false)
   readAt      DateTime?
   senderId    String
@@ -1138,6 +1143,8 @@ model Message {
   @@index([receiverId])
   @@index([senderId, createdAt])
   @@index([receiverId, createdAt])
+  @@index([receiverId, isRead])
+  @@index([senderId, receiverId, createdAt])
 }
 
 model Notification {
