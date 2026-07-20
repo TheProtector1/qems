@@ -49,7 +49,8 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client-17
-          pg_dump --version
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Run backup
         env:
@@ -58,11 +59,21 @@ jobs:
           BACKUP_DIR: ${{ runner.temp }}/backups
           BACKUP_LOG: ${{ runner.temp }}/backup.log
           BACKUP_RETENTION_DAYS: ${{ env.BACKUP_RETENTION_DAYS }}
+          PATH: /usr/lib/postgresql/17/bin:/usr/local/bin:/usr/bin:/bin
         run: |
-          if [ -z "$DATABASE_URL" ]; then
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
             echo "ERROR: Add QURAN_EDUCATION_DATABASE_URL (or DATABASE_URL) to GitHub Actions secrets."
             exit 1
           fi
+          # Strip accidental wrapping quotes copied from .env files
+          DATABASE_URL="${DATABASE_URL%\"}"
+          DATABASE_URL="${DATABASE_URL#\"}"
+          DATABASE_URL="${DATABASE_URL%\'}"
+          DATABASE_URL="${DATABASE_URL#\'}"
+          export DATABASE_URL
+          echo "Using pg_dump: $(command -v pg_dump)"
+          pg_dump --version
           bash scripts/backup-database.sh
 
       - name: Upload backup artifact

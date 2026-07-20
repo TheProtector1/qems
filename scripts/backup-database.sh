@@ -97,7 +97,8 @@ log "Starting backup -> $BACKUP_FILE (pg_dump: $("$PG_DUMP" --version 2>/dev/nul
 
 if ! "$PG_DUMP" "$DATABASE_URL" --format=custom --no-owner --no-acl --file="$TMP_BACKUP_FILE" 2>"$DUMP_LOG"; then
   log "ERROR: pg_dump failed"
-  sed 's/^/[pg_dump] /' "$DUMP_LOG" | tee -a "$LOG_FILE" >/dev/null
+  # Print to console AND log (do not hide stdout — needed for GitHub Actions debugging)
+  sed 's/^/[pg_dump] /' "$DUMP_LOG" | tee -a "$LOG_FILE"
   exit 1
 fi
 
@@ -108,7 +109,7 @@ fi
 
 if ! "$PG_RESTORE" --list "$TMP_BACKUP_FILE" >/dev/null 2>>"$DUMP_LOG"; then
   log "ERROR: backup verification failed; pg_restore could not read the dump"
-  sed 's/^/[pg_restore] /' "$DUMP_LOG" | tee -a "$LOG_FILE" >/dev/null
+  sed 's/^/[pg_restore] /' "$DUMP_LOG" | tee -a "$LOG_FILE"
   exit 1
 fi
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Resolve pg_dump/pg_restore — prefer the highest installed major version (Homebrew PATH often has an older one).
+# Resolve pg_dump/pg_restore — prefer the highest installed major version
+# (PATH often points to an older wrapper, especially on Ubuntu/GitHub Actions).
 resolve_pg_tool() {
   local tool="$1"
   local best="" best_major=0 path major
@@ -18,6 +19,12 @@ resolve_pg_tool() {
     _consider "$(command -v "$tool")"
   fi
 
+  # Linux / GitHub Actions package layouts
+  for path in /usr/lib/postgresql/*/bin/"$tool" /usr/pgsql-*/bin/"$tool"; do
+    [ -e "$path" ] && _consider "$path"
+  done
+
+  # macOS Homebrew
   for path in /opt/homebrew/opt/postgresql@*/bin/"$tool" /usr/local/opt/postgresql@*/bin/"$tool"; do
     [ -e "$path" ] && _consider "$path"
   done
