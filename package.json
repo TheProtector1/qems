@@ -13,7 +13,8 @@
     "db:studio": "prisma studio",
     "db:seed:quran-valley": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed-quran-valley.ts",
     "backup": "bash scripts/backup-database.sh",
-    "backup:install": "bash scripts/setup-backup-cron.sh",
+    "backup:install": "bash scripts/setup-backup-scheduler.sh",
+    "backup:status": "bash scripts/backup-status.sh",
     "backup:restore": "bash scripts/restore-database.sh"
   },
   "dependencies": {

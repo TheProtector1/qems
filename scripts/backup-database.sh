@@ -14,6 +14,35 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
 }
 
+# Portable lock (macOS has no flock). Uses mkdir atomic create.
+LOCK_DIR="${BACKUP_LOCK_DIR:-$BACKUP_DIR/.backup.lockdir}"
+acquire_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    return 0
+  fi
+
+  # Clear stale locks older than 60 minutes.
+  if [ -d "$LOCK_DIR" ]; then
+    local age_minutes
+    age_minutes="$(( ( $(date +%s) - $(stat -f %m "$LOCK_DIR" 2>/dev/null || echo 0) ) / 60 ))"
+    if [ "$age_minutes" -ge 60 ]; then
+      rmdir "$LOCK_DIR" 2>/dev/null || rm -rf "$LOCK_DIR"
+      if mkdir "$LOCK_DIR" 2>/dev/null; then
+        return 0
+      fi
+    fi
+  fi
+  return 1
+}
+
+if ! acquire_lock; then
+  log "Backup already running — skipping this tick"
+  exit 0
+fi
+
+release_lock() {
+  rmdir "$LOCK_DIR" 2>/dev/null || true
+}
 is_positive_int() {
   case "${1:-}" in
     ""|*[!0-9]*) return 1 ;;
@@ -54,11 +83,13 @@ DATABASE_URL="$(load_database_url "$ROOT_DIR")" || {
 
 TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
 BACKUP_FILE="$BACKUP_DIR/qems-${TIMESTAMP}.dump"
-TMP_BACKUP_FILE="$(mktemp "$BACKUP_DIR/.qems-${TIMESTAMP}.XXXXXX.dump")"
+# macOS mktemp requires the XXXXXX suffix at the end of the template.
+TMP_BACKUP_FILE="$(mktemp "$BACKUP_DIR/.qems-${TIMESTAMP}.XXXXXX")"
 DUMP_LOG="$(mktemp)"
 
 cleanup_tmp() {
   rm -f "$TMP_BACKUP_FILE" "$DUMP_LOG"
+  release_lock
 }
 trap cleanup_tmp EXIT
 
