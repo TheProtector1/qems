@@ -20,6 +20,10 @@ on:
     # Every 30 minutes UTC (GitHub may delay a few minutes under load)
     - cron: "*/30 * * * *"
   workflow_dispatch:
+  # Make the workflow visible under Actions immediately after setup pushes
+  push:
+    paths:
+      - ".github/workflows/database-backup.yml"
 
 env:
   BACKUP_RETENTION_DAYS: "2"
