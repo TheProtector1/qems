@@ -2,13 +2,10 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
+import { announcementTargetLabel } from "@/lib/communication";
+import { formatDateTimePK } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
-
-function targetLabel(roles: Role[]) {
-  if (roles.length === 0 || roles.length >= 4) return "All";
-  return roles.map((r) => r.replace("_", " ")).join(", ");
-}
 
 export async function GET() {
   try {
@@ -22,7 +19,7 @@ export async function GET() {
       include: { students: { select: { instituteId: true }, take: 1 } },
     });
 
-    const instituteId = parent?.students[0]?.instituteId;
+    const instituteId = session.user.instituteId || parent?.students[0]?.instituteId;
     if (!instituteId) {
       return NextResponse.json({ announcements: [] });
     }
@@ -36,22 +33,30 @@ export async function GET() {
         ],
       },
       orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+      take: 100,
     });
+
+    const authorIds = Array.from(
+      new Set(announcements.map((a) => a.createdById).filter(Boolean) as string[])
+    );
+    const authors = authorIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: authorIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const authorMap = new Map(authors.map((a) => [a.id, a.name]));
 
     return NextResponse.json({
       announcements: announcements.map((a) => ({
         id: a.id,
         title: a.title,
-        target: targetLabel(a.targetRoles),
+        target: announcementTargetLabel(a.targetRoles),
         content: a.content,
-        date: a.createdAt.toLocaleString("en-US", {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        }),
-        author: "Institute",
+        date: formatDateTimePK(a.createdAt),
+        author: (a.createdById && authorMap.get(a.createdById)) || "Institute",
         isPinned: a.isPinned,
+        createdAt: a.createdAt.toISOString(),
       })),
     });
   } catch (error) {

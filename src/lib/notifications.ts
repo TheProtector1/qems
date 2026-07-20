@@ -61,11 +61,12 @@ export async function notifyParentOfStudent(
 
 export async function notifyUser(
   userId: string,
-  payload: Omit<CreateNotificationInput, "userId">
+  payload: Omit<CreateNotificationInput, "userId"> & { sendSms?: boolean }
 ) {
   const notification = await createNotification({ userId, ...payload });
 
-  if (payload.type === NotificationType.MESSAGE) {
+  // In-app MESSAGE alerts stay silent on SMS unless explicitly requested
+  if (payload.sendSms && SMS_ENABLED_TYPES.includes(payload.type)) {
     const smsText = `${payload.title}: ${payload.message}`;
     await sendSmsToUser(userId, smsText);
   }
