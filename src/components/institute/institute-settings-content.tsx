@@ -2,22 +2,50 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Settings, Save, Bell, Shield, Building, Key } from "lucide-react";
+import { Settings, Save, Bell, Shield, Building, Key, Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 const PANELS = [
   { label: "Profile & Campus", icon: Building, id: "profile" },
   { label: "Alerts & Notifications", icon: Bell, id: "alerts" },
   { label: "Safeguarding Policies", icon: Shield, id: "safeguarding" },
-  { label: "Security & API Keys", icon: Key, id: "security" },
+  { label: "Security & Backup", icon: Key, id: "security" },
 ] as const;
 
 export function InstituteSettingsContent() {
   const [activePanel, setActivePanel] = useState<string>("profile");
   const [saved, setSaved] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const handleSave = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/institute/export");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Export failed");
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match?.[1] || `qems-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Backup downloaded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -118,9 +146,28 @@ export function InstituteSettingsContent() {
 
           {activePanel === "security" && (
             <div className="dash-card p-6 bg-white space-y-4">
-              <h3 className="font-semibold text-gray-900 text-sm border-b pb-3">Security & API Keys</h3>
-              <p className="text-sm text-gray-600">Manage API access keys and session policies for integrations.</p>
-              <button type="button" className="btn-ghost text-xs py-2" onClick={() => alert("API key rotation is managed by your system administrator.")}>
+              <h3 className="font-semibold text-gray-900 text-sm border-b pb-3">Security & Backup</h3>
+              <p className="text-sm text-gray-600">
+                Download a JSON archive of students, classes, fees, attendance, and safeguarding metadata (no password hashes or document blobs).
+              </p>
+              <button
+                type="button"
+                className="btn-primary text-xs py-2 inline-flex"
+                disabled={exporting}
+                onClick={handleExport}
+              >
+                {exporting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {exporting ? "Preparing…" : "Download data backup"}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost text-xs py-2"
+                onClick={() => alert("API key rotation is managed by your system administrator.")}
+              >
                 Rotate API Keys
               </button>
             </div>

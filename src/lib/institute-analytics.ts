@@ -34,12 +34,20 @@ export type InstituteAnalytics = {
   alerts: { type: string; message: string; severity: string }[];
 };
 
-export async function getInstituteAnalytics(instituteId: string): Promise<InstituteAnalytics> {
+export async function getInstituteAnalytics(
+  instituteId: string,
+  branchId?: string | null
+): Promise<InstituteAnalytics> {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+  const studentScope = {
+    instituteId,
+    ...(branchId ? { branchId } : {}),
+  };
 
   const [
     totalStudents,
@@ -54,32 +62,43 @@ export async function getInstituteAnalytics(instituteId: string): Promise<Instit
     overdueFees,
     hifzByMonthType,
   ] = await Promise.all([
-    prisma.student.count({ where: { instituteId, isActive: true } }),
-    prisma.teacher.count({ where: { instituteId, isActive: true } }),
+    prisma.student.count({ where: { ...studentScope, isActive: true } }),
+    prisma.teacher.count({
+      where: {
+        instituteId,
+        isActive: true,
+        ...(branchId ? { branchId } : {}),
+      },
+    }),
     prisma.attendance.groupBy({
       by: ["date", "status"],
-      where: { student: { instituteId }, date: { gte: thirtyDaysAgo } },
+      where: { student: studentScope, date: { gte: thirtyDaysAgo } },
       _count: true,
     }),
     prisma.hifzRecord.aggregate({
-      where: { student: { instituteId } },
+      where: { student: studentScope },
       _avg: { rating: true },
     }),
     prisma.feePayment.groupBy({
       by: ["status"],
-      where: { student: { instituteId } },
+      where: { student: studentScope },
       _sum: { netAmount: true },
       _count: true,
     }),
-    prisma.student.count({ where: { instituteId, hifzCompletedAt: { not: null } } }),
-    prisma.instituteAlumni.count({ where: { instituteId } }),
+    prisma.student.count({ where: { ...studentScope, hifzCompletedAt: { not: null } } }),
+    prisma.instituteAlumni.count({
+      where: {
+        instituteId,
+        ...(branchId ? { student: { branchId } } : {}),
+      },
+    }),
     prisma.student.groupBy({
       by: ["programType"],
-      where: { instituteId, isActive: true },
+      where: { ...studentScope, isActive: true },
       _count: true,
     }),
     prisma.student.findMany({
-      where: { instituteId, isActive: true },
+      where: { ...studentScope, isActive: true },
       select: {
         id: true,
         fullName: true,
@@ -92,19 +111,30 @@ export async function getInstituteAnalytics(instituteId: string): Promise<Instit
     }),
     prisma.feePayment.count({
       where: {
-        student: { instituteId },
+        student: studentScope,
         status: { in: ["PENDING", "OVERDUE", "PARTIAL"] },
         dueDate: { lt: new Date() },
       },
     }),
-    prisma.$queryRaw<Array<{ month: string; type: string; count: bigint }>>`
-      SELECT to_char(hr.date, 'YYYY-MM') AS month, hr.type::text AS type, COUNT(*)::bigint AS count
-      FROM "HifzRecord" hr
-      INNER JOIN "Student" s ON hr."studentId" = s.id
-      WHERE s."instituteId" = ${instituteId} AND hr.date >= ${sixMonthsAgo}
-      GROUP BY 1, 2
-      ORDER BY 1
-    `,
+    branchId
+      ? prisma.$queryRaw<Array<{ month: string; type: string; count: bigint }>>`
+          SELECT to_char(hr.date, 'YYYY-MM') AS month, hr.type::text AS type, COUNT(*)::bigint AS count
+          FROM "HifzRecord" hr
+          INNER JOIN "Student" s ON hr."studentId" = s.id
+          WHERE s."instituteId" = ${instituteId}
+            AND s."branchId" = ${branchId}
+            AND hr.date >= ${sixMonthsAgo}
+          GROUP BY 1, 2
+          ORDER BY 1
+        `
+      : prisma.$queryRaw<Array<{ month: string; type: string; count: bigint }>>`
+          SELECT to_char(hr.date, 'YYYY-MM') AS month, hr.type::text AS type, COUNT(*)::bigint AS count
+          FROM "HifzRecord" hr
+          INNER JOIN "Student" s ON hr."studentId" = s.id
+          WHERE s."instituteId" = ${instituteId} AND hr.date >= ${sixMonthsAgo}
+          GROUP BY 1, 2
+          ORDER BY 1
+        `,
   ]);
 
   let attTotal = 0;

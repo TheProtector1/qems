@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -19,7 +20,9 @@ export default async function InstituteAnalyticsPage() {
       title="Analytics & Reports"
       breadcrumbs={[{ label: "Institute" }, { label: "Analytics" }]}
     >
-      <AnalyticsPageContent initialAnalytics={analytics} />
+      <Suspense fallback={<div className="py-12 text-center text-sm text-gray-400">Loading analytics…</div>}>
+        <AnalyticsPageContent initialAnalytics={analytics} />
+      </Suspense>
     </DashboardShell>
   );
 }

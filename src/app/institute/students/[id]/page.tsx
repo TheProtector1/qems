@@ -29,6 +29,8 @@ import { StudentAuditPanel } from "@/components/institute/student-audit-panel";
 import { StudentAttendanceCalendar } from "@/components/institute/student-attendance-calendar";
 import { StudentReportsPanel } from "@/components/institute/student-reports-panel";
 import { StudentDocumentsManager } from "@/components/institute/student-documents-manager";
+import { StudentQrCard } from "@/components/institute/student-qr-card";
+import { StudentGuardiansPanel } from "@/components/institute/student-guardians-panel";
 import { progressSummaryLabel } from "@/lib/student-progress";
 import type { ElementType } from "react";
 import { HifzJuzGrid } from "@/components/common/hifz-juz-grid";
@@ -522,6 +524,12 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
             studentName={student.fullName}
             program={program}
           />
+          <div className="mt-4 space-y-4">
+            <StudentQrCard studentId={student.id} />
+            {session.user.role !== "TEACHER" && (
+              <StudentGuardiansPanel studentId={student.id} />
+            )}
+          </div>
         </div>
 
         <div className="dash-card bg-white p-5 sm:p-6">

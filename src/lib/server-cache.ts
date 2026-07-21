@@ -9,13 +9,17 @@ export function getCachedInstituteHolidays(instituteId: string) {
   )();
 }
 
-export function getCachedInstituteAnalytics(instituteId: string) {
+export function getCachedInstituteAnalytics(
+  instituteId: string,
+  branchId?: string | null
+) {
+  const scope = branchId || "all";
   return unstable_cache(
     async () => {
       const { getInstituteAnalytics } = await import("@/lib/institute-analytics");
-      return getInstituteAnalytics(instituteId);
+      return getInstituteAnalytics(instituteId, branchId);
     },
-    [`institute-analytics-${instituteId}`],
+    [`institute-analytics-${instituteId}-${scope}`],
     { revalidate: 120, tags: [`analytics-${instituteId}`] }
   )();
 }

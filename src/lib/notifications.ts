@@ -28,6 +28,7 @@ const SMS_ENABLED_TYPES: NotificationType[] = [
   NotificationType.ABSENCE,
   NotificationType.FEE_DUE,
   NotificationType.EXAM_RESULT,
+  NotificationType.LEAVE_REQUEST,
 ];
 
 export async function notifyParentOfStudent(

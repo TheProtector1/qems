@@ -18,6 +18,7 @@ import {
 import { ParaCompletionModal } from "@/components/institute/para-completion-modal";
 import { ShareToChatButton, useShareToChat } from "@/components/common/share-to-chat";
 import { buildHifzMilestoneShare, buildStudentProgressShare } from "@/lib/share-templates";
+import { HifzRevisionPlanPanel } from "@/components/institute/hifz-revision-panel";
 
 const SABAQ_TYPES = [
   { value: "SABAQ", label: "Sabaq (New Lesson)", color: "text-green-600 bg-green-50 border-green-200" },
@@ -78,7 +79,7 @@ export function HifzContent({
   const [students, setStudents] = useState<HifzStudent[]>([]);
   const [records, setRecords] = useState<HifzRecordRow[]>([]);
   const [selectedStudent, setSelectedStudent] = useState("");
-  const [activeTab, setActiveTab] = useState<"tracker" | "entry" | "records">("tracker");
+  const [activeTab, setActiveTab] = useState<"tracker" | "entry" | "records" | "revision">("tracker");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -370,6 +371,7 @@ export function HifzContent({
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {[
           { key: "tracker", label: "Juz Progress Map" },
+          ...(!readOnly ? [{ key: "revision", label: "Revision Plan" }] : []),
           ...(!readOnly ? [{ key: "entry", label: "Record Lesson" }] : []),
           { key: "records", label: "Recent Records" },
         ].map((t) => (
@@ -385,6 +387,15 @@ export function HifzContent({
           </button>
         ))}
       </div>
+
+      {activeTab === "revision" && !readOnly && (
+        <HifzRevisionPlanPanel
+          onSelectStudent={(id) => {
+            setSelectedStudent(id);
+            setActiveTab("entry");
+          }}
+        />
+      )}
 
       {activeTab === "tracker" && student && (
         <div className="dash-card p-6">

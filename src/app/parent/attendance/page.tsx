@@ -1,5 +1,5 @@
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { ParentAttendanceContent } from "@/components/parent/parent-attendance-content";
+import { ParentAttendanceTabs } from "@/components/parent/parent-attendance-tabs";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
@@ -14,7 +14,7 @@ export default async function ParentAttendancePage() {
       title="Attendance Records"
       breadcrumbs={[{ label: "Parent Portal" }, { label: "Attendance" }]}
     >
-      <ParentAttendanceContent />
+      <ParentAttendanceTabs />
     </DashboardShell>
   );
 }

@@ -69,28 +69,28 @@ function buildAchievements(
 }
 
 export async function getParentChildrenViewData(userId: string): Promise<ParentChildView[]> {
-  const dbParent = await prisma.parent.findUnique({
-    where: { userId },
+  const accessibleIds = await getAccessibleStudentIdsForParent(userId);
+  if (!accessibleIds.length) return [];
+
+  const students = await prisma.student.findMany({
+    where: { id: { in: accessibleIds }, isActive: true },
     include: {
-      students: {
-        include: {
-          enrollments: {
-            where: { isActive: true },
-            include: { class: true },
-          },
-          teacher: { include: { user: true } },
-          hifzRecords: {
-            orderBy: { date: "desc" },
-            take: 10,
-          },
-        },
+      enrollments: {
+        where: { isActive: true },
+        include: { class: true },
+      },
+      teacher: { include: { user: true } },
+      hifzRecords: {
+        orderBy: { date: "desc" },
+        take: 10,
       },
     },
+    orderBy: { fullName: "asc" },
   });
 
-  if (!dbParent?.students.length) return [];
+  if (!students.length) return [];
 
-  const studentIds = dbParent.students.map((s) => s.id);
+  const studentIds = students.map((s) => s.id);
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -129,7 +129,7 @@ export async function getParentChildrenViewData(userId: string): Promise<ParentC
     lessonCounts[row.studentId] = row._count;
   }
 
-  return dbParent.students.map((student) => {
+  return students.map((student) => {
     const activeClass = student.enrollments?.[0]?.class?.name || "Unassigned Class";
     const pct = attendancePct[student.id] ?? 0;
     const quality = qualityScore[student.id] ?? 0;
@@ -172,18 +172,42 @@ export async function getParentChildrenViewData(userId: string): Promise<ParentC
   });
 }
 
-export async function getParentChildIds(userId: string): Promise<Array<{ id: string; fullName: string; studentId: string }>> {
+export async function getParentRecordId(userId: string) {
   const parent = await prisma.parent.findUnique({
     where: { userId },
-    include: { students: { select: { id: true, fullName: true, studentId: true } } },
+    select: { id: true },
   });
-  return parent?.students ?? [];
+  return parent?.id ?? null;
+}
+
+/** Students linked as primary parent OR additional guardian */
+export async function getAccessibleStudentIdsForParent(userId: string): Promise<string[]> {
+  const parent = await prisma.parent.findUnique({
+    where: { userId },
+    select: {
+      id: true,
+      students: { select: { id: true } },
+      guardianships: { select: { studentId: true } },
+    },
+  });
+  if (!parent) return [];
+  const ids = new Set<string>();
+  for (const s of parent.students) ids.add(s.id);
+  for (const g of parent.guardianships) ids.add(g.studentId);
+  return Array.from(ids);
+}
+
+export async function getParentChildIds(userId: string): Promise<Array<{ id: string; fullName: string; studentId: string }>> {
+  const ids = await getAccessibleStudentIdsForParent(userId);
+  if (!ids.length) return [];
+  return prisma.student.findMany({
+    where: { id: { in: ids }, isActive: true },
+    select: { id: true, fullName: true, studentId: true },
+    orderBy: { fullName: "asc" },
+  });
 }
 
 export async function assertParentOwnsStudent(userId: string, studentId: string) {
-  const parent = await prisma.parent.findUnique({
-    where: { userId },
-    include: { students: { where: { id: studentId }, select: { id: true } } },
-  });
-  return Boolean(parent?.students.length);
+  const ids = await getAccessibleStudentIdsForParent(userId);
+  return ids.includes(studentId);
 }

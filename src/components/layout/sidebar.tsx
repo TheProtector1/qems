@@ -10,7 +10,7 @@ import {
   ClipboardList, DollarSign, MessageSquare, BarChart3, Settings,
   Building2, Shield, Bell, LogOut, ChevronRight, Star, Menu, X,
   Award, UserCheck, GitBranch, HeartHandshake, CreditCard, FileText,
-  Sparkles, Calendar, Gift, Palmtree, Network,
+  Sparkles, Calendar, Gift, Palmtree, Network, CalendarClock,
 } from "lucide-react";
 
 interface NavItem {
@@ -31,6 +31,7 @@ const instituteNav: NavItem[] = [
       { label: "All Students", href: "/institute/students", icon: Users },
       { label: "Admissions", href: "/institute/students/admissions", icon: ClipboardList },
       { label: "Classes", href: "/institute/students/classes", icon: Building2 },
+      { label: "Timetable", href: "/institute/timetable", icon: CalendarClock },
       { label: "Alumni", href: "/institute/alumni", icon: Award },
     ],
   },
@@ -125,6 +126,7 @@ const parentNav: NavItem[] = [
   { label: "Messaging", href: "/parent/communication", icon: MessageSquare },
   { label: "Spiritual Tracker", href: "/parent/worship", icon: Sparkles },
   { label: "Calendar", href: "/parent/calendar", icon: Calendar },
+  { label: "Timetable", href: "/parent/timetable", icon: CalendarClock },
   { label: "My Profile", href: "/profile", icon: Settings },
 ];
 

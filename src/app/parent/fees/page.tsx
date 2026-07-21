@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { AlertCircle, CheckCircle2, CreditCard } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
+import { ParentFeeClaimButton } from "@/components/parent/parent-fee-claim-button";
 
 export const metadata = { title: "Fees & Payments - Parent Portal" };
 
@@ -47,7 +48,8 @@ export default async function ParentFeesPage() {
     studentName: studentNames[p.studentId] || "Student",
     month: formatMonthLabel(p.month, p.dueDate),
     amount: Number(p.netAmount),
-    status: p.status === "PAID" ? "PAID" : "DUE",
+    status: p.status === "PAID" ? "PAID" : p.status === "OVERDUE" ? "OVERDUE" : "DUE",
+    claimStatus: p.claimStatus,
     dueDate: p.dueDate.toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" }),
     paidOn: p.paidAt
       ? p.paidAt.toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })
@@ -145,6 +147,7 @@ export default async function ParentFeesPage() {
                     <th>Status</th>
                     <th>Due Date</th>
                     <th>Paid Date</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -156,13 +159,18 @@ export default async function ParentFeesPage() {
                       <td>
                         <span className={cn(
                           "pill text-[10px] py-0.5",
-                          l.status === "PAID" ? "pill-success" : "pill-danger"
+                          l.status === "PAID" ? "pill-success" : l.status === "OVERDUE" ? "pill-danger" : "pill-warning"
                         )}>
-                          {l.status}
+                          {l.claimStatus === "CLAIMED" ? "CLAIMED" : l.status}
                         </span>
                       </td>
                       <td>{l.dueDate}</td>
                       <td>{l.paidOn || "—"}</td>
+                      <td>
+                        {l.status !== "PAID" && l.claimStatus !== "CLAIMED" && (
+                          <ParentFeeClaimButton feePaymentId={l.id} />
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
