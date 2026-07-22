@@ -176,9 +176,17 @@ export async function POST(req: Request) {
       errorCount,
       teacherNote,
       fluency,
+      /** Sabqi para-level: skip ayah/surah; mark done / not done */
+      simpleSabqi,
+      sabqiCompleted,
     } = body;
 
-    if (!studentId || !type || !surahNumber || !ayahFrom || !ayahTo) {
+    if (!studentId || !type) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    const isSimpleSabqi = type === "SABQI" && (simpleSabqi === true || sabqiCompleted !== undefined);
+    if (!isSimpleSabqi && (!surahNumber || ayahFrom === undefined || ayahFrom === "" || ayahTo === undefined || ayahTo === "")) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -194,23 +202,47 @@ export async function POST(req: Request) {
       where: { userId: session.user.id, instituteId },
     });
 
-    const surahNum = parseInt(String(surahNumber), 10);
+    const para = student.currentPara ?? student.currentJuz ?? null;
+    let surahNum: number;
+    let ayahFromNum: number;
+    let ayahToNum: number;
+    let surahName: string;
+    let note = teacherNote?.trim() || null;
+    let isRevision = false;
+
+    if (isSimpleSabqi) {
+      const done = sabqiCompleted !== false;
+      surahNum = student.currentSurah ?? 1;
+      ayahFromNum = 0;
+      ayahToNum = 0;
+      surahName = para ? `Para ${para} Sabqi` : "Current para Sabqi";
+      isRevision = true;
+      const statusLine = done ? "Sabqi done" : "Sabqi not done";
+      note = note ? `${statusLine} — ${note}` : statusLine;
+    } else {
+      surahNum = parseInt(String(surahNumber), 10);
+      ayahFromNum = parseInt(String(ayahFrom), 10);
+      ayahToNum = parseInt(String(ayahTo), 10);
+      surahName = getSurahName(surahNum);
+    }
+
     const record = await prisma.hifzRecord.create({
       data: {
         date: new Date(),
         type: type as HifzType,
         surahNumber: surahNum,
-        surahName: getSurahName(surahNum),
-        ayahFrom: parseInt(String(ayahFrom), 10),
-        ayahTo: parseInt(String(ayahTo), 10),
+        surahName,
+        ayahFrom: ayahFromNum,
+        ayahTo: ayahToNum,
         lines: lines ? parseInt(String(lines), 10) : null,
-        rating: parseInt(String(rating || 5), 10),
+        rating: parseInt(String(rating || (isSimpleSabqi && sabqiCompleted === false ? 2 : 5)), 10),
         errorCount: parseInt(String(errorCount || 0), 10),
         fluencyScore: fluency ? parseFloat(String(fluency)) : null,
-        teacherNote: teacherNote || null,
+        teacherNote: note,
+        isRevision,
         studentId,
         teacherId: teacher?.id ?? null,
-        juzNumber: student.currentJuz ?? null,
+        juzNumber: para,
       },
     });
 

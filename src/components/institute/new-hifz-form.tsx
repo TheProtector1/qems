@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Save, RotateCcw, CheckCircle2, Star, ArrowLeft, Loader2 } from "lucide-react";
+import { Save, RotateCcw, CheckCircle2, Star, ArrowLeft, Loader2, Clock } from "lucide-react";
 import { cn, getSurahName } from "@/lib/utils";
 
-type HifzStudent = { id: string; fullName: string; studentId: string };
+type HifzStudent = { id: string; fullName: string; studentId: string; currentPara?: number | null; currentJuz?: number | null };
 
 export function NewHifzForm() {
   const router = useRouter();
@@ -24,6 +24,8 @@ export function NewHifzForm() {
     rating: 5,
     errorCount: 0,
     note: "",
+    sabqiCompleted: null as boolean | null,
+    showSabqiDetails: false,
   });
 
   useEffect(() => {
@@ -37,8 +39,23 @@ export function NewHifzForm() {
       .finally(() => setLoading(false));
   }, []);
 
+  const selected = students.find((s) => s.id === selectedStudent);
+  const currentPara = selected?.currentPara ?? selected?.currentJuz ?? null;
+
   const handleSave = async () => {
-    if (!selectedStudent || !form.ayahFrom || !form.ayahTo) {
+    if (!selectedStudent) {
+      setError("Please select a student.");
+      return;
+    }
+
+    const isSabqi = form.type === "SABQI";
+    const useSimpleSabqi = isSabqi && !form.showSabqiDetails;
+
+    if (useSimpleSabqi && form.sabqiCompleted === null) {
+      setError("Mark Sabqi as Done or Not done.");
+      return;
+    }
+    if (!useSimpleSabqi && (!form.ayahFrom || !form.ayahTo)) {
       setError("Please select a student and fill in the ayah range.");
       return;
     }
@@ -46,20 +63,32 @@ export function NewHifzForm() {
     setSaving(true);
     setError(null);
     try {
+      const payload = useSimpleSabqi
+        ? {
+            studentId: selectedStudent,
+            type: "SABQI",
+            simpleSabqi: true,
+            sabqiCompleted: form.sabqiCompleted,
+            rating: form.rating,
+            errorCount: form.errorCount,
+            teacherNote: form.note,
+          }
+        : {
+            studentId: selectedStudent,
+            type: form.type,
+            surahNumber: form.surah,
+            ayahFrom: form.ayahFrom,
+            ayahTo: form.ayahTo,
+            lines: form.lines,
+            rating: form.rating,
+            errorCount: form.errorCount,
+            teacherNote: form.note,
+          };
+
       const res = await fetch("/api/institute/hifz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: selectedStudent,
-          type: form.type,
-          surahNumber: form.surah,
-          ayahFrom: form.ayahFrom,
-          ayahTo: form.ayahTo,
-          lines: form.lines,
-          rating: form.rating,
-          errorCount: form.errorCount,
-          teacherNote: form.note,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -129,7 +158,14 @@ export function NewHifzForm() {
                 <button
                   key={t.value}
                   type="button"
-                  onClick={() => setForm({ ...form, type: t.value })}
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      type: t.value,
+                      sabqiCompleted: t.value === "SABQI" ? form.sabqiCompleted : null,
+                      showSabqiDetails: t.value === "SABQI" ? form.showSabqiDetails : false,
+                    })
+                  }
                   className={cn(
                     "py-2.5 px-4 rounded-xl border-2 text-sm font-semibold transition-all text-center",
                     form.type === t.value ? "border-primary-600 bg-primary-50 text-primary-800" : "border-gray-200 text-gray-500 hover:border-gray-300"
@@ -141,26 +177,80 @@ export function NewHifzForm() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Surah</label>
-            <select value={form.surah} onChange={(e) => setForm({ ...form, surah: e.target.value })} className="form-input">
-              {Array.from({ length: 114 }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n}>{n}. {getSurahName(n)}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Lines Covered</label>
-            <input type="number" min={1} value={form.lines} onChange={(e) => setForm({ ...form, lines: e.target.value })} className="form-input" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Ayah From</label>
-            <input type="number" min={1} value={form.ayahFrom} onChange={(e) => setForm({ ...form, ayahFrom: e.target.value })} className="form-input" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Ayah To</label>
-            <input type="number" min={1} value={form.ayahTo} onChange={(e) => setForm({ ...form, ayahTo: e.target.value })} className="form-input" />
-          </div>
+          {form.type === "SABQI" && (
+            <div className="md:col-span-2 space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-gray-700 mb-1">
+                  Sabqi — current para revision
+                  {currentPara ? <span className="text-gray-400 font-normal"> (Para {currentPara})</span> : null}
+                </p>
+                <p className="text-xs text-gray-500 mb-3">Mark Done or Not done. Details are optional.</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, sabqiCompleted: true })}
+                    className={cn(
+                      "rounded-xl border-2 py-4 text-sm font-semibold transition-all",
+                      form.sabqiCompleted === true
+                        ? "border-emerald-600 bg-emerald-50 text-emerald-800"
+                        : "border-gray-200 text-gray-500 hover:border-emerald-300"
+                    )}
+                  >
+                    <CheckCircle2 className="h-5 w-5 mx-auto mb-1" />
+                    Done
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, sabqiCompleted: false })}
+                    className={cn(
+                      "rounded-xl border-2 py-4 text-sm font-semibold transition-all",
+                      form.sabqiCompleted === false
+                        ? "border-amber-600 bg-amber-50 text-amber-800"
+                        : "border-gray-200 text-gray-500 hover:border-amber-300"
+                    )}
+                  >
+                    <Clock className="h-5 w-5 mx-auto mb-1" />
+                    Not done
+                  </button>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300"
+                  checked={form.showSabqiDetails}
+                  onChange={(e) => setForm({ ...form, showSabqiDetails: e.target.checked })}
+                />
+                Add surah / ayah details
+              </label>
+            </div>
+          )}
+
+          {(form.type !== "SABQI" || form.showSabqiDetails) && (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Surah</label>
+                <select value={form.surah} onChange={(e) => setForm({ ...form, surah: e.target.value })} className="form-input">
+                  {Array.from({ length: 114 }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>{n}. {getSurahName(n)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Lines Covered</label>
+                <input type="number" min={1} value={form.lines} onChange={(e) => setForm({ ...form, lines: e.target.value })} className="form-input" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Ayah From</label>
+                <input type="number" min={1} value={form.ayahFrom} onChange={(e) => setForm({ ...form, ayahFrom: e.target.value })} className="form-input" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Ayah To</label>
+                <input type="number" min={1} value={form.ayahTo} onChange={(e) => setForm({ ...form, ayahTo: e.target.value })} className="form-input" />
+              </div>
+            </>
+          )}
+
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Teacher Rating</label>
             <div className="flex gap-2">
@@ -185,8 +275,21 @@ export function NewHifzForm() {
                saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> :
                <><Save className="h-4 w-4" /> Save Hifz Lesson</>}
             </button>
-            <button onClick={() => setForm({ ...form, ayahFrom: "", ayahTo: "", lines: "", note: "" })} className="btn-ghost py-3">
-              Reset
+            <button
+              onClick={() =>
+                setForm({
+                  ...form,
+                  ayahFrom: "",
+                  ayahTo: "",
+                  lines: "",
+                  note: "",
+                  sabqiCompleted: null,
+                  showSabqiDetails: false,
+                })
+              }
+              className="btn-ghost py-3"
+            >
+              <RotateCcw className="h-4 w-4" /> Reset
             </button>
           </div>
         </div>
