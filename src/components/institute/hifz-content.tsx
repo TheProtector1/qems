@@ -104,9 +104,9 @@ export function HifzContent({
     rating: 5,
     errorCount: 0,
     note: "",
-    /** Sabqi: null until teacher picks Done / Not done */
-    sabqiCompleted: null as boolean | null,
-    showSabqiDetails: false,
+    /** Simple lesson: null until teacher picks Done / Not done */
+    lessonCompleted: null as boolean | null,
+    showLessonDetails: false,
   });
 
   const loadData = useCallback(async () => {
@@ -230,14 +230,14 @@ export function HifzContent({
       return;
     }
 
-    const isSabqi = form.type === "SABQI";
-    const useSimpleSabqi = isSabqi && !form.showSabqiDetails;
+    const useSimple = !form.showLessonDetails;
+    const typeLabel = typeLabels[form.type] || form.type;
 
-    if (useSimpleSabqi && form.sabqiCompleted === null) {
-      setError("Mark Sabqi as Done or Not done.");
+    if (useSimple && form.lessonCompleted === null) {
+      setError(`Mark ${typeLabel} as Done or Not done.`);
       return;
     }
-    if (!useSimpleSabqi && (!form.ayahFrom || !form.ayahTo)) {
+    if (!useSimple && (!form.ayahFrom || !form.ayahTo)) {
       setError("Please fill in surah, ayah range, and select a student.");
       return;
     }
@@ -245,12 +245,12 @@ export function HifzContent({
     setSaving(true);
     setError(null);
     try {
-      const payload = useSimpleSabqi
+      const payload = useSimple
         ? {
             studentId: selectedStudent,
-            type: "SABQI",
-            simpleSabqi: true,
-            sabqiCompleted: form.sabqiCompleted,
+            type: form.type,
+            simpleLesson: true,
+            lessonCompleted: form.lessonCompleted,
             rating: form.rating,
             errorCount: form.errorCount,
             teacherNote: form.note,
@@ -265,7 +265,7 @@ export function HifzContent({
             rating: form.rating,
             errorCount: form.errorCount,
             teacherNote: form.note,
-            ...(isSabqi ? { simpleSabqi: false } : {}),
+            simpleLesson: false,
           };
 
       const res = await fetch("/api/institute/hifz", {
@@ -286,8 +286,8 @@ export function HifzContent({
         ayahTo: "",
         lines: "",
         note: "",
-        sabqiCompleted: null,
-        showSabqiDetails: false,
+        lessonCompleted: null,
+        showLessonDetails: false,
       });
       setTimeout(() => setSaved(false), 2000);
       loadData();
@@ -485,8 +485,8 @@ export function HifzContent({
                       setForm({
                         ...form,
                         type: t.value,
-                        sabqiCompleted: t.value === "SABQI" ? form.sabqiCompleted : null,
-                        showSabqiDetails: t.value === "SABQI" ? form.showSabqiDetails : false,
+                        lessonCompleted: null,
+                        showLessonDetails: false,
                       })
                     }
                     className={cn(
@@ -500,25 +500,25 @@ export function HifzContent({
               </div>
             </div>
 
-            {form.type === "SABQI" && (
+            {!form.showLessonDetails && (
               <div className="md:col-span-2 space-y-4">
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-1">
-                    Sabqi — current para revision
-                    {currentJuz ? (
+                    {typeLabels[form.type] || form.type}
+                    {form.type !== "SABAQ" && currentJuz ? (
                       <span className="text-gray-400 font-normal"> (Para {currentJuz})</span>
                     ) : null}
                   </p>
                   <p className="text-xs text-gray-500 mb-3">
-                    Mark whether today&apos;s Sabqi was completed. Ayah details are optional.
+                    Mark whether today&apos;s {typeLabels[form.type] || form.type} was completed. Ayah details are optional.
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => setForm({ ...form, sabqiCompleted: true })}
+                      onClick={() => setForm({ ...form, lessonCompleted: true })}
                       className={cn(
                         "rounded-xl border-2 py-4 text-sm font-semibold transition-all",
-                        form.sabqiCompleted === true
+                        form.lessonCompleted === true
                           ? "border-emerald-600 bg-emerald-50 text-emerald-800"
                           : "border-gray-200 text-gray-500 hover:border-emerald-300"
                       )}
@@ -528,10 +528,10 @@ export function HifzContent({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setForm({ ...form, sabqiCompleted: false })}
+                      onClick={() => setForm({ ...form, lessonCompleted: false })}
                       className={cn(
                         "rounded-xl border-2 py-4 text-sm font-semibold transition-all",
-                        form.sabqiCompleted === false
+                        form.lessonCompleted === false
                           ? "border-amber-600 bg-amber-50 text-amber-800"
                           : "border-gray-200 text-gray-500 hover:border-amber-300"
                       )}
@@ -545,16 +545,27 @@ export function HifzContent({
                   <input
                     type="checkbox"
                     className="rounded border-gray-300"
-                    checked={form.showSabqiDetails}
-                    onChange={(e) => setForm({ ...form, showSabqiDetails: e.target.checked })}
+                    checked={form.showLessonDetails}
+                    onChange={(e) => setForm({ ...form, showLessonDetails: e.target.checked })}
                   />
                   Add surah / ayah details
                 </label>
               </div>
             )}
 
-            {(form.type !== "SABQI" || form.showSabqiDetails) && (
+            {form.showLessonDetails && (
               <>
+                <div className="md:col-span-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none mb-3">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300"
+                      checked={form.showLessonDetails}
+                      onChange={(e) => setForm({ ...form, showLessonDetails: e.target.checked, lessonCompleted: null })}
+                    />
+                    Add surah / ayah details
+                  </label>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Surah</label>
                   <select value={form.surah} onChange={(e) => setForm({ ...form, surah: e.target.value })} className="form-input">
@@ -610,8 +621,8 @@ export function HifzContent({
                     ayahTo: "",
                     lines: "",
                     note: "",
-                    sabqiCompleted: null,
-                    showSabqiDetails: false,
+                    lessonCompleted: null,
+                    showLessonDetails: false,
                   })
                 }
                 className="btn-ghost"
@@ -653,11 +664,11 @@ export function HifzContent({
                         <>
                           <p className="text-gray-700">{r.surahName}</p>
                           <p className="text-xs text-gray-400">
-                            {r.teacherNote?.startsWith("Sabqi not done")
+                            {r.teacherNote?.includes("not done")
                               ? "Not done"
-                              : r.teacherNote?.startsWith("Sabqi done")
+                              : r.teacherNote?.includes("done")
                                 ? "Done"
-                                : "Para revision"}
+                                : "Lesson marked"}
                           </p>
                         </>
                       ) : (

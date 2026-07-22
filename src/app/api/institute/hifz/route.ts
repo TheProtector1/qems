@@ -176,7 +176,10 @@ export async function POST(req: Request) {
       errorCount,
       teacherNote,
       fluency,
-      /** Sabqi para-level: skip ayah/surah; mark done / not done */
+      /** Simple lesson: skip ayah/surah; mark done / not done (Sabaq / Sabqi / Manzil) */
+      simpleLesson,
+      lessonCompleted,
+      /** @deprecated use simpleLesson / lessonCompleted */
       simpleSabqi,
       sabqiCompleted,
     } = body;
@@ -185,8 +188,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const isSimpleSabqi = type === "SABQI" && (simpleSabqi === true || sabqiCompleted !== undefined);
-    if (!isSimpleSabqi && (!surahNumber || ayahFrom === undefined || ayahFrom === "" || ayahTo === undefined || ayahTo === "")) {
+    const hifzType = type as HifzType;
+    const completedFlag = lessonCompleted !== undefined ? lessonCompleted : sabqiCompleted;
+    const wantsSimple =
+      simpleLesson === true ||
+      simpleSabqi === true ||
+      completedFlag !== undefined;
+    const isSimpleLesson =
+      wantsSimple &&
+      (hifzType === "SABAQ" || hifzType === "SABQI" || hifzType === "MANZIL");
+
+    if (
+      !isSimpleLesson &&
+      (!surahNumber || ayahFrom === undefined || ayahFrom === "" || ayahTo === undefined || ayahTo === "")
+    ) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -208,16 +223,22 @@ export async function POST(req: Request) {
     let ayahToNum: number;
     let surahName: string;
     let note = teacherNote?.trim() || null;
-    let isRevision = false;
+    let isRevision = hifzType === "SABQI" || hifzType === "MANZIL";
 
-    if (isSimpleSabqi) {
-      const done = sabqiCompleted !== false;
+    const typeLabels: Record<string, string> = {
+      SABAQ: "Sabaq",
+      SABQI: "Sabqi",
+      MANZIL: "Manzil",
+    };
+
+    if (isSimpleLesson) {
+      const done = completedFlag !== false;
+      const label = typeLabels[hifzType] || hifzType;
       surahNum = student.currentSurah ?? 1;
       ayahFromNum = 0;
       ayahToNum = 0;
-      surahName = para ? `Para ${para} Sabqi` : "Current para Sabqi";
-      isRevision = true;
-      const statusLine = done ? "Sabqi done" : "Sabqi not done";
+      surahName = para ? `Para ${para} ${label}` : `Current para ${label}`;
+      const statusLine = done ? `${label} done` : `${label} not done`;
       note = note ? `${statusLine} — ${note}` : statusLine;
     } else {
       surahNum = parseInt(String(surahNumber), 10);
@@ -229,13 +250,16 @@ export async function POST(req: Request) {
     const record = await prisma.hifzRecord.create({
       data: {
         date: new Date(),
-        type: type as HifzType,
+        type: hifzType,
         surahNumber: surahNum,
         surahName,
         ayahFrom: ayahFromNum,
         ayahTo: ayahToNum,
         lines: lines ? parseInt(String(lines), 10) : null,
-        rating: parseInt(String(rating || (isSimpleSabqi && sabqiCompleted === false ? 2 : 5)), 10),
+        rating: parseInt(
+          String(rating || (isSimpleLesson && completedFlag === false ? 2 : 5)),
+          10
+        ),
         errorCount: parseInt(String(errorCount || 0), 10),
         fluencyScore: fluency ? parseFloat(String(fluency)) : null,
         teacherNote: note,
