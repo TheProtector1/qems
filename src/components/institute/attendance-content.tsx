@@ -49,6 +49,9 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [historyDates, setHistoryDates] = useState<string[]>([]);
   const [history, setHistory] = useState<Record<string, Record<string, AttStatus | "HOLIDAY">>>({});
+  const [monthRates, setMonthRates] = useState<
+    Record<string, { rate: number; marked: number; present: number }>
+  >({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -90,6 +93,7 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
       setStudents(data.students || []);
       setHistoryDates(data.historyDates || []);
       setHistory(data.history || {});
+      setMonthRates(data.monthRates || {});
       setIsHoliday(Boolean(data.isHoliday));
       setHolidayInfo(data.holiday || null);
 
@@ -592,15 +596,18 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
                       {new Date(d + "T00:00:00").toLocaleDateString("en-PK", { day: "numeric", month: "short" })}
                     </th>
                   ))}
-                  <th className="text-center">Rate</th>
+                  <th className="text-center whitespace-nowrap">
+                    Rate
+                    <span className="block text-[9px] font-normal text-gray-400 normal-case">this month</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {students.map((s) => {
                   const dates = historyDates.map((d) => history[s.id]?.[d] || null);
-                  const marked = dates.filter((d) => d && d !== "HOLIDAY");
-                  const presentCount = dates.filter((d) => d === "PRESENT" || d === "LATE").length;
-                  const rate = marked.length ? Math.round((presentCount / marked.length) * 100) : 0;
+                  const month = monthRates[s.id];
+                  const rate = month?.rate ?? 0;
+                  const markedCount = month?.marked ?? 0;
                   return (
                     <tr key={s.id}>
                       <td>
@@ -626,9 +633,9 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
                       <td className="text-center">
                         <span className={cn(
                           "font-bold text-sm",
-                          rate >= 90 ? "text-green-600" : rate >= 75 ? "text-amber-600" : marked.length ? "text-red-500" : "text-gray-400"
+                          rate >= 90 ? "text-green-600" : rate >= 75 ? "text-amber-600" : markedCount ? "text-red-500" : "text-gray-400"
                         )}>
-                          {marked.length ? `${rate}%` : "—"}
+                          {markedCount ? `${rate}%` : "—"}
                         </span>
                       </td>
                     </tr>

@@ -129,13 +129,27 @@ export async function GET(req: Request) {
       console.warn("[ATTENDANCE_STALE_HOLIDAY_CLEANUP]", err)
     );
 
-    const historyRecords = await prisma.attendance.findMany({
-      where: {
-        student: { instituteId },
-        date: { gte: startHistory, lte: endHistory },
-      },
-      select: { studentId: true, date: true, status: true },
-    });
+    // Current calendar month (1st → today) for Rate column on History tab
+    const [yStr, mStr] = todayKey.split("-");
+    const monthStart = parseDateOnly(`${yStr}-${mStr}-01`);
+    const monthEnd = parseDateOnly(todayKey);
+
+    const [historyRecords, monthRecords] = await Promise.all([
+      prisma.attendance.findMany({
+        where: {
+          student: { instituteId },
+          date: { gte: startHistory, lte: endHistory },
+        },
+        select: { studentId: true, date: true, status: true },
+      }),
+      prisma.attendance.findMany({
+        where: {
+          student: { instituteId },
+          date: { gte: monthStart, lte: monthEnd },
+        },
+        select: { studentId: true, date: true, status: true },
+      }),
+    ]);
 
     const historyMap: Record<string, Record<string, AttendanceStatus>> = {};
     for (const r of historyRecords) {
@@ -143,6 +157,23 @@ export async function GET(req: Request) {
       const dk = dateKey(r.date);
       if (!historyMap[sid]) historyMap[sid] = {};
       historyMap[sid][dk] = r.status;
+    }
+
+    const monthRates: Record<string, { rate: number; marked: number; present: number }> = {};
+    const monthByStudent: Record<string, AttendanceStatus[]> = {};
+    for (const r of monthRecords) {
+      if (!monthByStudent[r.studentId]) monthByStudent[r.studentId] = [];
+      monthByStudent[r.studentId].push(r.status);
+    }
+    for (const s of students) {
+      const statuses = monthByStudent[s.id] || [];
+      const marked = statuses.filter((st) => st !== "HOLIDAY");
+      const present = marked.filter((st) => st === "PRESENT" || st === "LATE").length;
+      monthRates[s.id] = {
+        marked: marked.length,
+        present,
+        rate: marked.length ? Math.round((present / marked.length) * 100) : 0,
+      };
     }
 
     if (dateParam) {
@@ -173,6 +204,7 @@ export async function GET(req: Request) {
         attendance: attendanceByStudent,
         historyDates: dates,
         history: historyMap,
+        monthRates,
         isHoliday: Boolean(holidayInfo),
         holiday: holidayInfo,
       });
@@ -206,6 +238,7 @@ export async function GET(req: Request) {
       attendance: attendanceByStudent,
       historyDates: dates,
       history: historyMap,
+      monthRates,
       isHoliday: Boolean(todayHoliday),
       holiday: todayHoliday,
     });
