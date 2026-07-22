@@ -51,7 +51,9 @@ export function HifzJuzGrid({
             <h3 className="font-display font-bold text-gray-900">Hifz Map — 30 Para/Juz</h3>
             <p className="text-xs text-gray-500 mt-0.5">{hifzDirectionLabel(dir)}</p>
             {interactive && !hifzCompleted && (
-              <p className="text-xs text-primary-700 mt-1">Click the highlighted para to mark it complete</p>
+              <p className="text-xs text-primary-700 mt-1">
+                Click the highlighted current para to mark it complete (days taken, date, notes)
+              </p>
             )}
           </div>
           <span className={cn("pill", hifzCompleted ? "pill-success" : "pill-success")}>

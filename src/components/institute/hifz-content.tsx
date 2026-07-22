@@ -11,6 +11,7 @@ import { HifzDirection } from "@prisma/client";
 import {
   getHifzCompletionPercent,
   getNextPara,
+  getDefaultStartingJuz,
   hifzDirectionLabel,
   type JuzCellState,
   type ParaCompletionInfo,
@@ -138,9 +139,12 @@ export function HifzContent({
   }, [loadData]);
 
   const student = students.find((s) => s.id === selectedStudent);
-  const currentJuz = student?.currentPara ?? student?.currentJuz ?? 0;
   const direction = student?.hifzDirection ?? HifzDirection.REVERSE;
   const hifzCompleted = Boolean(student?.hifzCompletedAt);
+  const currentJuz =
+    student?.currentPara ??
+    student?.currentJuz ??
+    (hifzCompleted ? null : getDefaultStartingJuz(direction));
   const paraCompletions = student?.paraCompletions ?? [];
   const completedParas = paraCompletions.map((c) => c.paraNumber);
   const paraDetails = Object.fromEntries(
@@ -446,7 +450,7 @@ export function HifzContent({
           />
           <div className="flex items-center gap-6 text-xs text-gray-500 mt-6 flex-wrap">
             <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-primary-600 inline-block" />Memorised</span>
-            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-primary-300 inline-block border border-primary-500" />Current para — click to complete</span>
+            <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-primary-300 inline-block border border-primary-500" />Current para — click to mark complete (days + notes)</span>
             <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-md bg-gray-100 inline-block border" />Upcoming</span>
           </div>
           <ParaCompletionHistory completions={paraCompletions} />
@@ -454,6 +458,7 @@ export function HifzContent({
       )}
 
       <ParaCompletionModal
+        key={`${paraModal.mode}-${paraModal.para}-${paraModal.open}`}
         open={paraModal.open}
         mode={paraModal.mode}
         para={paraModal.para}

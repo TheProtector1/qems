@@ -33,9 +33,9 @@ import { StudentQrCard } from "@/components/institute/student-qr-card";
 import { StudentGuardiansPanel } from "@/components/institute/student-guardians-panel";
 import { progressSummaryLabel } from "@/lib/student-progress";
 import type { ElementType } from "react";
-import { HifzJuzGrid } from "@/components/common/hifz-juz-grid";
 import { HifzDirection } from "@prisma/client";
 import { getHifzCompletionPercent, hifzDirectionLabel } from "@/lib/hifz-progress";
+import { StudentHifzParaMap } from "@/components/institute/student-hifz-para-map";
 
 export const metadata = { title: "Student Profile — QEMS" };
 
@@ -107,6 +107,10 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
         include: { class: { select: { id: true, name: true } } },
       },
       hifzRecords: { orderBy: { date: "desc" }, take: 5 },
+      hifzParaCompletions: {
+        include: { markedBy: { include: { user: { select: { name: true } } } } },
+        orderBy: { paraNumber: "asc" },
+      },
       user: { select: { isActive: true } },
       alumni: true,
     },
@@ -144,8 +148,23 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
   const hifzDir = student.hifzDirection ?? HifzDirection.REVERSE;
   const currentPara = student.currentPara ?? student.currentJuz;
   const completionPct =
-    student.programType === "HIFZ" && currentPara ? getHifzCompletionPercent(hifzDir, currentPara) : 0;
+    student.programType === "HIFZ"
+      ? getHifzCompletionPercent(hifzDir, currentPara, {
+          completedCount: student.hifzParaCompletions.length,
+          hifzCompleted: Boolean(student.hifzCompletedAt),
+        })
+      : 0;
   const showAudit = session.user.role === "INSTITUTE_OWNER" || session.user.role === "SUPER_ADMIN";
+  const canMarkPara = ["INSTITUTE_OWNER", "BRANCH_MANAGER", "TEACHER", "SUPER_ADMIN"].includes(
+    session.user.role
+  );
+  const paraCompletions = student.hifzParaCompletions.map((c) => ({
+    paraNumber: c.paraNumber,
+    completedAt: c.completedAt.toISOString().slice(0, 10),
+    daysToComplete: c.daysToComplete,
+    notes: c.notes,
+    markedByName: c.markedBy?.user?.name ?? null,
+  }));
 
   const recentProgress = student.hifzRecords.map((r) => ({
     date: formatDate(r.date),
@@ -367,10 +386,17 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
           </dl>
         </div>
 
-        {student.programType === "HIFZ" && currentPara && (
+        {student.programType === "HIFZ" && (
           <div className="dash-card p-5 sm:p-6 bg-white">
             <SectionHeading icon={BookOpen} title="Hifz progress map" />
-            <HifzJuzGrid direction={hifzDir} currentJuz={currentPara} />
+            <StudentHifzParaMap
+              studentId={student.id}
+              direction={hifzDir}
+              currentPara={currentPara}
+              hifzCompleted={Boolean(student.hifzCompletedAt)}
+              completions={paraCompletions}
+              canEdit={canMarkPara}
+            />
           </div>
         )}
 

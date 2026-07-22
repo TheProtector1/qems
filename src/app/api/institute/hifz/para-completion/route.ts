@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { HifzDirection, NotificationType, ProgramType } from "@prisma/client";
-import { getNextPara, parseHifzDirection } from "@/lib/hifz-progress";
+import { getDefaultStartingJuz, getNextPara, parseHifzDirection } from "@/lib/hifz-progress";
 import { notifyParentOfStudent } from "@/lib/notifications";
 import { tryAwardBadgesForStudent } from "@/lib/badges";
 import { ensureAlumniFromHifzCompletion } from "@/lib/alumni";
@@ -69,6 +69,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const allowedRoles = new Set([
+      "INSTITUTE_OWNER",
+      "BRANCH_MANAGER",
+      "TEACHER",
+      "SUPER_ADMIN",
+    ]);
+    if (!allowedRoles.has(session.user.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const instituteId = session.user.instituteId;
     const body = await req.json();
     const { studentId, paraNumber, daysToComplete, notes, completedAt } = body as {
@@ -100,18 +110,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Hifz student not found" }, { status: 404 });
     }
 
+    if (session.user.role === "TEACHER") {
+      const teacher = await prisma.teacher.findFirst({
+        where: { userId: session.user.id, instituteId },
+        select: { id: true },
+      });
+      if (teacher && student.teacherId && student.teacherId !== teacher.id) {
+        return NextResponse.json(
+          { error: "You can only mark paras for your assigned students" },
+          { status: 403 }
+        );
+      }
+    }
+
     if (student.hifzCompletedAt) {
       return NextResponse.json({ error: "Student has already completed full Hifz" }, { status: 400 });
     }
 
     const direction = parseHifzDirection(student.hifzDirection ?? HifzDirection.REVERSE);
-    const currentPara = student.currentPara ?? student.currentJuz;
+    let currentPara = student.currentPara ?? student.currentJuz;
     if (!currentPara) {
-      return NextResponse.json({ error: "Student has no current para set" }, { status: 400 });
+      currentPara = getDefaultStartingJuz(direction);
     }
     if (para !== currentPara) {
       return NextResponse.json(
-        { error: `Only the current para (${currentPara}) can be marked complete` },
+        { error: `Only the current para (${currentPara}) can be marked complete. Click that para on the grid.` },
         { status: 400 }
       );
     }
@@ -147,9 +170,11 @@ export async function POST(req: Request) {
         currentJuz: number | null;
         currentPara: number | null;
         hifzCompletedAt?: Date;
+        hifzDirection?: HifzDirection;
       } = {
         currentJuz: nextPara,
         currentPara: nextPara,
+        hifzDirection: student.hifzDirection ?? direction,
       };
 
       if (nextPara === null) {
@@ -209,6 +234,7 @@ export async function POST(req: Request) {
           ? null
           : result.updatedStudent.currentPara,
       },
+      hifzCompleted: Boolean(result.updatedStudent.hifzCompletedAt),
       message: result.updatedStudent.hifzCompletedAt
         ? "Mabrook! Full Hifz completed."
         : `Para ${para} marked complete. Student moved to Para ${result.updatedStudent.currentPara}.`,
