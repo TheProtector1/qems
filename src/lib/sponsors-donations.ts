@@ -26,6 +26,19 @@ export const DONATION_CATEGORIES = [
   { value: "OTHER", label: "Other", color: "bg-slate-100 text-slate-700" },
 ] as const;
 
+/** Categories for spending / disbursing donation funds */
+export const DONATION_SPEND_CATEGORIES = [
+  { value: "OPERATIONS", label: "Operations", color: "bg-blue-100 text-blue-700" },
+  { value: "SUPPLIES", label: "Supplies / Materials", color: "bg-indigo-100 text-indigo-700" },
+  { value: "BUILDING", label: "Building / Maintenance", color: "bg-amber-100 text-amber-800" },
+  { value: "UTILITIES", label: "Utilities", color: "bg-cyan-100 text-cyan-800" },
+  { value: "SALARIES", label: "Salaries / Stipends", color: "bg-violet-100 text-violet-700" },
+  { value: "STUDENT_SUPPORT", label: "Student support", color: "bg-purple-100 text-purple-700" },
+  { value: "EVENTS", label: "Events / Programs", color: "bg-pink-100 text-pink-700" },
+  { value: "CHARITY", label: "Charity / Relief", color: "bg-emerald-100 text-emerald-700" },
+  { value: "OTHER", label: "Other", color: "bg-slate-100 text-slate-700" },
+] as const;
+
 export const DONATION_STATUSES = [
   { value: "RECEIVED", label: "Received", pill: "pill-success" },
   { value: "PLEDGED", label: "Pledged", pill: "pill-info" },
@@ -60,6 +73,12 @@ export function getFrequencyLabel(value: string) {
 
 export function getCategoryMeta(value: string) {
   return DONATION_CATEGORIES.find((c) => c.value === value) || DONATION_CATEGORIES[0];
+}
+
+export function getSpendCategoryMeta(value: string) {
+  return (
+    DONATION_SPEND_CATEGORIES.find((c) => c.value === value) || DONATION_SPEND_CATEGORIES[DONATION_SPEND_CATEGORIES.length - 1]
+  );
 }
 
 export function getStatusMeta(value: string) {

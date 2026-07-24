@@ -46,6 +46,7 @@ export async function GET(req: Request) {
       where,
       include: {
         sponsor: { select: { id: true, name: true, type: true } },
+        spends: { select: { amount: true } },
       },
       orderBy: [{ donationDate: "desc" }, { createdAt: "desc" }],
     });
@@ -98,24 +99,31 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json({
-      donations: donations.map((d) => ({
-        id: d.id,
-        amount: Number(d.amount),
-        currency: d.currency,
-        donationDate: d.donationDate,
-        frequency: d.frequency,
-        category: d.category,
-        status: d.status,
-        paymentMethod: d.paymentMethod,
-        referenceNo: d.referenceNo,
-        purpose: d.purpose,
-        notes: d.notes,
-        periodMonth: d.periodMonth,
-        sponsorId: d.sponsorId,
-        sponsor: d.sponsor,
-        receivedByName: d.receivedByName,
-        hasReceipt: Boolean(d.receiptData),
-      })),
+      donations: donations.map((d) => {
+        const spentAmount = d.spends.reduce((sum, s) => sum + Number(s.amount), 0);
+        const amount = Number(d.amount);
+        return {
+          id: d.id,
+          amount,
+          currency: d.currency,
+          donationDate: d.donationDate,
+          frequency: d.frequency,
+          category: d.category,
+          status: d.status,
+          paymentMethod: d.paymentMethod,
+          referenceNo: d.referenceNo,
+          purpose: d.purpose,
+          notes: d.notes,
+          periodMonth: d.periodMonth,
+          sponsorId: d.sponsorId,
+          sponsor: d.sponsor,
+          receivedByName: d.receivedByName,
+          hasReceipt: Boolean(d.receiptData),
+          spentAmount,
+          remainingAmount: Math.max(0, amount - spentAmount),
+          spendCount: d.spends.length,
+        };
+      }),
       summary,
     });
   } catch (error) {

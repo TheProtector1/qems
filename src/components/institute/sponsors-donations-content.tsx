@@ -4,18 +4,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Plus, Edit2, Trash2, X, Loader2, Heart, TrendingUp,
   Users, HandCoins, Calendar, Search, Gift, Receipt, Briefcase, Eye, ImageIcon,
-  Wallet, ArrowDownCircle, ArrowUpCircle, PiggyBank, UserPlus,
+  Wallet, ArrowDownCircle, ArrowUpCircle, PiggyBank, UserPlus, Banknote,
 } from "lucide-react";
 import { cn, formatCurrency, formatDate, getInitials } from "@/lib/utils";
 import {
   SPONSOR_TYPES,
   DONATION_FREQUENCIES,
   DONATION_CATEGORIES,
+  DONATION_SPEND_CATEGORIES,
   DONATION_STATUSES,
   PAYMENT_METHODS,
   getSponsorTypeLabel,
   getFrequencyLabel,
   getCategoryMeta,
+  getSpendCategoryMeta,
   getStatusMeta,
   getPaymentMethodLabel,
   periodMonthFromDate,
@@ -70,6 +72,9 @@ type Donation = {
   receivedByName: string | null;
   hasReceipt?: boolean;
   receiptData?: string | null;
+  spentAmount?: number;
+  remainingAmount?: number;
+  spendCount?: number;
 };
 
 type FundSummary = {
@@ -80,6 +85,7 @@ type FundSummary = {
   totalInflow: number;
   donationCount: number;
   feePaymentCount: number;
+  donationSpendCount?: number;
   sponsoredStudentCount: number;
 };
 
@@ -168,6 +174,25 @@ export function SponsorsDonationsContent() {
   const [allStudents, setAllStudents] = useState<Array<{ id: string; fullName: string; studentId: string }>>([]);
   const [assignStudentId, setAssignStudentId] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
+  const [spendModal, setSpendModal] = useState<Donation | null>(null);
+  const [spendForm, setSpendForm] = useState({
+    amount: "",
+    reason: "",
+    place: "",
+    category: "OPERATIONS",
+    spentAt: new Date().toISOString().slice(0, 10),
+    notes: "",
+  });
+  const [spendSaving, setSpendSaving] = useState(false);
+  const [spendError, setSpendError] = useState<string | null>(null);
+  const [spendHistory, setSpendHistory] = useState<Array<{
+    id: string;
+    amount: number;
+    reason: string;
+    place: string;
+    category: string;
+    spentAt: string;
+  }>>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -285,6 +310,71 @@ export function SponsorsDonationsContent() {
     if (!confirm("Delete this donation record?")) return;
     await fetch(`/api/institute/donations/${id}`, { method: "DELETE" });
     loadData();
+  };
+
+  const openSpend = async (d: Donation) => {
+    const remaining = d.remainingAmount ?? d.amount;
+    setSpendModal(d);
+    setSpendError(null);
+    setSpendForm({
+      amount: remaining > 0 ? String(remaining) : "",
+      reason: "",
+      place: "",
+      category: "OPERATIONS",
+      spentAt: new Date().toISOString().slice(0, 10),
+      notes: "",
+    });
+    setSpendHistory([]);
+    try {
+      const res = await fetch(`/api/institute/donations/${d.id}/spend`);
+      if (res.ok) {
+        const data = await res.json();
+        setSpendHistory(
+          (data.spends || []).map((s: {
+            id: string;
+            amount: number;
+            reason: string;
+            place: string;
+            category: string;
+            spentAt: string;
+          }) => ({
+            ...s,
+            spentAt: typeof s.spentAt === "string" ? s.spentAt.slice(0, 10) : s.spentAt,
+          }))
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const saveSpend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!spendModal) return;
+    setSpendSaving(true);
+    setSpendError(null);
+    try {
+      const res = await fetch(`/api/institute/donations/${spendModal.id}/spend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: Number(spendForm.amount),
+          reason: spendForm.reason,
+          place: spendForm.place,
+          category: spendForm.category,
+          spentAt: spendForm.spentAt,
+          notes: spendForm.notes || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to record spend");
+      setSpendModal(null);
+      await loadData();
+    } catch (err) {
+      setSpendError(err instanceof Error ? err.message : "Failed to record spend");
+    } finally {
+      setSpendSaving(false);
+    }
   };
 
   const openNewSponsor = () => {
@@ -526,10 +616,15 @@ export function SponsorsDonationsContent() {
               </div>
               <div className="dash-card p-5 border-l-4 border-l-amber-500">
                 <div className="flex items-center gap-2 text-amber-700 text-xs font-semibold uppercase tracking-wide">
-                  <HandCoins className="h-4 w-4" /> Spent on fees
+                  <HandCoins className="h-4 w-4" /> Spent
                 </div>
                 <p className="font-display text-2xl font-bold text-gray-900 mt-2">{formatCurrency(funds.spent)}</p>
-                <p className="text-xs text-gray-500 mt-1">{funds.feePaymentCount} invoice{funds.feePaymentCount !== 1 ? "s" : ""} paid from sponsor funds</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {funds.feePaymentCount} fee invoice{funds.feePaymentCount !== 1 ? "s" : ""}
+                  {(funds.donationSpendCount ?? 0) > 0
+                    ? ` · ${funds.donationSpendCount} donation spend${funds.donationSpendCount !== 1 ? "s" : ""}`
+                    : ""}
+                </p>
               </div>
               <div className="dash-card p-5 border-l-4 border-l-purple-500">
                 <div className="flex items-center gap-2 text-purple-700 text-xs font-semibold uppercase tracking-wide">
@@ -637,6 +732,7 @@ export function SponsorsDonationsContent() {
                   <th>Date</th>
                   <th>Sponsor</th>
                   <th>Amount</th>
+                  <th>Remaining</th>
                   <th>Frequency</th>
                   <th>Category</th>
                   <th>Status</th>
@@ -649,10 +745,13 @@ export function SponsorsDonationsContent() {
               </thead>
               <tbody>
                 {filteredDonations.length === 0 ? (
-                  <tr><td colSpan={10} className="text-center py-12 text-gray-400">No donations for this period.</td></tr>
+                  <tr><td colSpan={12} className="text-center py-12 text-gray-400">No donations for this period.</td></tr>
                 ) : filteredDonations.map((d) => {
                   const cat = getCategoryMeta(d.category);
                   const st = getStatusMeta(d.status);
+                  const remaining = d.remainingAmount ?? d.amount;
+                  const canSpend =
+                    (d.status === "RECEIVED" || d.status === "PARTIAL") && remaining > 0;
                   return (
                     <tr key={d.id}>
                       <td className="text-sm">{formatDate(d.donationDate)}</td>
@@ -661,6 +760,14 @@ export function SponsorsDonationsContent() {
                         {d.periodMonth && <p className="text-[10px] text-gray-400">Period: {d.periodMonth}</p>}
                       </td>
                       <td className="font-bold text-green-700">{formatCurrency(d.amount)}</td>
+                      <td>
+                        <span className={cn("text-sm font-medium", remaining < d.amount ? "text-amber-700" : "text-gray-700")}>
+                          {formatCurrency(remaining)}
+                        </span>
+                        {(d.spendCount ?? 0) > 0 && (
+                          <p className="text-[10px] text-gray-400">{d.spendCount} spend{(d.spendCount ?? 0) === 1 ? "" : "s"}</p>
+                        )}
+                      </td>
                       <td><span className="text-xs text-gray-600">{getFrequencyLabel(d.frequency)}</span></td>
                       <td><span className={cn("pill text-[10px] py-0", cat.color)}>{cat.label}</span></td>
                       <td><span className={cn("pill text-[10px] py-0", st.pill)}>{st.label}</span></td>
@@ -687,8 +794,20 @@ export function SponsorsDonationsContent() {
                       </td>
                       <td className="text-sm text-gray-600 max-w-[120px] truncate">{d.purpose || "—"}</td>
                       <td className="text-right">
-                        <button type="button" onClick={() => openEditDonation(d)} className="p-1.5 text-gray-400 hover:text-blue-600"><Edit2 className="h-4 w-4" /></button>
-                        <button type="button" onClick={() => deleteDonation(d.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                        <div className="inline-flex items-center gap-0.5">
+                          {canSpend && (
+                            <button
+                              type="button"
+                              onClick={() => openSpend(d)}
+                              className="p-1.5 text-gray-400 hover:text-amber-700"
+                              title="Spend from this donation"
+                            >
+                              <Banknote className="h-4 w-4" />
+                            </button>
+                          )}
+                          <button type="button" onClick={() => openEditDonation(d)} className="p-1.5 text-gray-400 hover:text-blue-600"><Edit2 className="h-4 w-4" /></button>
+                          <button type="button" onClick={() => deleteDonation(d.id)} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1127,6 +1246,144 @@ export function SponsorsDonationsContent() {
                 <button type="button" onClick={() => setProfileSponsor(null)} className="btn-primary text-sm">Close</button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Spend from donation */}
+      {spendModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !spendSaving && setSpendModal(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-display font-bold text-lg text-gray-900">Spend donation</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {spendModal.sponsor?.name || "General donation"} · {formatDate(spendModal.donationDate)}
+                </p>
+              </div>
+              <button type="button" onClick={() => !spendSaving && setSpendModal(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-sm flex justify-between gap-3">
+              <div>
+                <p className="text-xs text-amber-800">Donation</p>
+                <p className="font-bold text-amber-900">{formatCurrency(spendModal.amount)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-amber-800">Remaining</p>
+                <p className="font-bold text-amber-900">
+                  {formatCurrency(spendModal.remainingAmount ?? spendModal.amount)}
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={saveSpend} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Amount *</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    required
+                    className="form-input text-sm"
+                    value={spendForm.amount}
+                    onChange={(e) => setSpendForm((f) => ({ ...f, amount: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Date *</label>
+                  <input
+                    type="date"
+                    required
+                    className="form-input text-sm"
+                    value={spendForm.spentAt}
+                    onChange={(e) => setSpendForm((f) => ({ ...f, spentAt: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Category *</label>
+                <select
+                  required
+                  className="form-input text-sm"
+                  value={spendForm.category}
+                  onChange={(e) => setSpendForm((f) => ({ ...f, category: e.target.value }))}
+                >
+                  {DONATION_SPEND_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Reason *</label>
+                <input
+                  required
+                  className="form-input text-sm"
+                  placeholder="Why is this money being spent?"
+                  value={spendForm.reason}
+                  onChange={(e) => setSpendForm((f) => ({ ...f, reason: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Place *</label>
+                <input
+                  required
+                  className="form-input text-sm"
+                  placeholder="Where was it spent / paid to?"
+                  value={spendForm.place}
+                  onChange={(e) => setSpendForm((f) => ({ ...f, place: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Notes</label>
+                <textarea
+                  className="form-input text-sm min-h-[64px]"
+                  value={spendForm.notes}
+                  onChange={(e) => setSpendForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Optional details"
+                />
+              </div>
+
+              {spendError && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{spendError}</p>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button type="button" className="btn-ghost flex-1 text-sm py-2" disabled={spendSaving} onClick={() => setSpendModal(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary flex-1 justify-center text-sm py-2" disabled={spendSaving}>
+                  {spendSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Record spend"}
+                </button>
+              </div>
+            </form>
+
+            {spendHistory.length > 0 && (
+              <div className="border-t border-gray-100 pt-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-2">Previous spends</h4>
+                <ul className="space-y-2 max-h-40 overflow-y-auto">
+                  {spendHistory.map((s) => {
+                    const cat = getSpendCategoryMeta(s.category);
+                    return (
+                      <li key={s.id} className="rounded-xl border border-gray-100 p-3 text-sm">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-semibold text-gray-900">{formatCurrency(s.amount)}</p>
+                            <p className="text-xs text-gray-600 mt-0.5">{s.reason}</p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">{s.place} · {formatDate(s.spentAt)}</p>
+                          </div>
+                          <span className={cn("pill text-[10px] py-0 shrink-0", cat.color)}>{cat.label}</span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       )}

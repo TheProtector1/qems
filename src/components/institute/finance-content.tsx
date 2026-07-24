@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   DollarSign, CheckCircle2, Clock, AlertCircle, TrendingUp,
-  Download, Plus, Search, CreditCard, Loader2,
+  Download, Plus, Search, CreditCard, Loader2, Pencil,
 } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { cn, formatCurrency, getInitials, downloadCsv } from "@/lib/utils";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -17,10 +18,16 @@ type FeeRow = {
   studentId: string;
   program: string;
   month: string;
+  monthKey?: string | null;
   amount: number;
+  grossAmount?: number;
+  discount?: number;
+  dueDate?: string;
+  notes?: string | null;
   status: string;
   paidAt: string | null;
   method: string | null;
+  paymentMethod?: string | null;
   sponsorId?: string | null;
   sponsorName?: string | null;
   availableSponsors?: Array<{ id: string; name: string }>;
@@ -35,6 +42,10 @@ const statusConfig: Record<string, { label: string; pill: string; icon: React.El
 };
 
 export function FinanceContent() {
+  const { data: session } = useSession();
+  const canEditFees =
+    session?.user?.role === "INSTITUTE_OWNER" || session?.user?.role === "SUPER_ADMIN";
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [fees, setFees] = useState<FeeRow[]>([]);
@@ -63,6 +74,20 @@ export function FinanceContent() {
   const [collectSaving, setCollectSaving] = useState(false);
   const [collectError, setCollectError] = useState<string | null>(null);
   const [sponsorBalances, setSponsorBalances] = useState<Record<string, number>>({});
+  const [editModal, setEditModal] = useState<FeeRow | null>(null);
+  const [editForm, setEditForm] = useState({
+    amount: "",
+    discount: "",
+    netAmount: "",
+    dueDate: "",
+    month: "",
+    status: "PENDING",
+    paymentMethod: "",
+    paidAt: "",
+    notes: "",
+  });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const loadStructures = useCallback(async () => {
     try {
@@ -152,6 +177,7 @@ export function FinanceContent() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "collect",
           paymentMethod: usingSponsor ? "SCHOLARSHIP" : collectMethod,
           sponsorId: usingSponsor ? collectSponsorId : null,
         }),
@@ -164,6 +190,57 @@ export function FinanceContent() {
       setCollectError(err instanceof Error ? err.message : "Failed to collect");
     } finally {
       setCollectSaving(false);
+    }
+  };
+
+  const openEdit = (fee: FeeRow) => {
+    setEditModal(fee);
+    setEditError(null);
+    const gross = fee.grossAmount ?? fee.amount;
+    const discount = fee.discount ?? 0;
+    setEditForm({
+      amount: String(gross),
+      discount: String(discount),
+      netAmount: String(fee.amount),
+      dueDate: fee.dueDate || "",
+      month: fee.monthKey || "",
+      status: fee.status,
+      paymentMethod: fee.paymentMethod || "",
+      paidAt: fee.paidAt || "",
+      notes: fee.notes || "",
+    });
+  };
+
+  const handleEditSave = async () => {
+    if (!editModal) return;
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/institute/fees/${editModal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update",
+          amount: Number(editForm.amount),
+          discount: Number(editForm.discount || 0),
+          netAmount: Number(editForm.netAmount),
+          dueDate: editForm.dueDate || undefined,
+          month: editForm.month || null,
+          status: editForm.status,
+          paymentMethod: editForm.paymentMethod || null,
+          paidAt: editForm.status === "PAID" ? editForm.paidAt || new Date().toISOString().slice(0, 10) : null,
+          notes: editForm.notes || null,
+          clearPaidAt: editForm.status !== "PAID" && editForm.status !== "WAIVED",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to update fee");
+      setEditModal(null);
+      await loadFees();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to update");
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -462,15 +539,27 @@ export function FinanceContent() {
                     </td>
                     <td><span className="text-sm text-gray-500">{f.paidAt || "—"}</span></td>
                     <td>
-                      {f.status !== "PAID" && f.status !== "WAIVED" && (
-                        <button
-                          className="btn-ghost text-xs py-1.5 px-3"
-                          id={`btn-collect-${f.id}`}
-                          onClick={() => openCollect(f)}
-                        >
-                          Collect
-                        </button>
-                      )}
+                      <div className="flex items-center gap-1 justify-end">
+                        {canEditFees && (
+                          <button
+                            type="button"
+                            className="btn-ghost text-xs py-1.5 px-2"
+                            title="Edit fee record"
+                            onClick={() => openEdit(f)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {f.status !== "PAID" && f.status !== "WAIVED" && (
+                          <button
+                            className="btn-ghost text-xs py-1.5 px-3"
+                            id={`btn-collect-${f.id}`}
+                            onClick={() => openCollect(f)}
+                          >
+                            Collect
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -561,6 +650,166 @@ export function FinanceContent() {
                 onClick={handleCollect}
               >
                 {collectSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm payment"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !editSaving && setEditModal(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-display font-bold text-lg text-gray-900">Edit fee record</h3>
+            <div className="rounded-xl bg-gray-50 border border-gray-100 p-3 text-sm">
+              <p className="font-semibold text-gray-900">{editModal.student}</p>
+              <p className="text-xs text-gray-500">{editModal.studentId} · {editModal.month}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Gross amount</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="form-input text-sm"
+                  value={editForm.amount}
+                  onChange={(e) => {
+                    const amount = e.target.value;
+                    const discount = Number(editForm.discount || 0);
+                    setEditForm((f) => ({
+                      ...f,
+                      amount,
+                      netAmount: String(Math.max(0, Number(amount || 0) - discount)),
+                    }));
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Discount</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="form-input text-sm"
+                  value={editForm.discount}
+                  onChange={(e) => {
+                    const discount = e.target.value;
+                    setEditForm((f) => ({
+                      ...f,
+                      discount,
+                      netAmount: String(Math.max(0, Number(f.amount || 0) - Number(discount || 0))),
+                    }));
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Net amount</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="form-input text-sm"
+                  value={editForm.netAmount}
+                  onChange={(e) => setEditForm((f) => ({ ...f, netAmount: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Billing month</label>
+                <input
+                  type="month"
+                  className="form-input text-sm"
+                  value={editForm.month}
+                  onChange={(e) => setEditForm((f) => ({ ...f, month: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Due date</label>
+                <input
+                  type="date"
+                  className="form-input text-sm"
+                  value={editForm.dueDate}
+                  onChange={(e) => setEditForm((f) => ({ ...f, dueDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Status</label>
+                <select
+                  className="form-input text-sm"
+                  value={editForm.status}
+                  onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
+                >
+                  <option value="PENDING">Pending</option>
+                  <option value="OVERDUE">Overdue</option>
+                  <option value="PARTIAL">Partial</option>
+                  <option value="PAID">Paid</option>
+                  <option value="WAIVED">Waived</option>
+                </select>
+              </div>
+              {editForm.status === "PAID" && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Paid on</label>
+                    <input
+                      type="date"
+                      className="form-input text-sm"
+                      value={editForm.paidAt}
+                      onChange={(e) => setEditForm((f) => ({ ...f, paidAt: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Payment method</label>
+                    <select
+                      className="form-input text-sm"
+                      value={editForm.paymentMethod}
+                      onChange={(e) => setEditForm((f) => ({ ...f, paymentMethod: e.target.value }))}
+                    >
+                      <option value="">—</option>
+                      <option value="CASH">Cash</option>
+                      <option value="BANK_TRANSFER">Bank transfer</option>
+                      <option value="IBFT">IBFT</option>
+                      <option value="RAAST">Raast</option>
+                      <option value="JAZZCASH">JazzCash</option>
+                      <option value="EASYPAISA">EasyPaisa</option>
+                      <option value="CHEQUE">Cheque</option>
+                      <option value="SCHOLARSHIP">Scholarship / Sponsor</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+                </>
+              )}
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Notes</label>
+                <textarea
+                  className="form-input text-sm min-h-[72px]"
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Optional notes"
+                />
+              </div>
+            </div>
+
+            {editError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{editError}</p>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                className="btn-ghost flex-1 text-sm py-2"
+                disabled={editSaving}
+                onClick={() => setEditModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary flex-1 justify-center text-sm py-2"
+                disabled={editSaving}
+                onClick={handleEditSave}
+              >
+                {editSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save changes"}
               </button>
             </div>
           </div>
