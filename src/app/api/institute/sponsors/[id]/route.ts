@@ -19,7 +19,9 @@ export async function GET(_req: Request, ctx: RouteCtx) {
 
     if (!sponsor) return new NextResponse("Not found", { status: 404 });
 
-    const [donationRows, receivedTotals] = await Promise.all([
+    const { getSponsorFundBalance } = await import("@/lib/sponsor-funds");
+
+    const [donationRows, fund, sponsored] = await Promise.all([
       prisma.donation.findMany({
         where: { sponsorId: id },
         orderBy: [{ donationDate: "desc" }, { createdAt: "desc" }],
@@ -38,16 +40,24 @@ export async function GET(_req: Request, ctx: RouteCtx) {
           receiptData: true,
         },
       }),
-      prisma.donation.findMany({
-        where: { sponsorId: id, status: { in: ["RECEIVED", "PARTIAL"] } },
-        select: { amount: true },
+      getSponsorFundBalance(session.user.instituteId, id),
+      prisma.studentSponsor.findMany({
+        where: { sponsorId: id, isActive: true },
+        include: {
+          student: {
+            select: { id: true, fullName: true, studentId: true, programType: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
       }),
     ]);
 
     return NextResponse.json({
       sponsor: {
         ...sponsor,
-        totalDonated: receivedTotals.reduce((s, d) => s + Number(d.amount), 0),
+        totalDonated: fund.collected,
+        totalSpent: fund.spent,
+        balance: fund.balance,
         donations: donationRows.map((d) => ({
           id: d.id,
           amount: Number(d.amount),
@@ -60,6 +70,14 @@ export async function GET(_req: Request, ctx: RouteCtx) {
           referenceNo: d.referenceNo,
           receivedByName: d.receivedByName,
           hasReceipt: Boolean(d.receiptData),
+        })),
+        sponsoredStudents: sponsored.map((l) => ({
+          linkId: l.id,
+          id: l.student.id,
+          fullName: l.student.fullName,
+          studentId: l.student.studentId,
+          programType: l.student.programType,
+          notes: l.notes,
         })),
       },
     });

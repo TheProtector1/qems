@@ -45,8 +45,22 @@ export async function GET(req: Request) {
         where,
         include: {
           student: {
-            select: { id: true, fullName: true, studentId: true, programType: true },
+            select: {
+              id: true,
+              fullName: true,
+              studentId: true,
+              programType: true,
+              sponsorLinks: {
+                where: { isActive: true, sponsor: { isActive: true } },
+                include: {
+                  sponsor: {
+                    select: { id: true, name: true },
+                  },
+                },
+              },
+            },
           },
+          sponsor: { select: { id: true, name: true } },
         },
         orderBy: [{ dueDate: "desc" }, { createdAt: "desc" }],
         skip,
@@ -57,6 +71,7 @@ export async function GET(req: Request) {
 
     const fees = payments.map((p) => ({
       id: p.id,
+      studentDbId: p.student.id,
       student: p.student.fullName,
       studentId: p.student.studentId,
       program: p.student.programType,
@@ -65,6 +80,12 @@ export async function GET(req: Request) {
       status: p.status,
       paidAt: p.paidAt ? p.paidAt.toISOString().slice(0, 10) : null,
       method: paymentMethodLabel(p.paymentMethod),
+      sponsorId: p.sponsorId,
+      sponsorName: p.sponsor?.name || null,
+      availableSponsors: p.student.sponsorLinks.map((l) => ({
+        id: l.sponsor.id,
+        name: l.sponsor.name,
+      })),
     }));
 
     let summary = null;

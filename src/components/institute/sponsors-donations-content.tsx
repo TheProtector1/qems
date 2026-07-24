@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Plus, Edit2, Trash2, X, Loader2, Heart, TrendingUp,
   Users, HandCoins, Calendar, Search, Gift, Receipt, Briefcase, Eye, ImageIcon,
+  Wallet, ArrowDownCircle, ArrowUpCircle, PiggyBank, UserPlus,
 } from "lucide-react";
 import { cn, formatCurrency, formatDate, getInitials } from "@/lib/utils";
 import {
@@ -37,6 +38,17 @@ type Sponsor = {
   notes: string | null;
   isActive: boolean;
   totalDonated: number;
+  totalSpent?: number;
+  balance?: number;
+  sponsoredStudentCount?: number;
+  sponsoredStudents?: Array<{
+    linkId: string;
+    id: string;
+    fullName: string;
+    studentId: string;
+    programType: string;
+    notes: string | null;
+  }>;
   _count?: { donations: number };
 };
 
@@ -60,6 +72,17 @@ type Donation = {
   receiptData?: string | null;
 };
 
+type FundSummary = {
+  collected: number;
+  spent: number;
+  balance: number;
+  generalCollected: number;
+  totalInflow: number;
+  donationCount: number;
+  feePaymentCount: number;
+  sponsoredStudentCount: number;
+};
+
 type Summary = {
   monthTotal: number;
   yearTotal: number;
@@ -67,6 +90,7 @@ type Summary = {
   activeSponsors: number;
   donationCount: number;
   monthlyTrend: Array<{ month: string; total: number }>;
+  funds?: FundSummary;
 };
 
 const emptyDonationForm = () => ({
@@ -140,6 +164,10 @@ export function SponsorsDonationsContent() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [funds, setFunds] = useState<FundSummary | null>(null);
+  const [allStudents, setAllStudents] = useState<Array<{ id: string; fullName: string; studentId: string }>>([]);
+  const [assignStudentId, setAssignStudentId] = useState("");
+  const [assignSaving, setAssignSaving] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -160,11 +188,13 @@ export function SponsorsDonationsContent() {
       if (sponsorsRes.ok) {
         const data = await sponsorsRes.json();
         setSponsors(data.sponsors || []);
+        if (data.funds) setFunds(data.funds);
       }
       if (donationsRes.ok) {
         const data = await donationsRes.json();
         setDonations(data.donations || []);
         setSummary(data.summary || null);
+        if (data.summary?.funds) setFunds(data.summary.funds);
       }
     } finally {
       setLoading(false);
@@ -285,16 +315,59 @@ export function SponsorsDonationsContent() {
   const openSponsorProfile = async (s: Sponsor) => {
     setProfileSponsor(s);
     setProfileLoading(true);
+    setAssignStudentId("");
     try {
-      const res = await fetch(`/api/institute/sponsors/${s.id}`);
+      const [res, studentsRes] = await Promise.all([
+        fetch(`/api/institute/sponsors/${s.id}`),
+        allStudents.length ? Promise.resolve(null) : fetch("/api/institute/students?pageSize=200"),
+      ]);
       if (res.ok) {
         const data = await res.json();
         setProfileSponsor(data.sponsor);
         setProfileDonations(data.sponsor.donations || []);
       }
+      if (studentsRes && studentsRes.ok) {
+        const data = await studentsRes.json();
+        setAllStudents(
+          (data.students || []).map((st: { id: string; fullName: string; studentId: string }) => ({
+            id: st.id,
+            fullName: st.fullName,
+            studentId: st.studentId,
+          }))
+        );
+      }
     } finally {
       setProfileLoading(false);
     }
+  };
+
+  const assignStudent = async () => {
+    if (!profileSponsor || !assignStudentId) return;
+    setAssignSaving(true);
+    try {
+      const res = await fetch(`/api/institute/sponsors/${profileSponsor.id}/students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId: assignStudentId }),
+      });
+      if (res.ok) {
+        setAssignStudentId("");
+        await openSponsorProfile(profileSponsor);
+        loadData();
+      }
+    } finally {
+      setAssignSaving(false);
+    }
+  };
+
+  const unlinkStudent = async (studentId: string) => {
+    if (!profileSponsor || !confirm("Remove this student from the sponsor?")) return;
+    await fetch(
+      `/api/institute/sponsors/${profileSponsor.id}/students?studentId=${studentId}`,
+      { method: "DELETE" }
+    );
+    await openSponsorProfile(profileSponsor);
+    loadData();
   };
 
   const handleSponsorPhoto = async (file: File | null) => {
@@ -369,7 +442,7 @@ export function SponsorsDonationsContent() {
             </div>
             <h2 className="font-display text-2xl md:text-3xl font-bold">Sponsors & Donations</h2>
             <p className="text-purple-100/90 text-sm mt-2 max-w-xl">
-              Track donors, log contributions on any schedule — daily, monthly, or one-time — and monitor pledged vs received funds.
+              Track donor funds: money collected, spent on student fees, and balance still in stock. Link sponsors to students to pay invoices from their fund.
             </p>
           </div>
           <div className="flex gap-2">
@@ -381,13 +454,29 @@ export function SponsorsDonationsContent() {
             </button>
           </div>
         </div>
-        {summary && (
+        {(funds || summary) && (
           <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
             {[
-              { label: "This Month", value: formatCurrency(summary.monthTotal), icon: Calendar },
-              { label: "Year to Date", value: formatCurrency(summary.yearTotal), icon: TrendingUp },
-              { label: "Active Sponsors", value: summary.activeSponsors, icon: Users },
-              { label: "Pledged (Open)", value: formatCurrency(summary.pledgedTotal), icon: HandCoins },
+              {
+                label: "Collected (sponsor funds)",
+                value: formatCurrency(funds?.collected ?? summary?.yearTotal ?? 0),
+                icon: ArrowDownCircle,
+              },
+              {
+                label: "Spent on fees",
+                value: formatCurrency(funds?.spent ?? 0),
+                icon: ArrowUpCircle,
+              },
+              {
+                label: "In stock (balance)",
+                value: formatCurrency(funds?.balance ?? 0),
+                icon: PiggyBank,
+              },
+              {
+                label: "Sponsored students",
+                value: funds?.sponsoredStudentCount ?? summary?.activeSponsors ?? 0,
+                icon: Users,
+              },
             ].map((s) => (
               <div key={s.label} className="rounded-xl bg-white/10 border border-white/10 p-4">
                 <s.icon className="h-4 w-4 text-purple-200 mb-2" />
@@ -421,7 +510,37 @@ export function SponsorsDonationsContent() {
       </div>
 
       {/* Overview tab */}
-      {tab === "overview" && summary && (
+      {tab === "overview" && (
+        <div className="space-y-6">
+          {funds && (
+            <div className="grid sm:grid-cols-3 gap-4">
+              <div className="dash-card p-5 border-l-4 border-l-emerald-500">
+                <div className="flex items-center gap-2 text-emerald-700 text-xs font-semibold uppercase tracking-wide">
+                  <Wallet className="h-4 w-4" /> Collected
+                </div>
+                <p className="font-display text-2xl font-bold text-gray-900 mt-2">{formatCurrency(funds.collected)}</p>
+                <p className="text-xs text-gray-500 mt-1">{funds.donationCount} received donation{funds.donationCount !== 1 ? "s" : ""} into sponsor funds</p>
+                {funds.generalCollected > 0 && (
+                  <p className="text-[11px] text-gray-400 mt-1">+ {formatCurrency(funds.generalCollected)} unassigned / general</p>
+                )}
+              </div>
+              <div className="dash-card p-5 border-l-4 border-l-amber-500">
+                <div className="flex items-center gap-2 text-amber-700 text-xs font-semibold uppercase tracking-wide">
+                  <HandCoins className="h-4 w-4" /> Spent on fees
+                </div>
+                <p className="font-display text-2xl font-bold text-gray-900 mt-2">{formatCurrency(funds.spent)}</p>
+                <p className="text-xs text-gray-500 mt-1">{funds.feePaymentCount} invoice{funds.feePaymentCount !== 1 ? "s" : ""} paid from sponsor funds</p>
+              </div>
+              <div className="dash-card p-5 border-l-4 border-l-purple-500">
+                <div className="flex items-center gap-2 text-purple-700 text-xs font-semibold uppercase tracking-wide">
+                  <PiggyBank className="h-4 w-4" /> In stock
+                </div>
+                <p className="font-display text-2xl font-bold text-gray-900 mt-2">{formatCurrency(funds.balance)}</p>
+                <p className="text-xs text-gray-500 mt-1">Available for future sponsored fee payments</p>
+              </div>
+            </div>
+          )}
+          {summary && (
         <div className="grid lg:grid-cols-2 gap-6">
           <div className="dash-card p-5">
             <h3 className="font-semibold text-gray-900 mb-4">Monthly Trend (Last 6 Months)</h3>
@@ -468,6 +587,11 @@ export function SponsorsDonationsContent() {
               )}
             </div>
           </div>
+        </div>
+          )}
+          {!summary && !funds && (
+            <p className="text-sm text-gray-400 text-center py-12">No fund data yet. Log a donation to get started.</p>
+          )}
         </div>
       )}
 
@@ -609,14 +733,27 @@ export function SponsorsDonationsContent() {
                   {(s.email || s.phone) && (
                     <p className="text-xs text-gray-500 mt-2">{s.email}{s.phone && ` · ${s.phone}`}</p>
                   )}
-                  <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between items-center">
-                    <div>
-                      <p className="text-lg font-bold text-green-700">{formatCurrency(s.totalDonated)}</p>
-                      <p className="text-[10px] text-gray-400">Total contributed</p>
+                  <div className="mt-4 pt-3 border-t border-gray-100 space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-500">Collected</span>
+                      <span className="font-semibold text-green-700">{formatCurrency(s.totalDonated)}</span>
                     </div>
-                    <span className={cn("pill text-[10px] py-0", s.isActive ? "pill-success" : "bg-gray-100 text-gray-500")}>
-                      {s.isActive ? "Active" : "Inactive"}
-                    </span>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-500">Spent on fees</span>
+                      <span className="font-semibold text-amber-700">{formatCurrency(s.totalSpent ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-500">In stock</span>
+                      <span className="font-bold text-purple-800">{formatCurrency(s.balance ?? s.totalDonated)}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-1">
+                      <span className="text-[10px] text-gray-400">
+                        {s.sponsoredStudentCount ?? 0} sponsored student{(s.sponsoredStudentCount ?? 0) !== 1 ? "s" : ""}
+                      </span>
+                      <span className={cn("pill text-[10px] py-0", s.isActive ? "pill-success" : "bg-gray-100 text-gray-500")}>
+                        {s.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -884,6 +1021,84 @@ export function SponsorsDonationsContent() {
                   <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3 border border-gray-100">{profileSponsor.notes}</p>
                 </div>
               )}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3 text-center">
+                  <p className="text-[10px] uppercase text-emerald-700 font-semibold">Collected</p>
+                  <p className="font-bold text-emerald-800 mt-1">{formatCurrency(profileSponsor.totalDonated)}</p>
+                </div>
+                <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-center">
+                  <p className="text-[10px] uppercase text-amber-700 font-semibold">Spent</p>
+                  <p className="font-bold text-amber-800 mt-1">{formatCurrency(profileSponsor.totalSpent ?? 0)}</p>
+                </div>
+                <div className="rounded-xl bg-purple-50 border border-purple-100 p-3 text-center">
+                  <p className="text-[10px] uppercase text-purple-700 font-semibold">In stock</p>
+                  <p className="font-bold text-purple-800 mt-1">{formatCurrency(profileSponsor.balance ?? profileSponsor.totalDonated)}</p>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <UserPlus className="h-4 w-4 text-purple-600" /> Sponsored students
+                  </h4>
+                </div>
+                <div className="flex gap-2 mb-3">
+                  <select
+                    className="form-input text-sm flex-1"
+                    value={assignStudentId}
+                    onChange={(e) => setAssignStudentId(e.target.value)}
+                  >
+                    <option value="">Link a student…</option>
+                    {allStudents
+                      .filter(
+                        (st) =>
+                          !(profileSponsor.sponsoredStudents || []).some((ss) => ss.id === st.id)
+                      )
+                      .map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.fullName} ({st.studentId})
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn-primary text-sm py-2 px-3"
+                    disabled={!assignStudentId || assignSaving}
+                    onClick={assignStudent}
+                  >
+                    {assignSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Link"}
+                  </button>
+                </div>
+                {(profileSponsor.sponsoredStudents || []).length === 0 ? (
+                  <p className="text-xs text-gray-400 py-2">
+                    No students linked. Link students so their fees can be paid from this sponsor&apos;s fund.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {(profileSponsor.sponsoredStudents || []).map((st) => (
+                      <li
+                        key={st.id}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-gray-100 px-3 py-2 text-sm"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-900">{st.fullName}</p>
+                          <p className="text-xs text-gray-400">
+                            {st.studentId} · {st.programType}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-xs text-red-600 hover:underline"
+                          onClick={() => unlinkStudent(st.id)}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-semibold text-gray-900">Donation history</h4>

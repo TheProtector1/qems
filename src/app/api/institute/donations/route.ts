@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { periodMonthFromDate } from "@/lib/sponsors-donations";
+import { getInstituteSponsorFunds } from "@/lib/sponsor-funds";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +93,7 @@ export async function GET(req: Request) {
           month: r.periodMonth,
           total: Number(r._sum.amount || 0),
         })),
+        funds: await getInstituteSponsorFunds(instituteId),
       };
     }
 

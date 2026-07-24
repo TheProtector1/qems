@@ -12,6 +12,7 @@ import {
 
 type FeeRow = {
   id: string;
+  studentDbId?: string;
   student: string;
   studentId: string;
   program: string;
@@ -20,6 +21,9 @@ type FeeRow = {
   status: string;
   paidAt: string | null;
   method: string | null;
+  sponsorId?: string | null;
+  sponsorName?: string | null;
+  availableSponsors?: Array<{ id: string; name: string }>;
 };
 
 const statusConfig: Record<string, { label: string; pill: string; icon: React.ElementType }> = {
@@ -53,6 +57,12 @@ export function FinanceContent() {
   const [billingSaving, setBillingSaving] = useState(false);
   const [structureForm, setStructureForm] = useState({ name: "", programType: "HIFZ", amount: "5000" });
   const [structureSaving, setStructureSaving] = useState(false);
+  const [collectModal, setCollectModal] = useState<FeeRow | null>(null);
+  const [collectMethod, setCollectMethod] = useState("CASH");
+  const [collectSponsorId, setCollectSponsorId] = useState("");
+  const [collectSaving, setCollectSaving] = useState(false);
+  const [collectError, setCollectError] = useState<string | null>(null);
+  const [sponsorBalances, setSponsorBalances] = useState<Record<string, number>>({});
 
   const loadStructures = useCallback(async () => {
     try {
@@ -110,13 +120,51 @@ export function FinanceContent() {
     );
   };
 
-  const handleCollect = async (id: string) => {
-    const res = await fetch(`/api/institute/fees/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentMethod: "CASH" }),
-    });
-    if (res.ok) loadFees();
+  const openCollect = async (fee: FeeRow) => {
+    setCollectModal(fee);
+    setCollectError(null);
+    setCollectSponsorId("");
+    setCollectMethod("CASH");
+    if (fee.availableSponsors?.length) {
+      try {
+        const res = await fetch("/api/institute/sponsors");
+        if (res.ok) {
+          const data = await res.json();
+          const map: Record<string, number> = {};
+          for (const s of data.sponsors || []) {
+            map[s.id] = Number(s.balance ?? 0);
+          }
+          setSponsorBalances(map);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  const handleCollect = async () => {
+    if (!collectModal) return;
+    setCollectSaving(true);
+    setCollectError(null);
+    try {
+      const usingSponsor = Boolean(collectSponsorId);
+      const res = await fetch(`/api/institute/fees/${collectModal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentMethod: usingSponsor ? "SCHOLARSHIP" : collectMethod,
+          sponsorId: usingSponsor ? collectSponsorId : null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to collect payment");
+      setCollectModal(null);
+      await loadFees();
+    } catch (err) {
+      setCollectError(err instanceof Error ? err.message : "Failed to collect");
+    } finally {
+      setCollectSaving(false);
+    }
   };
 
   const handleRecordPayment = () => {
@@ -404,14 +452,21 @@ export function FinanceContent() {
                         {cfg.label}
                       </span>
                     </td>
-                    <td><span className="text-sm text-gray-500">{f.method || "—"}</span></td>
+                    <td>
+                      <span className="text-sm text-gray-500">
+                        {f.method || "—"}
+                        {f.sponsorName ? (
+                          <span className="block text-[10px] text-purple-600">via {f.sponsorName}</span>
+                        ) : null}
+                      </span>
+                    </td>
                     <td><span className="text-sm text-gray-500">{f.paidAt || "—"}</span></td>
                     <td>
                       {f.status !== "PAID" && f.status !== "WAIVED" && (
                         <button
                           className="btn-ghost text-xs py-1.5 px-3"
                           id={`btn-collect-${f.id}`}
-                          onClick={() => handleCollect(f.id)}
+                          onClick={() => openCollect(f)}
                         >
                           Collect
                         </button>
@@ -424,6 +479,93 @@ export function FinanceContent() {
           </table>
         </div>
       </div>
+
+      {collectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !collectSaving && setCollectModal(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 className="font-display font-bold text-lg text-gray-900">Collect fee</h3>
+            <div className="rounded-xl bg-gray-50 border border-gray-100 p-3 text-sm">
+              <p className="font-semibold text-gray-900">{collectModal.student}</p>
+              <p className="text-xs text-gray-500">{collectModal.studentId} · {collectModal.month}</p>
+              <p className="mt-2 font-bold text-primary-800">{formatCurrency(collectModal.amount)}</p>
+            </div>
+
+            {collectModal.availableSponsors && collectModal.availableSponsors.length > 0 && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Pay via sponsor (optional)
+                </label>
+                <select
+                  className="form-input text-sm"
+                  value={collectSponsorId}
+                  onChange={(e) => {
+                    setCollectSponsorId(e.target.value);
+                    if (e.target.value) setCollectMethod("SCHOLARSHIP");
+                    else setCollectMethod("CASH");
+                  }}
+                >
+                  <option value="">— No sponsor (direct payment) —</option>
+                  {collectModal.availableSponsors.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                      {sponsorBalances[s.id] !== undefined
+                        ? ` · balance ${formatCurrency(sponsorBalances[s.id])}`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Selecting a sponsor deducts this invoice from their donation fund.
+                </p>
+              </div>
+            )}
+
+            {!collectSponsorId && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Payment method</label>
+                <select
+                  className="form-input text-sm"
+                  value={collectMethod}
+                  onChange={(e) => setCollectMethod(e.target.value)}
+                >
+                  <option value="CASH">Cash</option>
+                  <option value="BANK_TRANSFER">Bank transfer</option>
+                  <option value="IBFT">IBFT</option>
+                  <option value="RAAST">Raast</option>
+                  <option value="JAZZCASH">JazzCash</option>
+                  <option value="EASYPAISA">EasyPaisa</option>
+                  <option value="CHEQUE">Cheque</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+            )}
+
+            {collectError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{collectError}</p>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                className="btn-ghost flex-1 text-sm py-2"
+                disabled={collectSaving}
+                onClick={() => setCollectModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary flex-1 justify-center text-sm py-2"
+                disabled={collectSaving}
+                onClick={handleCollect}
+              >
+                {collectSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm payment"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
