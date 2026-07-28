@@ -74,3 +74,89 @@ export async function GET() {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+export async function POST(req: Request) {
+  try {
+    const session = await getAuthSession();
+    if (!session?.user.instituteId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const instituteId = session.user.instituteId;
+    const body = await req.json();
+    const studentId = String(body.studentId || "").trim();
+    const name = String(body.name || "").trim();
+    const reason = String(body.reason || "").trim() || null;
+    const startDateRaw = String(body.startDate || "").trim();
+    const percentage =
+      body.percentage === "" || body.percentage === undefined || body.percentage === null
+        ? null
+        : Number(body.percentage);
+    const amount =
+      body.amount === "" || body.amount === undefined || body.amount === null
+        ? null
+        : Number(body.amount);
+    const isFullScholarship = Boolean(body.isFullScholarship);
+
+    if (!studentId || !name || !startDateRaw) {
+      return NextResponse.json(
+        { error: "Student, scholarship name, and start date are required" },
+        { status: 400 }
+      );
+    }
+
+    if (!isFullScholarship && percentage === null && amount === null) {
+      return NextResponse.json(
+        { error: "Provide either a percentage or amount for the scholarship" },
+        { status: 400 }
+      );
+    }
+
+    if (percentage !== null && (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100)) {
+      return NextResponse.json({ error: "Percentage must be between 1 and 100" }, { status: 400 });
+    }
+
+    if (amount !== null && (!Number.isFinite(amount) || amount < 0)) {
+      return NextResponse.json({ error: "Amount must be zero or greater" }, { status: 400 });
+    }
+
+    const student = await prisma.student.findFirst({
+      where: { id: studentId, instituteId },
+      select: { id: true },
+    });
+
+    if (!student) {
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+
+    await prisma.scholarship.updateMany({
+      where: { studentId, isActive: true },
+      data: { isActive: false, endDate: new Date(startDateRaw) },
+    });
+
+    const scholarship = await prisma.scholarship.create({
+      data: {
+        studentId,
+        name,
+        reason,
+        startDate: new Date(startDateRaw),
+        isActive: true,
+        isFullScholarship,
+        percentage: isFullScholarship ? null : percentage,
+        amount: isFullScholarship ? 0 : amount ?? 0,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      scholarship: {
+        ...scholarship,
+        amount: Number(scholarship.amount),
+        percentage: scholarship.percentage ? Number(scholarship.percentage) : null,
+      },
+    });
+  } catch (error) {
+    console.error("Create scholarship error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

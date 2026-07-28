@@ -30,7 +30,7 @@ type FeeRow = {
   paymentMethod?: string | null;
   sponsorId?: string | null;
   sponsorName?: string | null;
-  availableSponsors?: Array<{ id: string; name: string }>;
+  availableSponsors?: Array<{ id: string; name: string; balance?: number }>;
 };
 
 const statusConfig: Record<string, { label: string; pill: string; icon: React.ElementType }> = {
@@ -73,7 +73,6 @@ export function FinanceContent() {
   const [collectSponsorId, setCollectSponsorId] = useState("");
   const [collectSaving, setCollectSaving] = useState(false);
   const [collectError, setCollectError] = useState<string | null>(null);
-  const [sponsorBalances, setSponsorBalances] = useState<Record<string, number>>({});
   const [editModal, setEditModal] = useState<FeeRow | null>(null);
   const [editForm, setEditForm] = useState({
     amount: "",
@@ -150,21 +149,6 @@ export function FinanceContent() {
     setCollectError(null);
     setCollectSponsorId("");
     setCollectMethod("CASH");
-    if (fee.availableSponsors?.length) {
-      try {
-        const res = await fetch("/api/institute/sponsors");
-        if (res.ok) {
-          const data = await res.json();
-          const map: Record<string, number> = {};
-          for (const s of data.sponsors || []) {
-            map[s.id] = Number(s.balance ?? 0);
-          }
-          setSponsorBalances(map);
-        }
-      } catch {
-        /* ignore */
-      }
-    }
   };
 
   const handleCollect = async () => {
@@ -598,8 +582,8 @@ export function FinanceContent() {
                   {collectModal.availableSponsors.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
-                      {sponsorBalances[s.id] !== undefined
-                        ? ` · balance ${formatCurrency(sponsorBalances[s.id])}`
+                      {s.balance !== undefined
+                        ? ` · balance ${formatCurrency(s.balance)}`
                         : ""}
                     </option>
                   ))}

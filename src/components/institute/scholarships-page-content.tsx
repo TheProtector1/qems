@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { HeartHandshake, Plus, Award, Sparkles, Loader2 } from "lucide-react";
+import { HeartHandshake, Plus, Award, Sparkles, Loader2, X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 type ScholarshipRow = {
@@ -20,6 +19,19 @@ export function ScholarshipsPageContent() {
   const [scholarships, setScholarships] = useState<ScholarshipRow[]>([]);
   const [summary, setSummary] = useState({ monthlySubsidy: 0, scholarshipRatio: 0, activeCount: 0 });
   const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState<Array<{ id: string; fullName: string; studentId: string; programType: string }>>([]);
+  const [showGrantModal, setShowGrantModal] = useState(false);
+  const [grantSaving, setGrantSaving] = useState(false);
+  const [grantError, setGrantError] = useState<string | null>(null);
+  const [grantForm, setGrantForm] = useState({
+    studentId: "",
+    name: "",
+    reason: "",
+    startDate: new Date().toISOString().slice(0, 10),
+    isFullScholarship: false,
+    percentage: "",
+    amount: "",
+  });
 
   const loadScholarships = useCallback(async () => {
     setLoading(true);
@@ -37,14 +49,73 @@ export function ScholarshipsPageContent() {
     }
   }, []);
 
+  const loadStudents = useCallback(async () => {
+    try {
+      const res = await fetch("/api/institute/students?pageSize=50");
+      if (!res.ok) return;
+      const data = await res.json();
+      setStudents(
+        (data.students || []).map(
+          (student: { id: string; fullName: string; studentId: string; programType: string }) => ({
+            id: student.id,
+            fullName: student.fullName,
+            studentId: student.studentId,
+            programType: student.programType,
+          })
+        )
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
   useEffect(() => {
     loadScholarships();
-  }, [loadScholarships]);
+    loadStudents();
+  }, [loadScholarships, loadStudents]);
 
   const handleRevoke = async (id: string) => {
     if (!confirm("Revoke this scholarship grant?")) return;
     const res = await fetch(`/api/institute/scholarships/${id}`, { method: "PATCH" });
     if (res.ok) loadScholarships();
+  };
+
+  const openGrantModal = () => {
+    setGrantError(null);
+    setGrantForm({
+      studentId: "",
+      name: "",
+      reason: "",
+      startDate: new Date().toISOString().slice(0, 10),
+      isFullScholarship: false,
+      percentage: "",
+      amount: "",
+    });
+    setShowGrantModal(true);
+  };
+
+  const handleGrantScholarship = async () => {
+    setGrantSaving(true);
+    setGrantError(null);
+    try {
+      const res = await fetch("/api/institute/scholarships", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...grantForm,
+          percentage: grantForm.percentage || null,
+          amount: grantForm.amount || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to grant scholarship");
+      setShowGrantModal(false);
+      await loadScholarships();
+    } catch (error) {
+      setGrantError(error instanceof Error ? error.message : "Failed to grant scholarship");
+    } finally {
+      setGrantSaving(false);
+    }
   };
 
   if (loading) {
@@ -62,9 +133,9 @@ export function ScholarshipsPageContent() {
           <h2 className="section-heading">Scholarship Registry</h2>
           <p className="text-sm text-gray-500 mt-0.5">Manage discounts, full grants, and sibling deductions</p>
         </div>
-        <Link href="/institute/finance/fees" className="btn-primary text-sm py-2">
+        <button type="button" onClick={openGrantModal} className="btn-primary text-sm py-2">
           <Plus className="h-4 w-4" /> Grant Scholarship
-        </Link>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -152,6 +223,144 @@ export function ScholarshipsPageContent() {
           </tbody>
         </table>
       </div>
+
+      {showGrantModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !grantSaving && setShowGrantModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display font-bold text-lg text-gray-900">Grant Scholarship</h3>
+              <button
+                type="button"
+                onClick={() => !grantSaving && setShowGrantModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Student</label>
+                <select
+                  className="form-input text-sm"
+                  value={grantForm.studentId}
+                  onChange={(e) => setGrantForm((prev) => ({ ...prev, studentId: e.target.value }))}
+                >
+                  <option value="">Select student</option>
+                  {students.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.fullName} ({student.studentId}) - {student.programType}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Scholarship name</label>
+                <input
+                  className="form-input text-sm"
+                  value={grantForm.name}
+                  onChange={(e) => setGrantForm((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="Merit scholarship"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Start date</label>
+                <input
+                  type="date"
+                  className="form-input text-sm"
+                  value={grantForm.startDate}
+                  onChange={(e) => setGrantForm((prev) => ({ ...prev, startDate: e.target.value }))}
+                />
+              </div>
+
+              <div className="flex items-end">
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={grantForm.isFullScholarship}
+                    onChange={(e) =>
+                      setGrantForm((prev) => ({
+                        ...prev,
+                        isFullScholarship: e.target.checked,
+                        percentage: e.target.checked ? "" : prev.percentage,
+                        amount: e.target.checked ? "" : prev.amount,
+                      }))
+                    }
+                  />
+                  Full scholarship
+                </label>
+              </div>
+
+              {!grantForm.isFullScholarship && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Discount %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      className="form-input text-sm"
+                      value={grantForm.percentage}
+                      onChange={(e) => setGrantForm((prev) => ({ ...prev, percentage: e.target.value }))}
+                      placeholder="Optional"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Discount amount</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="form-input text-sm"
+                      value={grantForm.amount}
+                      onChange={(e) => setGrantForm((prev) => ({ ...prev, amount: e.target.value }))}
+                      placeholder="Optional"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Reason</label>
+                <textarea
+                  className="form-input text-sm min-h-[90px]"
+                  value={grantForm.reason}
+                  onChange={(e) => setGrantForm((prev) => ({ ...prev, reason: e.target.value }))}
+                  placeholder="Why is this scholarship being granted?"
+                />
+              </div>
+            </div>
+
+            {grantError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">
+                {grantError}
+              </p>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                className="btn-ghost flex-1 text-sm py-2"
+                disabled={grantSaving}
+                onClick={() => setShowGrantModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary flex-1 justify-center text-sm py-2"
+                disabled={grantSaving}
+                onClick={handleGrantScholarship}
+              >
+                {grantSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Grant scholarship"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

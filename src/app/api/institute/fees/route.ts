@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getSponsorFundBalance } from "@/lib/sponsor-funds";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,19 @@ export async function GET(req: Request) {
       prisma.feePayment.count({ where }),
     ]);
 
+    const sponsorIds = Array.from(
+      new Set(
+        payments.flatMap((p) => p.student.sponsorLinks.map((link) => link.sponsor.id))
+      )
+    );
+    const sponsorBalances = new Map<string, number>();
+    await Promise.all(
+      sponsorIds.map(async (sponsorId) => {
+        const fund = await getSponsorFundBalance(instituteId, sponsorId);
+        sponsorBalances.set(sponsorId, fund.balance);
+      })
+    );
+
     const fees = payments.map((p) => ({
       id: p.id,
       studentDbId: p.student.id,
@@ -91,6 +105,7 @@ export async function GET(req: Request) {
       availableSponsors: p.student.sponsorLinks.map((l) => ({
         id: l.sponsor.id,
         name: l.sponsor.name,
+        balance: sponsorBalances.get(l.sponsor.id) ?? 0,
       })),
     }));
 
