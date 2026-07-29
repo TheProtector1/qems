@@ -156,19 +156,14 @@ export async function PATCH(
     let resolvedSponsorId: string | null = null;
 
     if (sponsorId) {
-      const link = await prisma.studentSponsor.findFirst({
-        where: {
-          studentId: existing.studentId,
-          sponsorId,
-          isActive: true,
-          sponsor: { instituteId, isActive: true },
-        },
-        include: { sponsor: { select: { id: true, name: true } } },
+      const sponsor = await prisma.sponsor.findFirst({
+        where: { id: sponsorId, instituteId, isActive: true },
+        select: { id: true, name: true },
       });
 
-      if (!link) {
+      if (!sponsor) {
         return NextResponse.json(
-          { error: "Selected sponsor is not linked to this student" },
+          { error: "Selected sponsor is not available for this institute" },
           { status: 400 }
         );
       }

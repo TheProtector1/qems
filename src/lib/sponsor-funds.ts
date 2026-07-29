@@ -116,6 +116,45 @@ export async function getSponsorFundBalance(
   };
 }
 
+/** Fund balance for every sponsor of an institute, keyed by sponsor id. */
+export async function getSponsorFundBalances(
+  instituteId: string,
+  db: Tx = prisma
+): Promise<Map<string, number>> {
+  const [collected, feeSpent, donationSpends] = await Promise.all([
+    db.donation.groupBy({
+      by: ["sponsorId"],
+      where: {
+        instituteId,
+        status: { in: ["RECEIVED", "PARTIAL"] },
+        sponsorId: { not: null },
+      },
+      _sum: { amount: true },
+    }),
+    db.feePayment.groupBy({
+      by: ["sponsorId"],
+      where: { status: "PAID", student: { instituteId }, sponsorId: { not: null } },
+      _sum: { netAmount: true },
+    }),
+    db.donationSpend.findMany({
+      where: { instituteId, donation: { sponsorId: { not: null } } },
+      select: { amount: true, donation: { select: { sponsorId: true } } },
+    }),
+  ]);
+
+  const balances = new Map<string, number>();
+  const add = (sponsorId: string | null, delta: number) => {
+    if (!sponsorId) return;
+    balances.set(sponsorId, (balances.get(sponsorId) ?? 0) + delta);
+  };
+
+  for (const row of collected) add(row.sponsorId, Number(row._sum?.amount || 0));
+  for (const row of feeSpent) add(row.sponsorId, -Number(row._sum?.netAmount || 0));
+  for (const spend of donationSpends) add(spend.donation.sponsorId, -Number(spend.amount));
+
+  return balances;
+}
+
 /** Remaining amount on a single donation after spends. */
 export async function getDonationRemaining(
   donationId: string,

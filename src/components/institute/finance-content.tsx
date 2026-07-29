@@ -33,6 +33,8 @@ type FeeRow = {
   availableSponsors?: Array<{ id: string; name: string; balance?: number }>;
 };
 
+type SponsorOption = { id: string; name: string; balance: number };
+
 const statusConfig: Record<string, { label: string; pill: string; icon: React.ElementType }> = {
   PAID: { label: "Paid", pill: "pill-success", icon: CheckCircle2 },
   PENDING: { label: "Pending", pill: "pill-warning", icon: Clock },
@@ -70,9 +72,11 @@ export function FinanceContent() {
   const [structureSaving, setStructureSaving] = useState(false);
   const [collectModal, setCollectModal] = useState<FeeRow | null>(null);
   const [collectMethod, setCollectMethod] = useState("CASH");
+  const [collectPayer, setCollectPayer] = useState<"DIRECT" | "SPONSOR">("DIRECT");
   const [collectSponsorId, setCollectSponsorId] = useState("");
   const [collectSaving, setCollectSaving] = useState(false);
   const [collectError, setCollectError] = useState<string | null>(null);
+  const [sponsors, setSponsors] = useState<SponsorOption[]>([]);
   const [editModal, setEditModal] = useState<FeeRow | null>(null);
   const [editForm, setEditForm] = useState({
     amount: "",
@@ -107,10 +111,12 @@ export function FinanceContent() {
       if (!res.ok) throw new Error("Failed to load fees");
       const data = await res.json();
       setFees(data.fees || []);
+      setSponsors(data.sponsors || []);
       setSummary(data.summary || null);
     } catch (err) {
       console.error(err);
       setFees([]);
+      setSponsors([]);
       setSummary(null);
     } finally {
       setLoading(false);
@@ -147,16 +153,36 @@ export function FinanceContent() {
   const openCollect = async (fee: FeeRow) => {
     setCollectModal(fee);
     setCollectError(null);
+    setCollectPayer("DIRECT");
+    setCollectSponsorId("");
+    setCollectMethod("CASH");
+  };
+
+  const selectSponsorPayer = () => {
+    setCollectPayer("SPONSOR");
+    setCollectMethod("SCHOLARSHIP");
+    if (!collectSponsorId) {
+      const preferred = collectModal?.availableSponsors?.[0]?.id || sponsors[0]?.id || "";
+      setCollectSponsorId(preferred);
+    }
+  };
+
+  const selectDirectPayer = () => {
+    setCollectPayer("DIRECT");
     setCollectSponsorId("");
     setCollectMethod("CASH");
   };
 
   const handleCollect = async () => {
     if (!collectModal) return;
+    const usingSponsor = collectPayer === "SPONSOR";
+    if (usingSponsor && !collectSponsorId) {
+      setCollectError("Select the sponsor who is paying this invoice.");
+      return;
+    }
     setCollectSaving(true);
     setCollectError(null);
     try {
-      const usingSponsor = Boolean(collectSponsorId);
       const res = await fetch(`/api/institute/fees/${collectModal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -286,6 +312,15 @@ export function FinanceContent() {
     });
     loadStructures();
   };
+
+  const linkedSponsorIds = new Set(
+    (collectModal?.availableSponsors || []).map((s) => s.id)
+  );
+  const selectedSponsor = sponsors.find((s) => s.id === collectSponsorId);
+  const sponsorShortOnFunds =
+    Boolean(collectModal) &&
+    Boolean(selectedSponsor) &&
+    selectedSponsor!.balance < collectModal!.amount;
 
   if (loading) {
     return (
@@ -564,37 +599,74 @@ export function FinanceContent() {
               <p className="mt-2 font-bold text-primary-800">{formatCurrency(collectModal.amount)}</p>
             </div>
 
-            {collectModal.availableSponsors && collectModal.availableSponsors.length > 0 && (
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Pay via sponsor (optional)
-                </label>
-                <select
-                  className="form-input text-sm"
-                  value={collectSponsorId}
-                  onChange={(e) => {
-                    setCollectSponsorId(e.target.value);
-                    if (e.target.value) setCollectMethod("SCHOLARSHIP");
-                    else setCollectMethod("CASH");
-                  }}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Who is paying?</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={selectDirectPayer}
+                  className={cn(
+                    "rounded-xl border px-3 py-2 text-sm font-medium text-left transition",
+                    collectPayer === "DIRECT"
+                      ? "border-primary-600 bg-primary-50 text-primary-900"
+                      : "border-gray-200 text-gray-600 hover:border-gray-300"
+                  )}
                 >
-                  <option value="">— No sponsor (direct payment) —</option>
-                  {collectModal.availableSponsors.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                      {s.balance !== undefined
-                        ? ` · balance ${formatCurrency(s.balance)}`
-                        : ""}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-gray-400 mt-1">
-                  Selecting a sponsor deducts this invoice from their donation fund.
-                </p>
+                  Student / parent
+                  <span className="block text-[10px] font-normal text-gray-500">Direct payment</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={selectSponsorPayer}
+                  className={cn(
+                    "rounded-xl border px-3 py-2 text-sm font-medium text-left transition",
+                    collectPayer === "SPONSOR"
+                      ? "border-purple-600 bg-purple-50 text-purple-900"
+                      : "border-gray-200 text-gray-600 hover:border-gray-300"
+                  )}
+                >
+                  Sponsor
+                  <span className="block text-[10px] font-normal text-gray-500">Paid from sponsor fund</span>
+                </button>
               </div>
-            )}
+            </div>
 
-            {!collectSponsorId && (
+            {collectPayer === "SPONSOR" ? (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Select sponsor</label>
+                {sponsors.length === 0 ? (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">
+                    No active sponsors yet. Add a sponsor before collecting from a sponsor fund.
+                  </p>
+                ) : (
+                  <>
+                    <select
+                      className="form-input text-sm"
+                      value={collectSponsorId}
+                      onChange={(e) => setCollectSponsorId(e.target.value)}
+                    >
+                      <option value="">— Choose a sponsor —</option>
+                      {sponsors.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                          {linkedSponsorIds.has(s.id) ? " (linked)" : ""}
+                          {` · balance ${formatCurrency(s.balance)}`}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      This invoice is deducted from the selected sponsor&apos;s donation fund.
+                    </p>
+                    {sponsorShortOnFunds && (
+                      <p className="text-[11px] text-amber-700 mt-1.5">
+                        {selectedSponsor?.name} has {formatCurrency(selectedSponsor?.balance ?? 0)} available,
+                        which is less than this invoice.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : (
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">Payment method</label>
                 <select
@@ -630,10 +702,16 @@ export function FinanceContent() {
               <button
                 type="button"
                 className="btn-primary flex-1 justify-center text-sm py-2"
-                disabled={collectSaving}
+                disabled={collectSaving || (collectPayer === "SPONSOR" && !collectSponsorId)}
                 onClick={handleCollect}
               >
-                {collectSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm payment"}
+                {collectSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : collectPayer === "SPONSOR" ? (
+                  "Confirm sponsor payment"
+                ) : (
+                  "Confirm payment"
+                )}
               </button>
             </div>
           </div>

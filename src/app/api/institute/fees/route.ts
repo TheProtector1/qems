@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getSponsorFundBalance } from "@/lib/sponsor-funds";
+import { getSponsorFundBalances } from "@/lib/sponsor-funds";
 
 export const dynamic = "force-dynamic";
 
@@ -70,18 +70,14 @@ export async function GET(req: Request) {
       prisma.feePayment.count({ where }),
     ]);
 
-    const sponsorIds = Array.from(
-      new Set(
-        payments.flatMap((p) => p.student.sponsorLinks.map((link) => link.sponsor.id))
-      )
-    );
-    const sponsorBalances = new Map<string, number>();
-    await Promise.all(
-      sponsorIds.map(async (sponsorId) => {
-        const fund = await getSponsorFundBalance(instituteId, sponsorId);
-        sponsorBalances.set(sponsorId, fund.balance);
-      })
-    );
+    const [instituteSponsors, sponsorBalances] = await Promise.all([
+      prisma.sponsor.findMany({
+        where: { instituteId, isActive: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      getSponsorFundBalances(instituteId),
+    ]);
 
     const fees = payments.map((p) => ({
       id: p.id,
@@ -170,6 +166,11 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       fees,
+      sponsors: instituteSponsors.map((sponsor) => ({
+        id: sponsor.id,
+        name: sponsor.name,
+        balance: sponsorBalances.get(sponsor.id) ?? 0,
+      })),
       summary,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
