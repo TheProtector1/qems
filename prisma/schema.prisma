@@ -649,6 +649,9 @@ model Student {
   /// isActive is kept in sync with this for existing active-student queries.
   status          StudentEnrollmentStatus @default(ACTIVE)
   statusReason    String?
+  /// Required when status is TERMINATED or DISMISSED: what the institute tried
+  /// before discontinuing the student (parent meetings, fee plans, counselling, etc.)
+  retentionAttempts String?           @db.Text
   statusUpdatedAt DateTime?
   /// Opaque token for QR check-in (rotated on regenerate)
   qrToken         String?         @unique

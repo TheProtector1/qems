@@ -300,6 +300,11 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                         {STUDENT_STATUS_META[student.status].label} reason: {student.statusReason}
                       </p>
                     )}
+                    {student.status !== "ACTIVE" && student.retentionAttempts && (
+                      <p className="text-xs text-gray-400 mt-1 max-w-md">
+                        Retention attempts: {student.retentionAttempts}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex justify-center lg:justify-end">

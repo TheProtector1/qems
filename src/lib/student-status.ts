@@ -40,3 +40,19 @@ export function studentStatusLabel(status?: string | null): string {
   if (!status) return STUDENT_STATUS_META.ACTIVE.label;
   return STUDENT_STATUS_META[status as StudentEnrollmentStatus]?.label || status;
 }
+
+/** Statuses that require a reason + documented retention attempts before saving. */
+export const RETENTION_REQUIRED_STATUSES: StudentEnrollmentStatus[] = ["TERMINATED", "DISMISSED"];
+
+export function requiresRetentionDetails(status: StudentEnrollmentStatus): boolean {
+  return RETENTION_REQUIRED_STATUSES.includes(status);
+}
+
+/** Statuses shown in the "Dismissed / Discontinued" section — students no longer
+ * enrolled for a negative/administrative reason (as opposed to graduating or
+ * transferring, which are neutral exits handled by the Alumni section). */
+export const DISCONTINUED_STATUSES: StudentEnrollmentStatus[] = ["TERMINATED", "DISMISSED", "WITHDRAWN"];
+
+export function isDiscontinuedStatus(status: StudentEnrollmentStatus): boolean {
+  return DISCONTINUED_STATUSES.includes(status);
+}

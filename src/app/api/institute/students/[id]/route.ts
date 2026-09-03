@@ -5,7 +5,7 @@ import { Gender, HifzDirection, ProgramType, ProgressStartType, StudentEnrollmen
 import { createAuditLog, diffFields } from "@/lib/audit";
 import { resolveInstituteClassIds, syncStudentClassEnrollments } from "@/lib/student-enrollments";
 import { parseHifzDirection } from "@/lib/hifz-progress";
-import { isActiveForStatus, STUDENT_STATUS_OPTIONS } from "@/lib/student-status";
+import { isActiveForStatus, requiresRetentionDetails, STUDENT_STATUS_OPTIONS } from "@/lib/student-status";
 
 const VALID_STATUSES = new Set(STUDENT_STATUS_OPTIONS.map((o) => o.value));
 
@@ -25,6 +25,7 @@ const TRACKED_FIELDS = [
   "isActive",
   "status",
   "statusReason",
+  "retentionAttempts",
   "photo",
 ] as const;
 
@@ -56,6 +57,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       isActive,
       status,
       statusReason,
+      retentionAttempts,
       photo,
       classIds,
     } = body;
@@ -70,6 +72,20 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
           { error: "Only institute owners, branch managers, or admins can change enrollment status" },
           { status: 403 }
         );
+      }
+      if (requiresRetentionDetails(status as StudentEnrollmentStatus)) {
+        if (!statusReason?.trim()) {
+          return NextResponse.json(
+            { error: "A reason is required when marking a student as terminated or dismissed" },
+            { status: 400 }
+          );
+        }
+        if (!retentionAttempts?.trim()) {
+          return NextResponse.json(
+            { error: "Please document the attempts made to retain the student before terminating/dismissing them" },
+            { status: 400 }
+          );
+        }
       }
     }
 
@@ -97,6 +113,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       isActive: student.isActive,
       status: student.status,
       statusReason: student.statusReason,
+      retentionAttempts: student.retentionAttempts,
       photo: student.photo,
     };
 
@@ -123,6 +140,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         const nextStatus = status as StudentEnrollmentStatus;
         studentData.status = nextStatus;
         studentData.statusReason = nextStatus === "ACTIVE" ? null : statusReason?.trim() || null;
+        studentData.retentionAttempts = requiresRetentionDetails(nextStatus)
+          ? retentionAttempts?.trim() || null
+          : null;
         studentData.statusUpdatedAt = new Date();
         // Keep the legacy isActive flag in sync so existing active-student queries
         // (attendance rosters, class lists, dashboards) still work correctly.
@@ -199,6 +219,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       isActive: result.isActive,
       status: result.status,
       statusReason: result.statusReason,
+      retentionAttempts: result.retentionAttempts,
       photo: result.photo,
     };
 

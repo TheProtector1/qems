@@ -17,7 +17,8 @@ import { ClassAssignmentField, type InstituteClassOption } from "@/components/in
 import { StudentDocumentsManager } from "@/components/institute/student-documents-manager";
 import { HIFZ_DIRECTION_OPTIONS } from "@/lib/hifz-progress";
 import { getHifzCompletionPercent } from "@/lib/hifz-progress";
-import { STUDENT_STATUS_OPTIONS, STUDENT_STATUS_META } from "@/lib/student-status";
+import { STUDENT_STATUS_OPTIONS, STUDENT_STATUS_META, requiresRetentionDetails } from "@/lib/student-status";
+import type { StudentEnrollmentStatus } from "@prisma/client";
 
 type HifzDirectionValue = "FORWARD" | "REVERSE";
 
@@ -42,6 +43,7 @@ type Student = {
   status: "Excellent" | "On Track" | "Needs Attention" | "At Risk";
   enrollmentStatus: string;
   statusReason: string | null;
+  retentionAttempts: string | null;
   admissionDate: string;
   parentName: string;
   parentPhone: string;
@@ -97,16 +99,31 @@ function EditStudentModal({
   const [previousInstitute, setPreviousInstitute] = useState(student.previousInstitute || "");
   const [enrollmentStatus, setEnrollmentStatus] = useState(student.enrollmentStatus || "ACTIVE");
   const [statusReason, setStatusReason] = useState(student.statusReason || "");
+  const [retentionAttempts, setRetentionAttempts] = useState(student.retentionAttempts || "");
   const [fatherName, setFatherName] = useState(student.parentName);
   const [parentEmail, setParentEmail] = useState(student.parentEmail || "");
   const [photo, setPhoto] = useState(student.photo || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const statusNeedsRetentionDetails = canManageStatus && requiresRetentionDetails(enrollmentStatus as StudentEnrollmentStatus);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+
+    if (statusNeedsRetentionDetails) {
+      if (!statusReason.trim()) {
+        setError(`Please provide a reason for marking this student as ${STUDENT_STATUS_OPTIONS.find((o) => o.value === enrollmentStatus)?.label}.`);
+        return;
+      }
+      if (!retentionAttempts.trim()) {
+        setError("Please document the attempts made to retain the student before terminating/dismissing them.");
+        return;
+      }
+    }
+
+    setLoading(true);
     try {
       const res = await fetch(`/api/institute/students/${student.id}`, {
         method: "PATCH",
@@ -128,7 +145,7 @@ function EditStudentModal({
           fatherName,
           parentEmail,
           photo: photo || null,
-          ...(canManageStatus ? { status: enrollmentStatus, statusReason } : {}),
+          ...(canManageStatus ? { status: enrollmentStatus, statusReason, retentionAttempts } : {}),
         }),
       });
 
@@ -342,16 +359,42 @@ function EditStudentModal({
                     {STUDENT_STATUS_OPTIONS.find((o) => o.value === enrollmentStatus)?.description}
                   </p>
                 </div>
+                {statusNeedsRetentionDetails && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                    Terminating or dismissing a student ends their enrollment. Please document why, and what the
+                    institute tried before this decision, for the record.
+                  </div>
+                )}
                 {enrollmentStatus !== "ACTIVE" && (
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Reason <span className="font-normal text-gray-400">(shown in audit log)</span>
+                      Reason{" "}
+                      {statusNeedsRetentionDetails ? (
+                        <span className="text-red-500">*</span>
+                      ) : (
+                        <span className="font-normal text-gray-400">(shown in audit log)</span>
+                      )}
                     </label>
                     <textarea
                       value={statusReason}
                       onChange={(e) => setStatusReason(e.target.value)}
                       className="form-input text-xs min-h-[60px]"
                       placeholder="e.g. Repeated unexcused absences, fee non-payment, disciplinary action..."
+                      required={statusNeedsRetentionDetails}
+                    />
+                  </div>
+                )}
+                {statusNeedsRetentionDetails && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Attempts made to retain the student <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={retentionAttempts}
+                      onChange={(e) => setRetentionAttempts(e.target.value)}
+                      className="form-input text-xs min-h-[70px]"
+                      placeholder="e.g. Met with parents on [date], offered a fee installment plan, counselling sessions with the student, warning letters issued..."
+                      required
                     />
                   </div>
                 )}
@@ -646,6 +689,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
       status: s.isActive ? "On Track" : "Needs Attention",
       enrollmentStatus: s.status || "ACTIVE",
       statusReason: s.statusReason || null,
+      retentionAttempts: s.retentionAttempts || null,
       admissionDate: formatDate(s.admissionDate),
       parentName: s.parent?.user?.name || "Parent",
       parentPhone: s.parent?.user?.phone || s.parent?.user?.email || "—",

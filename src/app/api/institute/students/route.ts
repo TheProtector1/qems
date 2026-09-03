@@ -127,6 +127,8 @@ export async function GET(req: Request) {
       isActive: true,
       status: true,
       statusReason: true,
+      retentionAttempts: true,
+      statusUpdatedAt: true,
       admissionDate: true,
       parent: {
         select: {
