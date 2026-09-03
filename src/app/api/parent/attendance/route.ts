@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertParentOwnsStudent } from "@/lib/parent-portal-data";
+import { buildHifzDayMap } from "@/lib/hifz-lesson-status";
 
 export const dynamic = "force-dynamic";
 
@@ -45,13 +46,28 @@ export async function GET(req: Request) {
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 0);
 
-    const records = await prisma.attendance.findMany({
-      where: {
-        studentId,
-        date: { gte: start, lte: end },
-      },
-      orderBy: { date: "asc" },
-    });
+    const [records, hifzRecords] = await Promise.all([
+      prisma.attendance.findMany({
+        where: {
+          studentId,
+          date: { gte: start, lte: end },
+        },
+        orderBy: { date: "asc" },
+      }),
+      prisma.hifzRecord.findMany({
+        where: {
+          studentId,
+          date: { gte: start, lte: end },
+          type: { in: ["SABAQ", "SABQI", "MANZIL"] },
+        },
+        select: { date: true, type: true, ayahFrom: true, ayahTo: true, teacherNote: true },
+        orderBy: { date: "asc" },
+      }),
+    ]);
+
+    const hifzByDay = buildHifzDayMap(
+      hifzRecords.map((r) => ({ ...r, date: r.date.toISOString().slice(0, 10) }))
+    );
 
     return NextResponse.json({
       records: records.map((r) => ({
@@ -59,7 +75,9 @@ export async function GET(req: Request) {
         status: r.status,
         leaveReason: r.leaveReason,
         leaveRequestedBy: r.leaveRequestedBy,
+        hifz: hifzByDay[r.date.toISOString().slice(0, 10)] || undefined,
       })),
+      hifzByDay,
     });
   } catch (error) {
     console.error("Parent attendance error:", error);

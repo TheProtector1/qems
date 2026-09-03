@@ -88,11 +88,20 @@ export const ATTENDANCE_STATUS: Record<
 
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+export type HifzLessonType = "SABAQ" | "SABQI" | "MANZIL";
+
+export const HIFZ_LESSON_META: Record<HifzLessonType, { short: string; label: string }> = {
+  SABAQ: { short: "S", label: "Sabaq" },
+  SABQI: { short: "Sq", label: "Sabqi" },
+  MANZIL: { short: "M", label: "Manzil" },
+};
+
 export type DayRecord = {
   id?: string;
   status: AttStatus;
   leaveReason?: string | null;
   leaveRequestedBy?: string | null;
+  hifz?: Partial<Record<HifzLessonType, "done" | "not_done">>;
 };
 
 export function buildCalendarDays(year: number, month: number) {

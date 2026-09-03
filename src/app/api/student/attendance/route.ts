@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { addDaysToDateKey, dateKeyFromStored, todayDateKey } from "@/lib/timezone";
+import { buildHifzDayMap } from "@/lib/hifz-lesson-status";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ export async function GET(req: Request) {
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 0);
 
-    const [monthRecords, recentPresent] = await Promise.all([
+    const [monthRecords, recentPresent, hifzRecords] = await Promise.all([
       prisma.attendance.findMany({
         where: { studentId: student.id, date: { gte: start, lte: end } },
         orderBy: { date: "asc" },
@@ -66,7 +67,18 @@ export async function GET(req: Request) {
         select: { date: true },
         orderBy: { date: "desc" },
       }),
+      prisma.hifzRecord.findMany({
+        where: {
+          studentId: student.id,
+          date: { gte: start, lte: end },
+          type: { in: ["SABAQ", "SABQI", "MANZIL"] },
+        },
+        select: { date: true, type: true, ayahFrom: true, ayahTo: true, teacherNote: true },
+        orderBy: { date: "asc" },
+      }),
     ]);
+
+    const hifzByDay = buildHifzDayMap(hifzRecords.map((r) => ({ ...r, date: dateKey(r.date) })));
 
     const records = monthRecords.map((r) => ({
       id: r.id,
@@ -74,6 +86,7 @@ export async function GET(req: Request) {
       status: r.status,
       leaveReason: r.leaveReason,
       leaveRequestedBy: r.leaveRequestedBy,
+      hifz: hifzByDay[dateKey(r.date)] || undefined,
     }));
 
     const present = records.filter((r) => r.status === "PRESENT").length;
@@ -91,6 +104,7 @@ export async function GET(req: Request) {
       month,
       year,
       records,
+      hifzByDay,
       summary: { present, absent, late, leave, holiday, marked, rate, streak },
     });
   } catch (error) {

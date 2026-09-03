@@ -298,6 +298,7 @@
   .pill-info     { @apply bg-blue-50   text-blue-700   border-blue-200; }
   .pill-gold     { @apply bg-yellow-50 text-yellow-700 border-yellow-200; }
   .pill-primary  { @apply bg-primary-50 text-primary-800 border-primary-200; }
+  .pill-muted    { @apply bg-gray-50   text-gray-600   border-gray-200; }
 
   /* Table */
   .data-table {

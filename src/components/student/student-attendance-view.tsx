@@ -26,8 +26,10 @@ import { cn } from "@/lib/utils";
 import { StudentAvatar } from "@/components/common/student-avatar";
 import {
   ATTENDANCE_STATUS,
+  HIFZ_LESSON_META,
   type AttStatus,
   type DayRecord,
+  type HifzLessonType,
   programLabel,
 } from "@/lib/attendance-status";
 
@@ -130,6 +132,7 @@ export function StudentAttendanceView() {
   const [selectedDate, setSelectedDate] = useState(today);
   const [student, setStudent] = useState<StudentProfile | null>(null);
   const [records, setRecords] = useState<Record<string, DayRecord>>({});
+  const [hifzByDay, setHifzByDay] = useState<Record<string, Partial<Record<HifzLessonType, "done" | "not_done">>>>({});
   const [summary, setSummary] = useState<MonthSummary>({
     present: 0,
     absent: 0,
@@ -171,6 +174,7 @@ export function StudentAttendanceView() {
         };
       }
       setRecords(map);
+      setHifzByDay(data.hifzByDay || {});
     } catch (err) {
       console.error(err);
     } finally {
@@ -394,6 +398,10 @@ export function StudentAttendanceView() {
                   const selected = key === selectedKey;
                   const todayCell = isToday(day);
                   const isFriday = day.getDay() === 5;
+                  const hifz = hifzByDay[key];
+                  const hifzTypes = hifz
+                    ? (Object.keys(hifz) as HifzLessonType[]).filter((t) => hifz[t])
+                    : [];
 
                   return (
                     <button
@@ -421,6 +429,21 @@ export function StudentAttendanceView() {
                       {Icon && meta && (
                         <Icon className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4 opacity-90", meta.text)} />
                       )}
+                      {hifzTypes.length > 0 && (
+                        <span className="flex items-center gap-0.5 mt-0.5">
+                          {hifzTypes.map((t) => (
+                            <span
+                              key={t}
+                              className={cn(
+                                "inline-flex items-center justify-center h-3 min-w-[13px] px-0.5 rounded text-[7px] font-bold leading-none",
+                                hifz![t] === "done" ? "bg-emerald-600/90 text-white" : "bg-rose-600/90 text-white"
+                              )}
+                            >
+                              {HIFZ_LESSON_META[t].short}
+                            </span>
+                          ))}
+                        </span>
+                      )}
                       {todayCell && (
                         <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-green-500" />
                       )}
@@ -447,6 +470,24 @@ export function StudentAttendanceView() {
                   Not marked
                 </span>
               </div>
+
+              {Object.keys(hifzByDay).length > 0 && (
+                <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Hifz lessons</span>
+                  {(Object.keys(HIFZ_LESSON_META) as HifzLessonType[]).map((t) => (
+                    <span key={t} className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                      <span className="inline-flex items-center justify-center h-3.5 min-w-[14px] px-0.5 rounded text-[8px] font-bold leading-none bg-emerald-600/90 text-white">
+                        {HIFZ_LESSON_META[t].short}
+                      </span>
+                      {HIFZ_LESSON_META[t].label}
+                    </span>
+                  ))}
+                  <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-600/90" /> Done
+                    <span className="h-2.5 w-2.5 rounded-full bg-rose-600/90 ml-2" /> Not done
+                  </span>
+                </div>
+              )}
             </>
           )}
         </div>

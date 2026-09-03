@@ -17,6 +17,8 @@ import {
   WEEKDAYS,
   AttStatus,
   DayRecord,
+  HifzLessonType,
+  HIFZ_LESSON_META,
   buildCalendarDays,
   computeMonthStats,
   programLabel,
@@ -57,6 +59,7 @@ export function StudentAttendanceCalendar({
   const [year, setYear] = useState(() => parseDateOnly(today).getUTCFullYear());
   const [selectedDate, setSelectedDate] = useState(today);
   const [records, setRecords] = useState<Record<string, DayRecord>>({});
+  const [hifzByDay, setHifzByDay] = useState<Record<string, Partial<Record<HifzLessonType, "done" | "not_done">>>>({});
   const [loading, setLoading] = useState(true);
 
   const activeStudent = student || students?.find((s) => s.id === (selectedStudentId || studentId));
@@ -83,6 +86,7 @@ export function StudentAttendanceCalendar({
         };
       }
       setRecords(map);
+      setHifzByDay(data.hifzByDay || {});
     } finally {
       setLoading(false);
     }
@@ -245,7 +249,7 @@ export function StudentAttendanceCalendar({
               <div className="grid grid-cols-7 gap-1.5">
                 {days.map((cell, idx) => {
                   if (!cell.inMonth) {
-                    return <div key={`e-${idx}`} className="min-h-[52px] md:min-h-[64px]" />;
+                    return <div key={`e-${idx}`} className="min-h-[58px] md:min-h-[72px]" />;
                   }
                   const rec = records[cell.date];
                   const status = rec?.status;
@@ -253,6 +257,13 @@ export function StudentAttendanceCalendar({
                   const isToday = cell.date === today;
                   const meta = status ? ATTENDANCE_STATUS[status] : null;
                   const clickable = Boolean(rec?.id && onDayClick && !readOnly);
+                  const hifz = hifzByDay[cell.date];
+                  const hifzTypes = hifz
+                    ? (Object.keys(hifz) as HifzLessonType[]).filter((t) => hifz[t])
+                    : [];
+                  const hifzTitle = hifzTypes
+                    .map((t) => `${HIFZ_LESSON_META[t].label}: ${hifz![t] === "done" ? "Done" : "Not done"}`)
+                    .join(" · ");
 
                   return (
                     <button
@@ -260,14 +271,19 @@ export function StudentAttendanceCalendar({
                       type="button"
                       onClick={() => handleDayClick(cell.date, rec)}
                       title={
-                        status === "LEAVE"
-                          ? `Leave — ${rec?.leaveRequestedBy || "N/A"}: ${rec?.leaveReason || "No reason"}`
-                          : status
-                          ? meta!.fullLabel
-                          : "No record"
+                        [
+                          status === "LEAVE"
+                            ? `Leave — ${rec?.leaveRequestedBy || "N/A"}: ${rec?.leaveReason || "No reason"}`
+                            : status
+                            ? meta!.fullLabel
+                            : "No record",
+                          hifzTitle,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
                       }
                       className={cn(
-                        "min-h-[52px] md:min-h-[64px] rounded-xl border flex flex-col items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-green-500/30",
+                        "min-h-[58px] md:min-h-[72px] rounded-xl border flex flex-col items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-green-500/30",
                         meta ? meta.cal : "bg-gray-50 text-gray-400 border-gray-100",
                         isSelected && "ring-2 ring-green-600 ring-offset-1 shadow-sm scale-[1.02]",
                         isToday && !isSelected && "ring-2 ring-green-400/50",
@@ -278,6 +294,23 @@ export function StudentAttendanceCalendar({
                       <span className="text-xs font-bold">{cell.day}</span>
                       {status && (
                         <span className="text-[9px] font-bold mt-0.5 opacity-90">{meta!.label}</span>
+                      )}
+                      {hifzTypes.length > 0 && (
+                        <span className="flex items-center gap-0.5 mt-1">
+                          {hifzTypes.map((t) => (
+                            <span
+                              key={t}
+                              className={cn(
+                                "inline-flex items-center justify-center h-3.5 min-w-[14px] px-0.5 rounded text-[8px] font-bold leading-none",
+                                hifz![t] === "done"
+                                  ? "bg-emerald-600/90 text-white"
+                                  : "bg-rose-600/90 text-white"
+                              )}
+                            >
+                              {HIFZ_LESSON_META[t].short}
+                            </span>
+                          ))}
+                        </span>
                       )}
                     </button>
                   );
@@ -298,6 +331,24 @@ export function StudentAttendanceCalendar({
                   <span className="h-2.5 w-2.5 rounded-full bg-gray-200" /> No record
                 </span>
               </div>
+
+              {Object.keys(hifzByDay).length > 0 && (
+                <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Hifz lessons</span>
+                  {(Object.keys(HIFZ_LESSON_META) as HifzLessonType[]).map((t) => (
+                    <span key={t} className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                      <span className="inline-flex items-center justify-center h-3.5 min-w-[14px] px-0.5 rounded text-[8px] font-bold leading-none bg-emerald-600/90 text-white">
+                        {HIFZ_LESSON_META[t].short}
+                      </span>
+                      {HIFZ_LESSON_META[t].label}
+                    </span>
+                  ))}
+                  <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-600/90" /> Done
+                    <span className="h-2.5 w-2.5 rounded-full bg-rose-600/90 ml-2" /> Not done
+                  </span>
+                </div>
+              )}
             </>
           )}
         </div>

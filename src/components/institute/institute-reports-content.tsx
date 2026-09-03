@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText, Loader2 } from "lucide-react";
+import { FileText, Loader2, CalendarCheck } from "lucide-react";
 import Link from "next/link";
 import { StudentReportsPanel } from "@/components/institute/student-reports-panel";
+import { StudentAttendanceCalendar } from "@/components/institute/student-attendance-calendar";
 
 type StudentRow = {
   id: string;
   fullName: string;
   studentId: string;
   programType: string;
+  gender?: string;
 };
 
 function programLabel(type: string) {
@@ -24,25 +26,50 @@ export function InstituteReportsContent() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/institute/students")
-      .then((res) => res.json())
-      .then((data) => {
-        const list = (data.students || []).map((s: StudentRow) => ({
-          id: s.id,
-          fullName: s.fullName,
-          studentId: s.studentId,
-          programType: s.programType,
-        }));
+    let cancelled = false;
+
+    async function loadAllStudents() {
+      const list: StudentRow[] = [];
+      let page = 1;
+      let totalPages = 1;
+      const pageSize = 50; // API max page size
+
+      do {
+        const res = await fetch(`/api/institute/students?page=${page}&pageSize=${pageSize}`);
+        const data = await res.json();
+        for (const s of data.students || []) {
+          list.push({
+            id: s.id,
+            fullName: s.fullName,
+            studentId: s.studentId,
+            programType: s.programType,
+            gender: s.gender,
+          });
+        }
+        totalPages = data.pagination?.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages && !cancelled);
+
+      if (!cancelled) {
         setStudents(list);
         if (list.length) setSelectedId(list[0].id);
-      })
-      .finally(() => setLoading(false));
+        setLoading(false);
+      }
+    }
+
+    loadAllStudents().catch(() => {
+      if (!cancelled) setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const selected = students.find((s) => s.id === selectedId);
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-6xl mx-auto">
       <div>
         <h2 className="section-heading flex items-center gap-2">
           <FileText className="h-6 w-6 text-primary-700" /> Student Reports
@@ -87,6 +114,27 @@ export function InstituteReportsContent() {
               studentName={selected.fullName}
               program={programLabel(selected.programType)}
             />
+          )}
+
+          {selected && (
+            <div>
+              <h3 className="flex items-center gap-2 font-display font-bold text-gray-900 mb-3">
+                <CalendarCheck className="h-5 w-5 text-primary-700" /> Attendance Overview
+              </h3>
+              <StudentAttendanceCalendar
+                key={selected.id}
+                studentId={selected.id}
+                apiScope="institute"
+                student={{
+                  id: selected.id,
+                  fullName: selected.fullName,
+                  studentId: selected.studentId,
+                  gender: selected.gender,
+                  programType: selected.programType,
+                }}
+                readOnly
+              />
+            </div>
           )}
         </>
       )}

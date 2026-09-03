@@ -18,6 +18,7 @@ import {
   todayDateKey,
   weekdayIndexForDateKey,
 } from "@/lib/timezone";
+import { buildHifzDayMap } from "@/lib/hifz-lesson-status";
 
 export const dynamic = "force-dynamic";
 
@@ -67,14 +68,28 @@ export async function GET(req: Request) {
       const start = new Date(Date.UTC(y, m - 1, 1));
       const end = new Date(Date.UTC(y, m, 0));
 
-      const records = await prisma.attendance.findMany({
-        where: {
-          studentId,
-          student: { instituteId },
-          date: { gte: start, lte: end },
-        },
-        orderBy: { date: "asc" },
-      });
+      const [records, hifzRecords] = await Promise.all([
+        prisma.attendance.findMany({
+          where: {
+            studentId,
+            student: { instituteId },
+            date: { gte: start, lte: end },
+          },
+          orderBy: { date: "asc" },
+        }),
+        prisma.hifzRecord.findMany({
+          where: {
+            studentId,
+            student: { instituteId },
+            date: { gte: start, lte: end },
+            type: { in: ["SABAQ", "SABQI", "MANZIL"] },
+          },
+          select: { date: true, type: true, ayahFrom: true, ayahTo: true, teacherNote: true },
+          orderBy: { date: "asc" },
+        }),
+      ]);
+
+      const hifzByDay = buildHifzDayMap(hifzRecords.map((r) => ({ ...r, date: dateKey(r.date) })));
 
       return NextResponse.json({
         studentId,
@@ -86,7 +101,9 @@ export async function GET(req: Request) {
           status: r.status,
           leaveReason: r.leaveReason,
           leaveRequestedBy: r.leaveRequestedBy,
+          hifz: hifzByDay[dateKey(r.date)] || undefined,
         })),
+        hifzByDay,
       });
     }
 

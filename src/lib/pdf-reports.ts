@@ -3,8 +3,19 @@ import autoTable from "jspdf-autotable";
 import { ProgramType, ProgressStartType } from "@prisma/client";
 import { formatDate, getSurahName } from "@/lib/utils";
 import { progressSummaryLabel } from "@/lib/student-progress";
+import { WEEKDAYS, buildCalendarDays } from "@/lib/attendance-status";
 
 export type ReportType = "attendance" | "hifz" | "combined";
+
+// Mirrors the colors used for attendance statuses in the web app (src/lib/attendance-status.ts)
+// so the PDF report visually matches the in-app calendar.
+const STATUS_COLORS: Record<string, { fill: [number, number, number]; text: [number, number, number] }> = {
+  PRESENT: { fill: [220, 252, 231], text: [22, 101, 52] },
+  ABSENT: { fill: [254, 226, 226], text: [153, 27, 27] },
+  LATE: { fill: [254, 243, 199], text: [146, 64, 14] },
+  LEAVE: { fill: [219, 234, 254], text: [30, 64, 175] },
+  HOLIDAY: { fill: [243, 244, 246], text: [75, 85, 99] },
+};
 
 export type StudentReportData = {
   instituteName: string;
@@ -125,7 +136,101 @@ function addAttendanceSection(doc: jsPDF, data: StudentReportData, startY: numbe
     headStyles: { fillColor: [22, 101, 52] },
     styles: { fontSize: 8 },
     margin: { left: 14, right: 14 },
+    didParseCell: (hook) => {
+      if (hook.section !== "body" || hook.column.index !== 1) return;
+      const status = String(hook.cell.raw || "").trim();
+      const color = STATUS_COLORS[status];
+      if (color) {
+        hook.cell.styles.fillColor = color.fill;
+        hook.cell.styles.textColor = color.text;
+        hook.cell.styles.fontStyle = "bold";
+      }
+    },
   });
+}
+
+/** Renders a colour-coded month-grid calendar (like the in-app attendance calendar) for every
+ * calendar month spanned by the report period, so parents get a familiar at-a-glance view. */
+function addAttendanceCalendarSection(doc: jsPDF, data: StudentReportData, startY: number): number {
+  const months = getMonthsInRange(data.period.from, data.period.to).slice(0, 6);
+  if (!months.length) return startY;
+
+  const byDate: Record<string, string> = {};
+  for (const r of data.attendance.rows) byDate[r.date] = r.status;
+
+  let y = startY;
+  doc.setFontSize(12);
+  doc.setTextColor(22, 101, 52);
+  doc.text("Monthly Calendar View", 14, y);
+  y += 8;
+
+  for (const { year, month } of months) {
+    if (y > 245) {
+      doc.addPage();
+      y = 20;
+    }
+
+    const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+    doc.setFontSize(10);
+    doc.setTextColor(60, 60, 60);
+    doc.text(monthLabel, 14, y);
+    y += 3;
+
+    const days = buildCalendarDays(year, month);
+    const weeksText: string[][] = [];
+    const weeksStatus: (string | null)[][] = [];
+    for (let i = 0; i < days.length; i += 7) {
+      const chunk = days.slice(i, i + 7);
+      weeksText.push(chunk.map((d) => (d.inMonth ? String(d.day) : "")));
+      weeksStatus.push(chunk.map((d) => (d.inMonth ? byDate[d.date] || null : null)));
+    }
+
+    autoTable(doc, {
+      startY: y,
+      head: [WEEKDAYS],
+      body: weeksText,
+      theme: "grid",
+      styles: { fontSize: 8, halign: "center", cellPadding: 2.5, minCellHeight: 9 },
+      headStyles: { fillColor: [22, 101, 52], textColor: 255, fontSize: 7 },
+      margin: { left: 14, right: 14 },
+      didParseCell: (hook) => {
+        if (hook.section !== "body") return;
+        const status = weeksStatus[hook.row.index]?.[hook.column.index];
+        const color = status ? STATUS_COLORS[status] : null;
+        if (color) {
+          hook.cell.styles.fillColor = color.fill;
+          hook.cell.styles.textColor = color.text;
+          hook.cell.styles.fontStyle = "bold";
+        }
+      },
+    });
+
+    y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+  }
+
+  return y;
+}
+
+function getMonthsInRange(fromISO: string, toISO: string): Array<{ year: number; month: number }> {
+  const [fy, fm] = fromISO.split("-").map(Number);
+  const [ty, tm] = toISO.split("-").map(Number);
+  if (!fy || !fm || !ty || !tm) return [];
+  const months: Array<{ year: number; month: number }> = [];
+  let y = fy;
+  let m = fm;
+  while (y < ty || (y === ty && m <= tm)) {
+    months.push({ year: y, month: m });
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return months;
 }
 
 function addHifzSection(doc: jsPDF, data: StudentReportData, startY: number) {
@@ -258,6 +363,11 @@ export function buildStudentReportPdf(type: ReportType, data: StudentReportData)
   if (type === "attendance" || type === "combined") {
     addAttendanceSection(doc, data, y);
     y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 12;
+    if (y > 200) {
+      doc.addPage();
+      y = 20;
+    }
+    y = addAttendanceCalendarSection(doc, data, y);
     if (type === "combined" && y > 240) {
       doc.addPage();
       y = 20;
