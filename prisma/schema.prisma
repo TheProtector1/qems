@@ -166,19 +166,6 @@ enum AdmissionStatus {
   WITHDRAWN
 }
 
-// Enrollment/lifecycle status of an enrolled student (distinct from AdmissionStatus,
-// which tracks the admission pipeline before enrollment).
-enum StudentEnrollmentStatus {
-  ACTIVE
-  ON_LEAVE
-  SUSPENDED
-  TERMINATED
-  DISMISSED
-  GRADUATED
-  TRANSFERRED
-  WITHDRAWN
-}
-
 enum SubscriptionPlan {
   STARTER
   GROWTH
@@ -645,11 +632,6 @@ model Student {
   targetCompletionDate DateTime?  @db.Date
   hifzCompletedAt   DateTime?
   isActive        Boolean         @default(true)
-  /// Lifecycle status (active / on leave / terminated / dismissed / graduated / ...).
-  /// isActive is kept in sync with this for existing active-student queries.
-  status          StudentEnrollmentStatus @default(ACTIVE)
-  statusReason    String?
-  statusUpdatedAt DateTime?
   /// Opaque token for QR check-in (rotated on regenerate)
   qrToken         String?         @unique
   qrTokenCreatedAt DateTime?
@@ -695,7 +677,6 @@ model Student {
   @@index([instituteId, isActive])
   @@index([instituteId, createdAt])
   @@index([instituteId, programType])
-  @@index([instituteId, status])
   @@index([branchId, isActive])
   @@index([teacherId, createdAt])
 }

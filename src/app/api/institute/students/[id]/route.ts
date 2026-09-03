@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Gender, HifzDirection, ProgramType, ProgressStartType, StudentEnrollmentStatus } from "@prisma/client";
+import { Gender, HifzDirection, ProgramType, ProgressStartType } from "@prisma/client";
 import { createAuditLog, diffFields } from "@/lib/audit";
 import { resolveInstituteClassIds, syncStudentClassEnrollments } from "@/lib/student-enrollments";
 import { parseHifzDirection } from "@/lib/hifz-progress";
-import { isActiveForStatus, STUDENT_STATUS_OPTIONS } from "@/lib/student-status";
-
-const VALID_STATUSES = new Set(STUDENT_STATUS_OPTIONS.map((o) => o.value));
 
 const TRACKED_FIELDS = [
   "fullName",
@@ -23,8 +20,6 @@ const TRACKED_FIELDS = [
   "progressStartType",
   "previousInstitute",
   "isActive",
-  "status",
-  "statusReason",
   "photo",
 ] as const;
 
@@ -54,24 +49,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       progressStartType,
       previousInstitute,
       isActive,
-      status,
-      statusReason,
       photo,
       classIds,
     } = body;
-
-    if (status !== undefined) {
-      if (!VALID_STATUSES.has(status)) {
-        return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
-      }
-      const managerRoles = ["SUPER_ADMIN", "INSTITUTE_OWNER", "BRANCH_MANAGER"];
-      if (!managerRoles.includes(session.user.role)) {
-        return NextResponse.json(
-          { error: "Only institute owners, branch managers, or admins can change enrollment status" },
-          { status: 403 }
-        );
-      }
-    }
 
     const student = await prisma.student.findFirst({
       where: { id, instituteId: session.user.instituteId },
@@ -95,8 +75,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       progressStartType: student.progressStartType,
       previousInstitute: student.previousInstitute,
       isActive: student.isActive,
-      status: student.status,
-      statusReason: student.statusReason,
       photo: student.photo,
     };
 
@@ -119,15 +97,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       }
       if (previousInstitute !== undefined) studentData.previousInstitute = previousInstitute || null;
       if (typeof isActive === "boolean") studentData.isActive = isActive;
-      if (status !== undefined) {
-        const nextStatus = status as StudentEnrollmentStatus;
-        studentData.status = nextStatus;
-        studentData.statusReason = nextStatus === "ACTIVE" ? null : statusReason?.trim() || null;
-        studentData.statusUpdatedAt = new Date();
-        // Keep the legacy isActive flag in sync so existing active-student queries
-        // (attendance rosters, class lists, dashboards) still work correctly.
-        studentData.isActive = isActiveForStatus(nextStatus);
-      }
       if (photo !== undefined) studentData.photo = photo || null;
 
       if (program) {
@@ -197,8 +166,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       progressStartType: result.progressStartType,
       previousInstitute: result.previousInstitute,
       isActive: result.isActive,
-      status: result.status,
-      statusReason: result.statusReason,
       photo: result.photo,
     };
 

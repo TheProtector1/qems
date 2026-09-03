@@ -36,7 +36,6 @@ import type { ElementType } from "react";
 import { HifzDirection } from "@prisma/client";
 import { getHifzCompletionPercent, hifzDirectionLabel } from "@/lib/hifz-progress";
 import { StudentHifzParaMap } from "@/components/institute/student-hifz-para-map";
-import { STUDENT_STATUS_META } from "@/lib/student-status";
 
 export const metadata = { title: "Student Profile — QEMS" };
 
@@ -283,11 +282,6 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                       >
                         {isActive ? "Active" : "Inactive"}
                       </span>
-                      {student.status !== "ACTIVE" && (
-                        <span className={cn("pill text-xs", STUDENT_STATUS_META[student.status].pill)}>
-                          {STUDENT_STATUS_META[student.status].label}
-                        </span>
-                      )}
                       {student.alumni && (
                         <span className="pill pill-success text-xs">Alumni</span>
                       )}
@@ -295,11 +289,6 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                         <span className="pill bg-emerald-100 text-emerald-800 text-xs">Hifz complete</span>
                       )}
                     </div>
-                    {student.status !== "ACTIVE" && student.statusReason && (
-                      <p className="text-xs text-gray-400 mt-2 max-w-md">
-                        {STUDENT_STATUS_META[student.status].label} reason: {student.statusReason}
-                      </p>
-                    )}
                   </div>
 
                   <div className="flex justify-center lg:justify-end">

@@ -17,7 +17,6 @@ import { ClassAssignmentField, type InstituteClassOption } from "@/components/in
 import { StudentDocumentsManager } from "@/components/institute/student-documents-manager";
 import { HIFZ_DIRECTION_OPTIONS } from "@/lib/hifz-progress";
 import { getHifzCompletionPercent } from "@/lib/hifz-progress";
-import { STUDENT_STATUS_OPTIONS, STUDENT_STATUS_META } from "@/lib/student-status";
 
 type HifzDirectionValue = "FORWARD" | "REVERSE";
 
@@ -40,8 +39,6 @@ type Student = {
   qualityScore: number | null;
   attendancePct: number | null;
   status: "Excellent" | "On Track" | "Needs Attention" | "At Risk";
-  enrollmentStatus: string;
-  statusReason: string | null;
   admissionDate: string;
   parentName: string;
   parentPhone: string;
@@ -72,14 +69,12 @@ function EditStudentModal({
   student,
   teachers,
   classes,
-  canManageStatus = true,
   onClose,
   onSave,
 }: {
   student: Student;
   teachers: any[];
   classes: InstituteClassOption[];
-  canManageStatus?: boolean;
   onClose: () => void;
   onSave: () => void;
 }) {
@@ -95,8 +90,6 @@ function EditStudentModal({
   const [hifzDirection, setHifzDirection] = useState(student.hifzDirection || "REVERSE");
   const [progressStartType, setProgressStartType] = useState(student.progressStartType || "NEW");
   const [previousInstitute, setPreviousInstitute] = useState(student.previousInstitute || "");
-  const [enrollmentStatus, setEnrollmentStatus] = useState(student.enrollmentStatus || "ACTIVE");
-  const [statusReason, setStatusReason] = useState(student.statusReason || "");
   const [fatherName, setFatherName] = useState(student.parentName);
   const [parentEmail, setParentEmail] = useState(student.parentEmail || "");
   const [photo, setPhoto] = useState(student.photo || "");
@@ -128,7 +121,6 @@ function EditStudentModal({
           fatherName,
           parentEmail,
           photo: photo || null,
-          ...(canManageStatus ? { status: enrollmentStatus, statusReason } : {}),
         }),
       });
 
@@ -324,46 +316,6 @@ function EditStudentModal({
           )}
 
           <div className="border-t border-gray-100 my-4 pt-4">
-            <h4 className="text-xs font-bold text-gray-900 mb-3 uppercase tracking-wider">Enrollment Status</h4>
-            {canManageStatus ? (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Status</label>
-                  <select
-                    value={enrollmentStatus}
-                    onChange={(e) => setEnrollmentStatus(e.target.value)}
-                    className="form-input text-xs"
-                  >
-                    {STUDENT_STATUS_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                  <p className="text-[10px] text-gray-400 mt-1">
-                    {STUDENT_STATUS_OPTIONS.find((o) => o.value === enrollmentStatus)?.description}
-                  </p>
-                </div>
-                {enrollmentStatus !== "ACTIVE" && (
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Reason <span className="font-normal text-gray-400">(shown in audit log)</span>
-                    </label>
-                    <textarea
-                      value={statusReason}
-                      onChange={(e) => setStatusReason(e.target.value)}
-                      className="form-input text-xs min-h-[60px]"
-                      placeholder="e.g. Repeated unexcused absences, fee non-payment, disciplinary action..."
-                    />
-                  </div>
-                )}
-              </div>
-            ) : (
-              <span className={cn("pill", STUDENT_STATUS_META[enrollmentStatus as keyof typeof STUDENT_STATUS_META]?.pill || "pill-success")}>
-                {STUDENT_STATUS_META[enrollmentStatus as keyof typeof STUDENT_STATUS_META]?.label || "Active"}
-              </span>
-            )}
-          </div>
-
-          <div className="border-t border-gray-100 my-4 pt-4">
             <h4 className="text-xs font-bold text-gray-900 mb-3 uppercase tracking-wider">Parent Details</h4>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -459,11 +411,6 @@ function StudentCard({ student, onEdit, onDelete }: { student: Student; onEdit: 
                 {student.program}
               </span>
               <span className="text-[10px] text-gray-400">{student.class}</span>
-              {student.enrollmentStatus && student.enrollmentStatus !== "ACTIVE" && (
-                <span className={cn("pill text-[9px] py-0", STUDENT_STATUS_META[student.enrollmentStatus as keyof typeof STUDENT_STATUS_META]?.pill || "pill-muted")}>
-                  {STUDENT_STATUS_META[student.enrollmentStatus as keyof typeof STUDENT_STATUS_META]?.label || student.enrollmentStatus}
-                </span>
-              )}
             </div>
           </div>
         </div>
@@ -644,8 +591,6 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
       qualityScore: s.qualityScore ?? null,
       attendancePct: s.attendancePct ?? null,
       status: s.isActive ? "On Track" : "Needs Attention",
-      enrollmentStatus: s.status || "ACTIVE",
-      statusReason: s.statusReason || null,
       admissionDate: formatDate(s.admissionDate),
       parentName: s.parent?.user?.name || "Parent",
       parentPhone: s.parent?.user?.phone || s.parent?.user?.email || "—",
@@ -788,7 +733,6 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
           student={editingStudent}
           teachers={teachers}
           classes={instituteClasses}
-          canManageStatus={role !== "teacher"}
           onClose={() => setEditingStudent(null)}
           onSave={fetchStudentsAndTeachers}
         />
@@ -1047,14 +991,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
                               )}>{s.attendancePct != null ? `${s.attendancePct}%` : "—"}</span>
                             </td>
                             <td>
-                              <div className="flex flex-wrap items-center gap-1">
-                                <span className={cn("pill", statusMeta[s.status]?.pill || "pill-info")}>{s.status}</span>
-                                {s.enrollmentStatus && s.enrollmentStatus !== "ACTIVE" && (
-                                  <span className={cn("pill text-[9px] py-0", STUDENT_STATUS_META[s.enrollmentStatus as keyof typeof STUDENT_STATUS_META]?.pill || "pill-muted")}>
-                                    {STUDENT_STATUS_META[s.enrollmentStatus as keyof typeof STUDENT_STATUS_META]?.label || s.enrollmentStatus}
-                                  </span>
-                                )}
-                              </div>
+                              <span className={cn("pill", statusMeta[s.status]?.pill || "pill-info")}>{s.status}</span>
                             </td>
                             <td className="text-right">
                               <div className="flex justify-end items-center gap-1">

@@ -125,8 +125,6 @@ export async function GET(req: Request) {
       progressStartType: true,
       previousInstitute: true,
       isActive: true,
-      status: true,
-      statusReason: true,
       admissionDate: true,
       parent: {
         select: {
