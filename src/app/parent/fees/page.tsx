@@ -29,7 +29,7 @@ export default async function ParentFeesPage() {
       user: { select: { name: true, phone: true, email: true } },
       students: {
         include: {
-          institute: { select: { name: true, phone: true, email: true, address: true, city: true, currency: true } },
+          institute: { select: { name: true, phone: true, email: true, address: true, city: true } },
         },
       },
     },

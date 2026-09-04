@@ -85,7 +85,7 @@ export async function GET(req: Request) {
               studentId: true,
               gender: true,
               programType: true,
-              institute: { select: { name: true, phone: true, email: true, address: true, city: true, currency: true } },
+              institute: { select: { name: true, phone: true, email: true, address: true, city: true } },
               parent: {
                 select: {
                   user: {
@@ -130,7 +130,6 @@ export async function GET(req: Request) {
               address: true,
               city: true,
               logo: true,
-              currency: true,
             },
           })
         : null,
