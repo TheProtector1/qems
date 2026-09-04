@@ -20,27 +20,39 @@ export async function PATCH(
 ) {
   try {
     const session = await getAuthSession();
-    if (!session?.user.instituteId) {
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const isSuperAdmin = session.user.role === "SUPER_ADMIN";
     const instituteId = session.user.instituteId;
+    if (!instituteId && !isSuperAdmin) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const isOwner =
       session.user.role === "INSTITUTE_OWNER" || session.user.role === "SUPER_ADMIN";
     const resolved = await Promise.resolve(params);
     const body = await req.json();
     const action = (body.action as string) || "collect";
 
+    const where: any = { id: resolved.id };
+    if (instituteId) {
+      where.student = { instituteId };
+    }
+
     const existing = await prisma.feePayment.findFirst({
-      where: { id: resolved.id, student: { instituteId } },
+      where,
       include: {
-        student: { select: { id: true, fullName: true, studentId: true, programType: true } },
+        student: { select: { id: true, fullName: true, studentId: true, programType: true, instituteId: true } },
       },
     });
 
     if (!existing) {
       return NextResponse.json({ error: "Payment not found" }, { status: 404 });
     }
+
+    const effectiveInstituteId = existing.student?.instituteId || instituteId;
 
     // ── Owner edit of fee record fields ──────────────────────────────
     if (action === "update") {
@@ -157,9 +169,9 @@ export async function PATCH(
     let resolvedMethod = paymentMethod;
     let resolvedSponsorId: string | null = null;
 
-    if (sponsorId) {
+    if (sponsorId && effectiveInstituteId) {
       const sponsor = await prisma.sponsor.findFirst({
-        where: { id: sponsorId, instituteId, isActive: true },
+        where: { id: sponsorId, instituteId: effectiveInstituteId, isActive: true },
         select: { id: true, name: true },
       });
 
@@ -170,7 +182,7 @@ export async function PATCH(
         );
       }
 
-      const fund = await getSponsorFundBalance(instituteId, sponsorId);
+      const fund = await getSponsorFundBalance(effectiveInstituteId, sponsorId);
       const due = Number(existing.netAmount);
       if (fund.balance + 0.001 < due) {
         return NextResponse.json(
@@ -220,7 +232,7 @@ export async function DELETE(
 ) {
   try {
     const session = await getAuthSession();
-    if (!session?.user.instituteId) {
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -230,11 +242,14 @@ export async function DELETE(
       return NextResponse.json({ error: "Only institute owners can delete fee records" }, { status: 403 });
     }
 
+    const instituteId = session.user.instituteId;
     const resolved = await Promise.resolve(params);
-    const existing = await prisma.feePayment.findFirst({
-      where: { id: resolved.id, student: { instituteId: session.user.instituteId } },
-    });
+    const where: any = { id: resolved.id };
+    if (instituteId) {
+      where.student = { instituteId };
+    }
 
+    const existing = await prisma.feePayment.findFirst({ where });
     if (!existing) {
       return NextResponse.json({ error: "Fee record not found" }, { status: 404 });
     }

@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 function formatMonthLabel(month: string | null) {
   if (!month) return "—";
   const [y, m] = month.split("-").map(Number);
+  if (!y || !m) return month;
   return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
@@ -23,12 +24,17 @@ function paymentMethodLabel(method: string | null) {
 export async function GET(req: Request) {
   try {
     const session = await getAuthSession();
-    if (!session?.user.instituteId) {
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const instituteId = session.user.instituteId;
+    const isSuperAdmin = session.user.role === "SUPER_ADMIN";
+    if (!session.user.instituteId && !isSuperAdmin) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
+    const instituteId = session.user.instituteId || (isSuperAdmin ? searchParams.get("instituteId") || undefined : undefined);
     const status = searchParams.get("status");
     const month = searchParams.get("month");
     const search = searchParams.get("search")?.trim().toLowerCase();
@@ -37,9 +43,13 @@ export async function GET(req: Request) {
     const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") || "100", 10)));
     const skip = (page - 1) * limit;
 
-    const where: any = {
-      student: { instituteId },
-    };
+    const where: any = {};
+
+    if (instituteId) {
+      where.student = { instituteId };
+    } else if (session.user.role === "BRANCH_MANAGER" && session.user.branchId) {
+      where.student = { branchId: session.user.branchId };
+    }
 
     if (status && status !== "ALL") {
       where.status = status;
@@ -59,6 +69,11 @@ export async function GET(req: Request) {
       ];
     }
 
+    const monthWhere: any = {};
+    if (instituteId) {
+      monthWhere.student = { instituteId };
+    }
+
     const [payments, total, distinctMonthsRaw, institute] = await Promise.all([
       prisma.feePayment.findMany({
         where,
@@ -70,6 +85,7 @@ export async function GET(req: Request) {
               studentId: true,
               gender: true,
               programType: true,
+              institute: { select: { name: true, phone: true, email: true, address: true, city: true, currency: true } },
               parent: {
                 select: {
                   user: {
@@ -99,97 +115,114 @@ export async function GET(req: Request) {
       }),
       prisma.feePayment.count({ where }),
       prisma.feePayment.findMany({
-        where: { student: { instituteId }, month: { not: null } },
+        where: { ...monthWhere, month: { not: null } },
         select: { month: true },
         distinct: ["month"],
         orderBy: { month: "desc" },
       }),
-      prisma.institute.findUnique({
-        where: { id: instituteId },
-        select: {
-          name: true,
-          phone: true,
-          email: true,
-          address: true,
-          city: true,
-          logo: true,
-          currency: true,
-        },
-      }),
+      instituteId
+        ? prisma.institute.findUnique({
+            where: { id: instituteId },
+            select: {
+              name: true,
+              phone: true,
+              email: true,
+              address: true,
+              city: true,
+              logo: true,
+              currency: true,
+            },
+          })
+        : null,
     ]);
 
+    const sponsorInstituteId = instituteId || (payments[0]?.student?.institute ? undefined : undefined);
     const [instituteSponsors, sponsorBalances] = await Promise.all([
-      prisma.sponsor.findMany({
-        where: { instituteId, isActive: true },
-        select: { id: true, name: true },
-        orderBy: { name: "asc" },
-      }),
-      getSponsorFundBalances(instituteId),
+      sponsorInstituteId
+        ? prisma.sponsor.findMany({
+            where: { instituteId: sponsorInstituteId, isActive: true },
+            select: { id: true, name: true },
+            orderBy: { name: "asc" },
+          })
+        : prisma.sponsor.findMany({
+            where: { isActive: true },
+            select: { id: true, name: true },
+            orderBy: { name: "asc" },
+            take: 50,
+          }),
+      sponsorInstituteId
+        ? getSponsorFundBalances(sponsorInstituteId)
+        : Promise.resolve(new Map<string, number>()),
     ]);
 
     const distinctMonths = distinctMonthsRaw
       .map((m) => m.month)
       .filter((m): m is string => Boolean(m));
 
-    // Ensure current month is always present in available months list
     const currentMonthKey = todayDateKey().slice(0, 7);
     if (!distinctMonths.includes(currentMonthKey)) {
       distinctMonths.unshift(currentMonthKey);
     }
 
-    const fees = payments.map((p) => ({
-      id: p.id,
-      invoiceNo: p.invoiceNo,
-      studentDbId: p.student.id,
-      student: p.student.fullName,
-      studentId: p.student.studentId,
-      gender: p.student.gender,
-      program: p.student.programType,
-      parentName: p.student.parent?.user?.name || "Parent",
-      parentPhone: p.student.parent?.user?.phone || "",
-      parentEmail: p.student.parent?.user?.email || "",
-      month: formatMonthLabel(p.month),
-      monthKey: p.month,
-      amount: Number(p.netAmount),
-      grossAmount: Number(p.amount),
-      discount: Number(p.discount),
-      currency: p.currency || institute?.currency || "PKR",
-      dueDate: p.dueDate.toISOString().slice(0, 10),
-      notes: p.notes,
-      status: p.status,
-      paidAt: p.paidAt ? p.paidAt.toISOString().slice(0, 10) : null,
-      method: paymentMethodLabel(p.paymentMethod),
-      paymentMethod: p.paymentMethod,
-      claimStatus: p.claimStatus,
-      sponsorId: p.sponsorId,
-      sponsorName: p.sponsor?.name || null,
-      availableSponsors: p.student.sponsorLinks.map((l) => ({
-        id: l.sponsor.id,
-        name: l.sponsor.name,
-        balance: sponsorBalances.get(l.sponsor.id) ?? 0,
-      })),
-    }));
+    const fees = payments.map((p) => {
+      const studentInst = p.student?.institute;
+      return {
+        id: p.id,
+        invoiceNo: p.invoiceNo,
+        studentDbId: p.student?.id,
+        student: p.student?.fullName || "Student",
+        studentId: p.student?.studentId || "—",
+        gender: p.student?.gender,
+        program: p.student?.programType || "HIFZ",
+        parentName: p.student?.parent?.user?.name || "Parent",
+        parentPhone: p.student?.parent?.user?.phone || "",
+        parentEmail: p.student?.parent?.user?.email || "",
+        month: formatMonthLabel(p.month),
+        monthKey: p.month,
+        amount: Number(p.netAmount),
+        grossAmount: Number(p.amount),
+        discount: Number(p.discount),
+        currency: p.currency || institute?.currency || studentInst?.currency || "PKR",
+        dueDate: p.dueDate.toISOString().slice(0, 10),
+        notes: p.notes,
+        status: p.status,
+        paidAt: p.paidAt ? p.paidAt.toISOString().slice(0, 10) : null,
+        method: paymentMethodLabel(p.paymentMethod),
+        paymentMethod: p.paymentMethod,
+        claimStatus: p.claimStatus,
+        sponsorId: p.sponsorId,
+        sponsorName: p.sponsor?.name || null,
+        availableSponsors: (p.student?.sponsorLinks || []).map((l) => ({
+          id: l.sponsor.id,
+          name: l.sponsor.name,
+          balance: sponsorBalances.get(l.sponsor.id) ?? 0,
+        })),
+      };
+    });
 
     let summary = null;
     if (includeSummary) {
       const now = new Date();
       const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
+      const summaryWhere: any = {};
+      if (instituteId) summaryWhere.student = { instituteId };
+
       const [paid, unpaid, scholarshipCount, monthlyPayments] = await Promise.all([
         prisma.feePayment.aggregate({
-          where: { student: { instituteId }, status: "PAID" },
+          where: { ...summaryWhere, status: "PAID" },
           _sum: { netAmount: true },
         }),
         prisma.feePayment.aggregate({
-          where: { student: { instituteId }, status: { in: ["PENDING", "OVERDUE", "PARTIAL"] } },
+          where: { ...summaryWhere, status: { in: ["PENDING", "OVERDUE", "PARTIAL"] } },
           _sum: { netAmount: true },
         }),
         prisma.scholarship.count({
-          where: { student: { instituteId }, isActive: true },
+          where: { ...(instituteId ? { student: { instituteId } } : {}), isActive: true },
         }),
         prisma.feePayment.findMany({
           where: {
-            student: { instituteId },
+            ...summaryWhere,
             createdAt: { gte: sixMonthsAgo },
           },
           select: { month: true, status: true, netAmount: true },
@@ -234,11 +267,14 @@ export async function GET(req: Request) {
       fees,
       distinctMonths,
       institute: {
-        name: institute?.name || "Islamic Institute",
-        phone: institute?.phone || "",
-        email: institute?.email || "",
-        address: [institute?.address, institute?.city].filter(Boolean).join(", "),
-        city: institute?.city || "",
+        name: institute?.name || payments[0]?.student?.institute?.name || "Islamic Institute",
+        phone: institute?.phone || payments[0]?.student?.institute?.phone || "",
+        email: institute?.email || payments[0]?.student?.institute?.email || "",
+        address: [
+          institute?.address || payments[0]?.student?.institute?.address,
+          institute?.city || payments[0]?.student?.institute?.city,
+        ].filter(Boolean).join(", "),
+        city: institute?.city || payments[0]?.student?.institute?.city || "",
         logo: institute?.logo || null,
         currency: institute?.currency || "PKR",
       },
@@ -259,12 +295,18 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const session = await getAuthSession();
-    if (!session?.user.instituteId) {
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const instituteId = session.user.instituteId;
+    const isSuperAdmin = session.user.role === "SUPER_ADMIN";
     const body = await req.json();
+    const instituteId = session.user.instituteId || (isSuperAdmin ? body.instituteId : undefined);
+
+    if (!instituteId && !isSuperAdmin) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const month = body.month as string;
     const fallbackAmount = Number(body.amount) || 5000;
     const dueDay = Math.min(28, Math.max(1, Number(body.dueDay) || 10));
@@ -273,143 +315,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid month format (expected YYYY-MM)" }, { status: 400 });
     }
 
-    const [y, m] = month.split("-").map(Number);
-    const dueDate = new Date(y, m - 1, dueDay);
-    const today = parseDateOnly(todayDateKey());
+    const { generateMonthlyFeesForInstitute, generateMonthlyFeesForActiveInstitutes } = await import("@/lib/fee-ops");
 
-    // Only active students (excluding dismissed/terminated/withdrawn)
-    const [students, feeStructures] = await Promise.all([
-      prisma.student.findMany({
-        where: {
-          instituteId,
-          isActive: true,
-          status: { in: ["ACTIVE", "ON_LEAVE"] },
-        },
-        select: {
-          id: true,
-          studentId: true,
-          fullName: true,
-          programType: true,
-          scholarships: {
-            where: { isActive: true },
-            select: {
-              amount: true,
-              percentage: true,
-              isFullScholarship: true,
-              isActive: true,
-              startDate: true,
-              endDate: true,
-            },
-          },
-        },
-      }),
-      prisma.feeStructure.findMany({
-        where: { instituteId, isActive: true },
-        select: { programType: true, amount: true },
-      }),
-    ]);
-
-    const { notifyParentOfStudent } = await import("@/lib/notifications");
-    const { NotificationType } = await import("@prisma/client");
-    const { resolveBaseFeeAmount, computeNetFee } = await import("@/lib/fee-billing");
-
-    const studentIds = students.map((s) => s.id);
-    const existing = await prisma.feePayment.findMany({
-      where: { studentId: { in: studentIds }, month },
-      select: { studentId: true },
-    });
-    const billedStudentIds = new Set(existing.map((e) => e.studentId));
-
-    // Get current month's invoice sequence count for clean numbering
-    const currentMonthCount = await prisma.feePayment.count({
-      where: { month, student: { instituteId } },
-    });
-
-    let seq = currentMonthCount + 1;
-    const toCreate: Array<{
-      studentId: string;
-      month: string;
-      dueDate: Date;
-      amount: number;
-      discount: number;
-      netAmount: number;
-      status: "PENDING" | "OVERDUE" | "WAIVED";
-      invoiceNo: string;
-    }> = [];
-    const notifyTargets: Array<{ studentId: string; netAmount: number }> = [];
-
-    const monthNumStr = month.replace("-", "");
-
-    for (const student of students) {
-      if (billedStudentIds.has(student.id)) continue;
-
-      const baseAmount = resolveBaseFeeAmount(student.programType, feeStructures, fallbackAmount);
-      const { amount: gross, discount, netAmount, waived } = computeNetFee(
-        baseAmount,
-        student.scholarships,
-        dueDate
-      );
-
-      const status = waived
-        ? "WAIVED"
-        : dueDate < today
-        ? "OVERDUE"
-        : "PENDING";
-
-      const randSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-      const invoiceNo = `INV-${monthNumStr}-${String(seq).padStart(3, "0")}-${randSuffix}`;
-      seq += 1;
-
-      toCreate.push({
-        studentId: student.id,
+    if (instituteId) {
+      const result = await generateMonthlyFeesForInstitute({
+        instituteId,
         month,
-        dueDate,
-        amount: gross,
-        discount,
-        netAmount,
-        status,
-        invoiceNo,
+        dueDay,
+        fallbackAmount,
       });
-
-      if (!waived) {
-        notifyTargets.push({ studentId: student.id, netAmount });
-      }
-    }
-
-    if (toCreate.length) {
-      await prisma.feePayment.createMany({ data: toCreate });
-    }
-
-    if (notifyTargets.length) {
-      const dueLabel = dueDate.toLocaleDateString("en-PK", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
+      return NextResponse.json({ success: true, ...result });
+    } else {
+      const results = await generateMonthlyFeesForActiveInstitutes({
+        month,
+        dueDay,
+        fallbackAmount,
       });
-      const monthLabel = formatMonthLabel(month);
-      void Promise.all(
-        notifyTargets.map(({ studentId, netAmount }) =>
-          notifyParentOfStudent(studentId, {
-            type: NotificationType.FEE_DUE,
-            title: "Fee invoice generated",
-            message: `Tuition fee for ${monthLabel} is due on ${dueLabel}. Amount: PKR ${netAmount.toLocaleString()}.`,
-            data: { studentId, month },
-          })
-        )
-      );
+      const totalCreated = results.reduce((acc, r) => acc + r.created, 0);
+      return NextResponse.json({ success: true, created: totalCreated, results, month });
     }
-
-    const created = toCreate.length;
-    const totalEligible = students.length;
-    const alreadyBilled = existing.length;
-
-    return NextResponse.json({
-      success: true,
-      created,
-      alreadyBilled,
-      totalEligible,
-      month,
-    });
   } catch (error) {
     console.error("Generate fees error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -419,7 +343,7 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const session = await getAuthSession();
-    if (!session?.user.instituteId) {
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -429,13 +353,14 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Only institute owners can delete fee batches" }, { status: 403 });
     }
 
-    const instituteId = session.user.instituteId;
     const { searchParams } = new URL(req.url);
+    const instituteId = session.user.instituteId || (session.user.role === "SUPER_ADMIN" ? searchParams.get("instituteId") || undefined : undefined);
     const month = searchParams.get("month");
 
-    const where: any = {
-      student: { instituteId },
-    };
+    const where: any = {};
+    if (instituteId) {
+      where.student = { instituteId };
+    }
 
     if (month && month !== "ALL") {
       where.month = month;
