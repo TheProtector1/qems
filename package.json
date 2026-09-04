@@ -15,7 +15,8 @@
     "backup": "bash scripts/backup-database.sh",
     "backup:install": "bash scripts/setup-backup-scheduler.sh",
     "backup:status": "bash scripts/backup-status.sh",
-    "backup:restore": "bash scripts/restore-database.sh"
+    "backup:restore": "bash scripts/restore-database.sh",
+    "fee:generate": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/generate-monthly-fees.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
