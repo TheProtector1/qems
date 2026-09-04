@@ -151,6 +151,8 @@ export async function PATCH(
 
     const paymentMethod = (body.paymentMethod as PaymentMethod) || "CASH";
     const sponsorId = (body.sponsorId as string | null | undefined) || null;
+    const paidAt = body.paidAt ? new Date(body.paidAt) : new Date();
+    const notes = body.notes !== undefined ? body.notes : existing.notes;
 
     let resolvedMethod = paymentMethod;
     let resolvedSponsorId: string | null = null;
@@ -188,9 +190,10 @@ export async function PATCH(
       where: { id: resolved.id },
       data: {
         status: "PAID",
-        paidAt: new Date(),
+        paidAt,
         paymentMethod: resolvedMethod,
         sponsorId: resolvedSponsorId,
+        notes: notes || null,
       },
       include: {
         student: { select: { fullName: true, studentId: true, programType: true } },
@@ -207,6 +210,42 @@ export async function PATCH(
     });
   } catch (error) {
     console.error("Update fee payment error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> | { id: string } }
+) {
+  try {
+    const session = await getAuthSession();
+    if (!session?.user.instituteId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const isStaff =
+      session.user.role === "INSTITUTE_OWNER" || session.user.role === "SUPER_ADMIN";
+    if (!isStaff) {
+      return NextResponse.json({ error: "Only institute owners can delete fee records" }, { status: 403 });
+    }
+
+    const resolved = await Promise.resolve(params);
+    const existing = await prisma.feePayment.findFirst({
+      where: { id: resolved.id, student: { instituteId: session.user.instituteId } },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Fee record not found" }, { status: 404 });
+    }
+
+    await prisma.feePayment.delete({
+      where: { id: resolved.id },
+    });
+
+    return NextResponse.json({ success: true, deletedId: resolved.id });
+  } catch (error) {
+    console.error("Delete fee payment error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

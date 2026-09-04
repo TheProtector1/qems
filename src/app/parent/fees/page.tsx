@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { AlertCircle, CheckCircle2, CreditCard } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ParentFeeClaimButton } from "@/components/parent/parent-fee-claim-button";
+import { ParentFeeReceiptButton } from "@/components/parent/parent-fee-receipt-button";
+import type { FeeReceiptData } from "@/lib/fee-receipt-pdf";
 
 export const metadata = { title: "Fees & Payments - Parent Portal" };
 
@@ -24,16 +26,17 @@ export default async function ParentFeesPage() {
   const parent = await prisma.parent.findUnique({
     where: { userId: session.user.id },
     include: {
+      user: { select: { name: true, phone: true, email: true } },
       students: {
         include: {
-          institute: { select: { name: true, phone: true, email: true, address: true, city: true } },
+          institute: { select: { name: true, phone: true, email: true, address: true, city: true, currency: true } },
         },
       },
     },
   });
 
   const studentIds = parent?.students.map((s) => s.id) ?? [];
-  const studentNames = Object.fromEntries(parent?.students.map((s) => [s.id, s.fullName]) ?? []);
+  const studentsMap = Object.fromEntries(parent?.students.map((s) => [s.id, s]) ?? []);
   const institute = parent?.students[0]?.institute;
 
   const payments = studentIds.length
@@ -43,20 +46,58 @@ export default async function ParentFeesPage() {
       })
     : [];
 
-  const ledger = payments.map((p) => ({
-    id: p.id,
-    studentName: studentNames[p.studentId] || "Student",
-    month: formatMonthLabel(p.month, p.dueDate),
-    amount: Number(p.netAmount),
-    status: p.status === "PAID" ? "PAID" : p.status === "OVERDUE" ? "OVERDUE" : "DUE",
-    claimStatus: p.claimStatus,
-    dueDate: p.dueDate.toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" }),
-    paidOn: p.paidAt
-      ? p.paidAt.toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })
-      : null,
-  }));
+  const ledger = payments.map((p) => {
+    const student = studentsMap[p.studentId];
+    const receiptData: FeeReceiptData = {
+      invoiceNo: p.invoiceNo,
+      month: formatMonthLabel(p.month, p.dueDate),
+      monthKey: p.month,
+      amount: Number(p.netAmount),
+      grossAmount: Number(p.amount),
+      discount: Number(p.discount),
+      currency: p.currency || institute?.currency || "PKR",
+      dueDate: p.dueDate.toISOString().slice(0, 10),
+      paidAt: p.paidAt ? p.paidAt.toISOString().slice(0, 10) : null,
+      status: p.status,
+      method: p.paymentMethod ? p.paymentMethod.replace(/_/g, " ") : null,
+      paymentMethod: p.paymentMethod,
+      notes: p.notes,
+      student: {
+        name: student?.fullName || "Student",
+        studentId: student?.studentId || "",
+        program: student?.programType,
+        gender: student?.gender,
+      },
+      parent: {
+        name: parent?.user?.name || "Parent",
+        phone: parent?.user?.phone || "",
+        email: parent?.user?.email || "",
+      },
+      institute: {
+        name: institute?.name || "Islamic Institute",
+        phone: institute?.phone || "",
+        email: institute?.email || "",
+        address: [institute?.address, institute?.city].filter(Boolean).join(", "),
+        city: institute?.city || "",
+      },
+    };
 
-  const totalDue = ledger.filter((l) => l.status === "DUE").reduce((acc, curr) => acc + curr.amount, 0);
+    return {
+      id: p.id,
+      studentName: student?.fullName || "Student",
+      month: formatMonthLabel(p.month, p.dueDate),
+      amount: Number(p.netAmount),
+      status: p.status === "PAID" ? "PAID" : p.status === "OVERDUE" ? "OVERDUE" : "DUE",
+      claimStatus: p.claimStatus,
+      dueDate: p.dueDate.toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" }),
+      paidOn: p.paidAt
+        ? p.paidAt.toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" })
+        : null,
+      receiptData,
+    };
+  });
+
+  const totalDue = ledger.filter((l) => l.status === "DUE" || l.status === "OVERDUE").reduce((acc, curr) => acc + curr.amount, 0);
   const lastPaid = ledger.find((l) => l.status === "PAID");
 
   return (
@@ -67,7 +108,7 @@ export default async function ParentFeesPage() {
       <div className="space-y-6 max-w-4xl mx-auto">
         <div>
           <h2 className="section-heading font-display text-2xl font-bold text-gray-900">Fee Ledger</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Tuition invoices for your enrolled children</p>
+          <p className="text-sm text-gray-500 mt-0.5">Tuition invoices & paid receipts for your enrolled children</p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-6">
@@ -147,7 +188,7 @@ export default async function ParentFeesPage() {
                     <th>Status</th>
                     <th>Due Date</th>
                     <th>Paid Date</th>
-                    <th></th>
+                    <th className="text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -166,10 +207,14 @@ export default async function ParentFeesPage() {
                       </td>
                       <td>{l.dueDate}</td>
                       <td>{l.paidOn || "—"}</td>
-                      <td>
-                        {l.status !== "PAID" && l.claimStatus !== "CLAIMED" && (
-                          <ParentFeeClaimButton feePaymentId={l.id} />
-                        )}
+                      <td className="text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {l.status === "PAID" ? (
+                            <ParentFeeReceiptButton receiptData={l.receiptData} />
+                          ) : l.claimStatus !== "CLAIMED" ? (
+                            <ParentFeeClaimButton feePaymentId={l.id} />
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   ))}
