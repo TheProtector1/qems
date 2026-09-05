@@ -316,12 +316,15 @@ export async function POST(req: Request) {
 
     const { generateMonthlyFeesForInstitute, generateMonthlyFeesForActiveInstitutes } = await import("@/lib/fee-ops");
 
+    const feeStructureId = body.feeStructureId || null;
+
     if (instituteId) {
       const result = await generateMonthlyFeesForInstitute({
         instituteId,
         month,
         dueDay,
         fallbackAmount,
+        feeStructureId,
       });
       return NextResponse.json({ success: true, ...result });
     } else {

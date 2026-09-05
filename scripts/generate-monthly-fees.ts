@@ -132,8 +132,6 @@ async function main() {
 
       const status: PaymentStatus = waived
         ? PaymentStatus.WAIVED
-        : dueDate < today
-        ? PaymentStatus.OVERDUE
         : PaymentStatus.PENDING;
 
       const randSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();

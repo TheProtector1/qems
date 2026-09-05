@@ -97,6 +97,8 @@ export function FinanceContent() {
   }>>([]);
   const [billingMonth, setBillingMonth] = useState(currentMonth);
   const [billingDueDay, setBillingDueDay] = useState("10");
+  const [billingStructureMode, setBillingStructureMode] = useState<"AUTO" | "SPECIFIC" | "FIXED">("AUTO");
+  const [billingSelectedStructureId, setBillingSelectedStructureId] = useState<string>("");
   const [billingFallback, setBillingFallback] = useState("5000");
   const [billingSaving, setBillingSaving] = useState(false);
   const [billingSuccessMessage, setBillingSuccessMessage] = useState<string | null>(null);
@@ -422,19 +424,25 @@ export function FinanceContent() {
     setBillingSaving(true);
     setBillingSuccessMessage(null);
     try {
+      const payload: any = {
+        month: billingMonth,
+        dueDay: Number(billingDueDay),
+        amount: Number(billingFallback),
+      };
+
+      if (billingStructureMode === "SPECIFIC" && billingSelectedStructureId) {
+        payload.feeStructureId = billingSelectedStructureId;
+      }
+
       const res = await fetch("/api/institute/fees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          month: billingMonth,
-          dueDay: Number(billingDueDay),
-          amount: Number(billingFallback),
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok) {
         setBillingSuccessMessage(
-          `Generated ${data.created} invoice(s) for ${formatMonthOption(billingMonth)}. (${data.alreadyBilled} student(s) were already billed).`
+          `Successfully generated ${data.created} invoice(s) in Pending status for ${formatMonthOption(billingMonth)} using ${data.structureUsed || "defined fee structures"}.`
         );
         // Set filter to newly generated month so user sees them right away
         setMonthFilter(billingMonth);
@@ -543,12 +551,12 @@ export function FinanceContent() {
 
       {/* Generation Panel */}
       {showBillingPanel && (
-        <div className="dash-card p-6 border-2 border-primary-200 bg-gradient-to-br from-green-50/50 to-emerald-50/20 space-y-4">
+        <div className="dash-card p-6 border-2 border-primary-200 bg-gradient-to-br from-green-50/50 to-emerald-50/20 space-y-5">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-semibold text-gray-900 text-base">Generate Monthly Tuition Invoices</h3>
               <p className="text-xs text-gray-500">
-                Generates invoices for all active students. Program fee structures and active scholarships/concessions are applied automatically.
+                Generates monthly invoices in <span className="font-semibold text-amber-700">PENDING</span> status for active students with fee structures and scholarships applied.
               </p>
             </div>
             <button
@@ -560,7 +568,8 @@ export function FinanceContent() {
             </button>
           </div>
 
-          <div className="grid sm:grid-cols-3 gap-4 pt-2">
+          {/* Month & Due Date */}
+          <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">Billing Month</label>
               <input
@@ -583,16 +592,128 @@ export function FinanceContent() {
               />
               <p className="text-[10px] text-gray-400 mt-1">e.g. 10th of the month</p>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Default Fallback Amount (PKR)</label>
-              <input
-                type="number"
-                value={billingFallback}
-                onChange={(e) => setBillingFallback(e.target.value)}
-                className="form-input text-sm"
-              />
-              <p className="text-[10px] text-gray-400 mt-1">If no program structure matches</p>
+          </div>
+
+          {/* Fee Structure Rule Selection */}
+          <div className="space-y-3 pt-1 border-t border-gray-200/60">
+            <label className="block text-xs font-bold text-gray-900 uppercase tracking-wider">
+              Which Fee Structure to Follow?
+            </label>
+
+            <div className="grid sm:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => setBillingStructureMode("AUTO")}
+                className={cn(
+                  "p-3 rounded-xl border text-left transition flex flex-col justify-between",
+                  billingStructureMode === "AUTO"
+                    ? "border-primary-600 bg-white ring-2 ring-primary-500/20 shadow-xs"
+                    : "border-gray-200 bg-white/60 hover:border-gray-300"
+                )}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold text-xs text-gray-900">Program Structures</span>
+                    {billingStructureMode === "AUTO" && <span className="h-2 w-2 rounded-full bg-primary-600" />}
+                  </div>
+                  <p className="text-[11px] text-gray-500 leading-snug">
+                    Auto-matches each student&apos;s program (Hifz, Nazra, Tajweed).
+                  </p>
+                </div>
+                <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-1">
+                  {structures.filter((s) => s.isActive).map((s) => (
+                    <span key={s.id} className="text-[10px] bg-green-50 text-green-800 px-1.5 py-0.5 rounded font-medium">
+                      {s.programType || "Default"}: {formatCurrency(s.amount)}
+                    </span>
+                  ))}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setBillingStructureMode("SPECIFIC");
+                  if (!billingSelectedStructureId && structures[0]) {
+                    setBillingSelectedStructureId(structures[0].id);
+                  }
+                }}
+                className={cn(
+                  "p-3 rounded-xl border text-left transition flex flex-col justify-between",
+                  billingStructureMode === "SPECIFIC"
+                    ? "border-primary-600 bg-white ring-2 ring-primary-500/20 shadow-xs"
+                    : "border-gray-200 bg-white/60 hover:border-gray-300"
+                )}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold text-xs text-gray-900">Specific Structure</span>
+                    {billingStructureMode === "SPECIFIC" && <span className="h-2 w-2 rounded-full bg-primary-600" />}
+                  </div>
+                  <p className="text-[11px] text-gray-500 leading-snug">
+                    Apply one selected fee structure to all students.
+                  </p>
+                </div>
+                <span className="text-[10px] text-primary-700 font-medium mt-2">
+                  Choose from {structures.length} defined structures
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setBillingStructureMode("FIXED")}
+                className={cn(
+                  "p-3 rounded-xl border text-left transition flex flex-col justify-between",
+                  billingStructureMode === "FIXED"
+                    ? "border-primary-600 bg-white ring-2 ring-primary-500/20 shadow-xs"
+                    : "border-gray-200 bg-white/60 hover:border-gray-300"
+                )}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold text-xs text-gray-900">Custom Flat Amount</span>
+                    {billingStructureMode === "FIXED" && <span className="h-2 w-2 rounded-full bg-primary-600" />}
+                  </div>
+                  <p className="text-[11px] text-gray-500 leading-snug">
+                    Enter a one-off custom amount in PKR.
+                  </p>
+                </div>
+                <span className="text-[10px] text-gray-400 font-medium mt-2">
+                  Custom rate
+                </span>
+              </button>
             </div>
+
+            {/* Dynamic input depending on selection */}
+            {billingStructureMode === "SPECIFIC" && (
+              <div className="p-3 bg-white rounded-xl border border-primary-100 space-y-1">
+                <label className="block text-xs font-semibold text-gray-700">Select Defined Fee Structure:</label>
+                <select
+                  value={billingSelectedStructureId}
+                  onChange={(e) => setBillingSelectedStructureId(e.target.value)}
+                  className="form-input text-xs"
+                >
+                  <option value="">— Select a Fee Structure —</option>
+                  {structures.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.programType || "All Programs"}) — {formatCurrency(s.amount)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {billingStructureMode === "FIXED" && (
+              <div className="p-3 bg-white rounded-xl border border-primary-100 space-y-1">
+                <label className="block text-xs font-semibold text-gray-700">Custom Flat Amount (PKR):</label>
+                <input
+                  type="number"
+                  value={billingFallback}
+                  onChange={(e) => setBillingFallback(e.target.value)}
+                  className="form-input text-xs"
+                  placeholder="5000"
+                />
+              </div>
+            )}
           </div>
 
           {billingSuccessMessage && (
@@ -608,21 +729,21 @@ export function FinanceContent() {
               className="btn-ghost text-xs py-2"
               onClick={() => setShowBillingPanel(false)}
             >
-              Close
+              Cancel
             </button>
             <button
               type="button"
-              className="btn-primary text-sm py-2 px-5 shadow-sm"
+              className="btn-primary text-sm py-2 px-5 shadow-sm font-semibold"
               onClick={handleGenerateMonthly}
-              disabled={billingSaving}
+              disabled={billingSaving || (billingStructureMode === "SPECIFIC" && !billingSelectedStructureId)}
             >
               {billingSaving ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                  Generating Invoices...
+                  Generating Invoices in Pending Status...
                 </>
               ) : (
-                `Generate for ${formatMonthOption(billingMonth)}`
+                `Generate Invoices (Pending) for ${formatMonthOption(billingMonth)}`
               )}
             </button>
           </div>

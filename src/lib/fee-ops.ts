@@ -60,6 +60,7 @@ export async function remindFeeDues(opts: {
 
 /**
  * Generate monthly tuition fee vouchers for all active students in an institute.
+ * Newly generated invoices are always created with status = PENDING (or WAIVED if 100% scholarship).
  * Applies program fee structures, active scholarships, and avoids duplicate billing.
  */
 export async function generateMonthlyFeesForInstitute(opts: {
@@ -67,6 +68,7 @@ export async function generateMonthlyFeesForInstitute(opts: {
   month?: string;
   dueDay?: number;
   fallbackAmount?: number;
+  feeStructureId?: string | null;
 }) {
   const month = opts.month || todayDateKey().slice(0, 7);
   const fallbackAmount = opts.fallbackAmount ?? 5000;
@@ -74,9 +76,8 @@ export async function generateMonthlyFeesForInstitute(opts: {
 
   const [y, m] = month.split("-").map(Number);
   const dueDate = new Date(y, m - 1, dueDay);
-  const today = parseDateOnly(todayDateKey());
 
-  const [students, feeStructures] = await Promise.all([
+  const [students, feeStructures, chosenStructure] = await Promise.all([
     prisma.student.findMany({
       where: {
         instituteId: opts.instituteId,
@@ -107,8 +108,13 @@ export async function generateMonthlyFeesForInstitute(opts: {
     }),
     prisma.feeStructure.findMany({
       where: { instituteId: opts.instituteId, isActive: true },
-      select: { programType: true, amount: true },
+      select: { id: true, name: true, programType: true, amount: true },
     }),
+    opts.feeStructureId
+      ? prisma.feeStructure.findFirst({
+          where: { id: opts.feeStructureId, instituteId: opts.instituteId, isActive: true },
+        })
+      : null,
   ]);
 
   const studentIds = students.map((s) => s.id);
@@ -139,18 +145,22 @@ export async function generateMonthlyFeesForInstitute(opts: {
   for (const student of students) {
     if (billedStudentIds.has(student.id)) continue;
 
-    const baseAmount = resolveBaseFeeAmount(student.programType, feeStructures, fallbackAmount);
+    // Resolve base amount: if a specific structure was chosen, use that; otherwise match by student's programType
+    let baseAmount: number;
+    if (chosenStructure) {
+      baseAmount = Number(chosenStructure.amount);
+    } else {
+      baseAmount = resolveBaseFeeAmount(student.programType, feeStructures, fallbackAmount);
+    }
+
     const { amount: gross, discount, netAmount, waived } = computeNetFee(
       baseAmount,
       student.scholarships,
       dueDate
     );
 
-    const status: PaymentStatus = waived
-      ? PaymentStatus.WAIVED
-      : dueDate < today
-      ? PaymentStatus.OVERDUE
-      : PaymentStatus.PENDING;
+    // Newly generated fee invoices always start with PENDING status (or WAIVED if 100% scholarship)
+    const status: PaymentStatus = waived ? PaymentStatus.WAIVED : PaymentStatus.PENDING;
 
     const randSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
     const invoiceNo = `INV-${monthNumStr}-${String(seq).padStart(3, "0")}-${randSuffix}`;
@@ -205,6 +215,7 @@ export async function generateMonthlyFeesForInstitute(opts: {
     created: toCreate.length,
     alreadyBilled: existing.length,
     totalEligible: students.length,
+    structureUsed: chosenStructure?.name || "Program-Based Defined Structures",
   };
 }
 
