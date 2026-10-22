@@ -6,6 +6,7 @@ import { getDefaultStartingJuz, getNextPara, parseHifzDirection } from "@/lib/hi
 import { notifyParentOfStudent } from "@/lib/notifications";
 import { tryAwardBadgesForStudent } from "@/lib/badges";
 import { ensureAlumniFromHifzCompletion } from "@/lib/alumni";
+import { isStudentAssignedToTeacher } from "@/lib/teacher-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,17 @@ export async function GET(req: Request) {
     });
     if (!student) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+
+    if (session.user.role === "TEACHER") {
+      const teacher = await prisma.teacher.findFirst({
+        where: { userId: session.user.id, instituteId: session.user.instituteId },
+      });
+      if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      const assigned = await isStudentAssignedToTeacher(studentId, teacher.id, session.user.instituteId);
+      if (!assigned) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      }
     }
 
     const completions = await prisma.hifzParaCompletion.findMany({
@@ -115,7 +127,11 @@ export async function POST(req: Request) {
         where: { userId: session.user.id, instituteId },
         select: { id: true },
       });
-      if (teacher && student.teacherId && student.teacherId !== teacher.id) {
+      if (!teacher) {
+        return NextResponse.json({ error: "Teacher profile not found" }, { status: 403 });
+      }
+      const assigned = await isStudentAssignedToTeacher(studentId, teacher.id, instituteId);
+      if (!assigned) {
         return NextResponse.json(
           { error: "You can only mark paras for your assigned students" },
           { status: 403 }

@@ -3,6 +3,7 @@ import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { buildStudentReportPdf, ReportType } from "@/lib/pdf-reports";
 import { getSurahName } from "@/lib/utils";
+import { isStudentAssignedToTeacher } from "@/lib/teacher-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -54,9 +55,9 @@ async function authorizeStudentAccess(
     const teacher = await prisma.teacher.findFirst({
       where: { userId: session.user.id, instituteId: student.instituteId },
     });
-    if (teacher && student.teacherId && student.teacherId !== teacher.id) {
-      return null;
-    }
+    if (!teacher) return null;
+    const isAssigned = await isStudentAssignedToTeacher(studentId, teacher.id, student.instituteId);
+    if (!isAssigned) return null;
   }
 
   return student;

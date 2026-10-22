@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ProgramType } from "@prisma/client";
+import { ProgramType, type Prisma } from "@prisma/client";
+import { getTeacherScope, isStudentAssignedToTeacher } from "@/lib/teacher-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -16,20 +17,41 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const studentId = searchParams.get("studentId");
 
-    const [students, rules, records] = await Promise.all([
-      prisma.student.findMany({
-        where: { instituteId, isActive: true, programType: ProgramType.TAJWEED },
-        select: { id: true, fullName: true, currentSurah: true },
-        orderBy: { fullName: "asc" },
-      }),
+    const studentConditions: Prisma.StudentWhereInput[] = [
+      { instituteId, isActive: true, programType: ProgramType.TAJWEED },
+    ];
+
+    if (session.user.role === "TEACHER") {
+      const teacherScope = await getTeacherScope(session.user.id, instituteId);
+      if (!teacherScope.teacher) {
+        return NextResponse.json({ students: [], rules: [], evaluations: [] });
+      }
+      studentConditions.push(teacherScope.studentWhere);
+    }
+
+    const students = await prisma.student.findMany({
+      where: { AND: studentConditions },
+      select: { id: true, fullName: true, currentSurah: true },
+      orderBy: { fullName: "asc" },
+    });
+
+    const visibleStudentIds = students.map((s) => s.id);
+    if (studentId && session.user.role === "TEACHER" && !visibleStudentIds.includes(studentId)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    const targetStudentIds = studentId ? [studentId] : visibleStudentIds;
+
+    const [rules, records] = await Promise.all([
       prisma.tajweedRule.findMany({ orderBy: [{ category: "asc" }, { order: "asc" }] }),
-      prisma.tajweedRecord.findMany({
-        where: {
-          student: { instituteId },
-          ...(studentId ? { studentId } : {}),
-        },
-        include: { rule: true },
-      }),
+      targetStudentIds.length
+        ? prisma.tajweedRecord.findMany({
+            where: {
+              studentId: { in: targetStudentIds },
+            },
+            include: { rule: true },
+          })
+        : [],
     ]);
 
     const studentSummaries = students.map((s) => {
@@ -98,6 +120,20 @@ export async function POST(req: Request) {
 
     if (!student) {
       return NextResponse.json({ error: "Tajweed student not found" }, { status: 404 });
+    }
+
+    const teacher = await prisma.teacher.findFirst({
+      where: { userId: session.user.id, instituteId },
+    });
+
+    if (session.user.role === "TEACHER") {
+      if (!teacher) {
+        return NextResponse.json({ error: "Teacher profile not found" }, { status: 403 });
+      }
+      const assigned = await isStudentAssignedToTeacher(studentId, teacher.id, instituteId);
+      if (!assigned) {
+        return NextResponse.json({ error: "You are not assigned to this student" }, { status: 403 });
+      }
     }
 
     const record = await prisma.tajweedRecord.upsert({

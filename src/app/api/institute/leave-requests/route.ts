@@ -3,7 +3,8 @@ import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { applyLeaveToAttendance } from "@/lib/leave-requests";
 import { notifyUser } from "@/lib/notifications";
-import { LeaveRequestStatus, NotificationType } from "@prisma/client";
+import { LeaveRequestStatus, NotificationType, type Prisma } from "@prisma/client";
+import { getTeacherScope, isStudentAssignedToTeacher } from "@/lib/teacher-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +19,26 @@ export async function GET(req: Request) {
 
     const status = new URL(req.url).searchParams.get("status") || "PENDING";
 
+    const whereConditions: Prisma.LeaveRequestWhereInput[] = [
+      { instituteId: session.user.instituteId },
+    ];
+
+    if (status !== "ALL") {
+      whereConditions.push({ status: status as LeaveRequestStatus });
+    }
+
+    if (session.user.role === "TEACHER") {
+      const teacherScope = await getTeacherScope(session.user.id, session.user.instituteId);
+      if (!teacherScope.teacher) {
+        return NextResponse.json({ requests: [] });
+      }
+      whereConditions.push({
+        student: teacherScope.studentWhere,
+      });
+    }
+
     const requests = await prisma.leaveRequest.findMany({
-      where: {
-        instituteId: session.user.instituteId,
-        ...(status !== "ALL" ? { status: status as LeaveRequestStatus } : {}),
-      },
+      where: { AND: whereConditions },
       include: {
         student: {
           select: {
@@ -59,7 +75,6 @@ export async function GET(req: Request) {
         reviewNote: r.reviewNote,
         createdAt: r.createdAt.toISOString(),
       })),
-      pendingCount: requests.filter((r) => r.status === "PENDING").length,
     });
   } catch (error) {
     console.error("[INSTITUTE_LEAVE_GET]", error);
@@ -96,6 +111,17 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Request already reviewed" }, { status: 400 });
     }
 
+    if (session.user.role === "TEACHER") {
+      const teacher = await prisma.teacher.findFirst({
+        where: { userId: session.user.id, instituteId: session.user.instituteId },
+      });
+      if (!teacher) return NextResponse.json({ error: "Unauthorized teacher profile" }, { status: 403 });
+      const assigned = await isStudentAssignedToTeacher(existing.studentId, teacher.id, session.user.instituteId);
+      if (!assigned) {
+        return NextResponse.json({ error: "You are not assigned to this student" }, { status: 403 });
+      }
+    }
+
     const status =
       action === "APPROVE" ? LeaveRequestStatus.APPROVED : LeaveRequestStatus.REJECTED;
 
@@ -109,40 +135,27 @@ export async function PATCH(req: Request) {
       },
     });
 
-    if (action === "APPROVE") {
-      const teacher = await prisma.teacher.findFirst({
-        where: { userId: session.user.id },
-        select: { id: true },
-      });
-      const parentUser = await prisma.user.findUnique({
-        where: { id: existing.requestedById },
-        select: { name: true },
-      });
+    if (status === LeaveRequestStatus.APPROVED) {
       await applyLeaveToAttendance({
         studentId: existing.studentId,
         startDate: existing.startDate,
         endDate: existing.endDate,
         reason: existing.reason,
-        requestedByName: parentUser?.name || "Parent",
-        markedById: teacher?.id ?? null,
+        requestedByName: session.user.name || "Institute Staff",
+        markedById: session.user.id,
       });
     }
 
     await notifyUser(existing.requestedById, {
-      instituteId: session.user.instituteId,
       type: NotificationType.LEAVE_REQUEST,
-      title:
-        action === "APPROVE"
-          ? `Leave approved — ${existing.student.fullName}`
-          : `Leave declined — ${existing.student.fullName}`,
-      message:
-        action === "APPROVE"
-          ? `Your leave request was approved${reviewNote ? `: ${reviewNote}` : "."}`
-          : `Your leave request was declined${reviewNote ? `: ${reviewNote}` : "."}`,
-      data: { leaveRequestId: id, action },
+      title: `Leave request ${status.toLowerCase()}`,
+      message: `Your leave request for ${existing.student.fullName} was ${status.toLowerCase()}.${
+        reviewNote ? ` Note: ${reviewNote}` : ""
+      }`,
+      data: { leaveRequestId: id, status },
     });
 
-    return NextResponse.json({ success: true, status: updated.status });
+    return NextResponse.json({ success: true, request: updated });
   } catch (error) {
     console.error("[INSTITUTE_LEAVE_PATCH]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

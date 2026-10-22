@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { AttendanceStatus, NotificationType } from "@prisma/client";
+import { AttendanceStatus, NotificationType, type Prisma } from "@prisma/client";
 import { notifyParentOfStudent } from "@/lib/notifications";
 import {
   clearStaleHolidayAttendance,
@@ -19,6 +19,7 @@ import {
   weekdayIndexForDateKey,
 } from "@/lib/timezone";
 import { buildHifzDayMap } from "@/lib/hifz-lesson-status";
+import { getTeacherScope, isStudentAssignedToTeacher } from "@/lib/teacher-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -40,29 +41,87 @@ export async function GET(req: Request) {
     const year = searchParams.get("year");
     const studentId = searchParams.get("studentId");
     const program = searchParams.get("program");
+    const classId = searchParams.get("classId");
     const historyDays = Math.min(parseInt(searchParams.get("days") || "7", 10), 30);
 
     const holidays = await getCachedInstituteHolidays(instituteId);
     const weeklyOffDays = getWeeklyOffDays(holidays);
 
-    const programFilter =
-      program && program !== "ALL"
-        ? { programType: program.toUpperCase() as "HIFZ" | "NAZRA" | "TAJWEED" }
-        : {};
+    // Build scoped query conditions for students
+    const studentConditions: Prisma.StudentWhereInput[] = [
+      { instituteId, isActive: true },
+    ];
 
-    const students = await prisma.student.findMany({
-      where: { instituteId, isActive: true, ...programFilter },
+    if (program && program !== "ALL") {
+      studentConditions.push({
+        programType: program.toUpperCase() as "HIFZ" | "NAZRA" | "TAJWEED",
+      });
+    }
+
+    if (session.user.role === "TEACHER") {
+      const teacherScope = await getTeacherScope(session.user.id, instituteId);
+      if (!teacherScope.teacher) {
+        return NextResponse.json({
+          students: [],
+          attendance: {},
+          historyDates: [],
+          history: {},
+          monthRates: {},
+          isHoliday: false,
+          holiday: null,
+        });
+      }
+      studentConditions.push(teacherScope.studentWhere);
+    }
+
+    if (classId && classId !== "ALL") {
+      studentConditions.push({
+        enrollments: {
+          some: {
+            classId,
+            isActive: true,
+          },
+        },
+      });
+    }
+
+    const rawStudents = await prisma.student.findMany({
+      where: { AND: studentConditions },
       select: {
         id: true,
         fullName: true,
         studentId: true,
         gender: true,
         programType: true,
+        photo: true,
+        enrollments: {
+          where: { isActive: true },
+          select: {
+            class: { select: { id: true, name: true } },
+          },
+          take: 1,
+        },
       },
       orderBy: { fullName: "asc" },
     });
 
+    const students = rawStudents.map((s) => ({
+      id: s.id,
+      fullName: s.fullName,
+      studentId: s.studentId,
+      gender: s.gender,
+      programType: s.programType,
+      photo: s.photo,
+      className: s.enrollments?.[0]?.class?.name ?? null,
+    }));
+
+    const visibleStudentIds = students.map((s) => s.id);
+
     if (month && year && studentId) {
+      if (session.user.role === "TEACHER" && !visibleStudentIds.includes(studentId)) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      }
+
       const y = parseInt(year, 10);
       const m = parseInt(month, 10);
       const start = new Date(Date.UTC(y, m - 1, 1));
@@ -113,16 +172,18 @@ export async function GET(req: Request) {
       const start = new Date(Date.UTC(y, m - 1, 1));
       const end = new Date(Date.UTC(y, m, 0));
 
-      const records = await prisma.attendance.findMany({
-        where: {
-          student: { instituteId },
-          date: { gte: start, lte: end },
-        },
-        include: {
-          student: { select: { id: true, fullName: true, studentId: true } },
-        },
-        orderBy: { date: "asc" },
-      });
+      const records = visibleStudentIds.length
+        ? await prisma.attendance.findMany({
+            where: {
+              studentId: { in: visibleStudentIds },
+              date: { gte: start, lte: end },
+            },
+            include: {
+              student: { select: { id: true, fullName: true, studentId: true } },
+            },
+            orderBy: { date: "asc" },
+          })
+        : [];
 
       return NextResponse.json({ students, records, month: m, year: y });
     }
@@ -151,22 +212,24 @@ export async function GET(req: Request) {
     const monthStart = parseDateOnly(`${yStr}-${mStr}-01`);
     const monthEnd = parseDateOnly(todayKey);
 
-    const [historyRecords, monthRecords] = await Promise.all([
-      prisma.attendance.findMany({
-        where: {
-          student: { instituteId },
-          date: { gte: startHistory, lte: endHistory },
-        },
-        select: { studentId: true, date: true, status: true },
-      }),
-      prisma.attendance.findMany({
-        where: {
-          student: { instituteId },
-          date: { gte: monthStart, lte: monthEnd },
-        },
-        select: { studentId: true, date: true, status: true },
-      }),
-    ]);
+    const [historyRecords, monthRecords] = visibleStudentIds.length
+      ? await Promise.all([
+          prisma.attendance.findMany({
+            where: {
+              studentId: { in: visibleStudentIds },
+              date: { gte: startHistory, lte: endHistory },
+            },
+            select: { studentId: true, date: true, status: true },
+          }),
+          prisma.attendance.findMany({
+            where: {
+              studentId: { in: visibleStudentIds },
+              date: { gte: monthStart, lte: monthEnd },
+            },
+            select: { studentId: true, date: true, status: true },
+          }),
+        ])
+      : [[], []];
 
     const historyMap: Record<string, Record<string, AttendanceStatus>> = {};
     for (const r of historyRecords) {
@@ -203,12 +266,14 @@ export async function GET(req: Request) {
         );
       }
 
-      const dayRecords = await prisma.attendance.findMany({
-        where: {
-          student: { instituteId },
-          date: targetDate,
-        },
-      });
+      const dayRecords = visibleStudentIds.length
+        ? await prisma.attendance.findMany({
+            where: {
+              studentId: { in: visibleStudentIds },
+              date: targetDate,
+            },
+          })
+        : [];
 
       const attendanceByStudent: Record<string, AttendanceStatus> = {};
       for (const r of dayRecords) {
@@ -237,12 +302,14 @@ export async function GET(req: Request) {
       );
     }
 
-    const todayRecords = await prisma.attendance.findMany({
-      where: {
-        student: { instituteId },
-        date: todayDate,
-      },
-    });
+    const todayRecords = visibleStudentIds.length
+      ? await prisma.attendance.findMany({
+          where: {
+            studentId: { in: visibleStudentIds },
+            date: todayDate,
+          },
+        })
+      : [];
 
     const attendanceByStudent: Record<string, AttendanceStatus> = {};
     for (const r of todayRecords) {
@@ -297,11 +364,28 @@ export async function POST(req: Request) {
       });
     }
 
-    const teacher = await prisma.teacher.findFirst({
-      where: { userId: session.user.id, instituteId },
+    let allowedStudentIdSet: Set<string> | null = null;
+    let teacherId: string | null = null;
+    if (session.user.role === "TEACHER") {
+      const teacherScope = await getTeacherScope(session.user.id, instituteId);
+      if (!teacherScope.teacher) {
+        return NextResponse.json({ error: "Unauthorized teacher profile" }, { status: 403 });
+      }
+      teacherId = teacherScope.teacher.id;
+      allowedStudentIdSet = new Set(teacherScope.studentIds);
+    } else {
+      const teacher = await prisma.teacher.findFirst({
+        where: { userId: session.user.id, instituteId },
+      });
+      teacherId = teacher?.id ?? null;
+    }
+
+    const validRecords = records.filter((r) => {
+      if (!r.studentId || !r.status) return false;
+      if (allowedStudentIdSet && !allowedStudentIdSet.has(r.studentId)) return false;
+      return true;
     });
 
-    const validRecords = records.filter((r) => r.studentId && r.status);
     if (validRecords.length === 0) {
       return NextResponse.json({ success: true });
     }
@@ -354,7 +438,7 @@ export async function POST(req: Request) {
         toUpdate.push({
           id: existing.id,
           status: rec.status,
-          markedById: teacher?.id ?? existing.markedById,
+          markedById: teacherId ?? existing.markedById,
           leaveReason,
           leaveRequestedBy,
           prevStatus: existing.status,
@@ -366,7 +450,7 @@ export async function POST(req: Request) {
           studentId: rec.studentId,
           date: targetDate,
           status: rec.status,
-          markedById: teacher?.id ?? null,
+          markedById: teacherId,
           leaveReason,
           leaveRequestedBy,
           fullName: student.fullName,
@@ -452,6 +536,13 @@ export async function DELETE(req: Request) {
 
     if (!existing || existing.student.instituteId !== session.user.instituteId) {
       return NextResponse.json({ error: "Record not found" }, { status: 404 });
+    }
+
+    if (session.user.role === "TEACHER") {
+      const teacherScope = await getTeacherScope(session.user.id, session.user.instituteId);
+      if (!teacherScope.teacher || !teacherScope.studentIds.includes(existing.studentId)) {
+        return NextResponse.json({ error: "Unauthorized to delete this record" }, { status: 403 });
+      }
     }
 
     await prisma.attendance.delete({

@@ -34,12 +34,32 @@ export async function buildHifzRevisionPlan(opts: {
   limit?: number;
 }): Promise<RevisionItem[]> {
   const limit = opts.limit ?? 40;
+
+  let teacherStudentCondition: object = {};
+  if (opts.teacherId) {
+    const teacherClasses = await prisma.class.findMany({
+      where: { teacherId: opts.teacherId, instituteId: opts.instituteId },
+      select: { id: true },
+    });
+    const classIds = teacherClasses.map((c) => c.id);
+    if (classIds.length > 0) {
+      teacherStudentCondition = {
+        OR: [
+          { teacherId: opts.teacherId },
+          { enrollments: { some: { isActive: true, classId: { in: classIds } } } },
+        ],
+      };
+    } else {
+      teacherStudentCondition = { teacherId: opts.teacherId };
+    }
+  }
+
   const students = await prisma.student.findMany({
     where: {
       instituteId: opts.instituteId,
       isActive: true,
       programType: "HIFZ",
-      ...(opts.teacherId ? { teacherId: opts.teacherId } : {}),
+      ...teacherStudentCondition,
     },
     select: {
       id: true,

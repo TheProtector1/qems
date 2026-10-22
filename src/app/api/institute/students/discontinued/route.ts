@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { Prisma, StudentEnrollmentStatus } from "@prisma/client";
 import { DISCONTINUED_STATUSES } from "@/lib/student-status";
 
+import { getTeacherScope } from "@/lib/teacher-scope";
+
 export const dynamic = "force-dynamic";
 
 function clampPageSize(value: string | null) {
@@ -40,10 +42,12 @@ export async function GET(req: Request) {
     }
 
     if (session.user.role === "TEACHER" && instituteId) {
-      const teacher = await prisma.teacher.findFirst({
-        where: { userId: session.user.id, instituteId },
-      });
-      if (teacher) baseWhere.teacherId = teacher.id;
+      const scope = await getTeacherScope(session.user.id, instituteId);
+      if (scope) {
+        baseWhere.id = { in: scope.assignedStudentIds };
+      } else {
+        baseWhere.id = "no-teacher";
+      }
     }
 
     if (session.user.role === "BRANCH_MANAGER" && session.user.branchId) {

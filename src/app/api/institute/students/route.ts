@@ -12,6 +12,7 @@ import { resolveInstituteClassIds, syncStudentClassEnrollments } from "@/lib/stu
 import { createStudentDocuments, type DocumentInput } from "@/lib/student-documents-server";
 import { addDaysToDateKey, parseDateOnly, todayDateKey } from "@/lib/timezone";
 import { withDbRetry } from "@/lib/db-retry";
+import { getTeacherScope } from "@/lib/teacher-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -52,91 +53,63 @@ export async function GET(req: Request) {
     const className = searchParams.get("class")?.trim();
     const status = searchParams.get("status")?.trim();
 
-    const baseWhere: Prisma.StudentWhereInput = {};
-    if (isSuperAdmin && !instituteId) {
-      // super admin sees all
-    } else {
-      baseWhere.instituteId = instituteId!;
+    const baseConditions: Prisma.StudentWhereInput[] = [];
+    if (!isSuperAdmin || instituteId) {
+      baseConditions.push({ instituteId: instituteId! });
     }
 
     if (session.user.role === "TEACHER" && instituteId) {
-      const teacher = await withDbRetry("students.teacherScope", () =>
-        prisma.teacher.findFirst({
-          where: { userId: session.user.id, instituteId },
-          select: { id: true },
-        })
-      );
-      if (teacher) {
-        // Find all class IDs assigned to this teacher
-        const teacherClasses = await prisma.class.findMany({
-          where: { teacherId: teacher.id, instituteId },
-          select: { id: true },
-        });
-        const teacherClassIds = teacherClasses.map((c) => c.id);
-
-        if (teacherClassIds.length > 0) {
-          // Students directly assigned to teacher OR enrolled in any of teacher's classes
-          baseWhere.OR = [
-            { teacherId: teacher.id },
-            {
-              enrollments: {
-                some: {
-                  isActive: true,
-                  classId: { in: teacherClassIds },
-                },
-              },
-            },
-          ];
-        } else {
-          // No classes assigned — show only directly assigned students
-          baseWhere.teacherId = teacher.id;
-        }
-      } else {
-        // No teacher record found — return empty
-        baseWhere.id = "___no_match___";
-      }
+      const teacherScope = await getTeacherScope(session.user.id, instituteId);
+      baseConditions.push(teacherScope.studentWhere);
     }
 
     if (session.user.role === "BRANCH_MANAGER" && session.user.branchId) {
-      baseWhere.branchId = session.user.branchId;
+      baseConditions.push({ branchId: session.user.branchId });
     }
 
-    const whereClause: Prisma.StudentWhereInput = { ...baseWhere };
+    const baseWhere: Prisma.StudentWhereInput = baseConditions.length > 0 ? { AND: baseConditions } : {};
+    const andConditions: Prisma.StudentWhereInput[] = [...baseConditions];
 
     if (search) {
-      whereClause.OR = [
-        { fullName: { contains: search, mode: "insensitive" } },
-        { studentId: { contains: search, mode: "insensitive" } },
-        {
-          parent: {
-            user: { name: { contains: search, mode: "insensitive" } },
+      andConditions.push({
+        OR: [
+          { fullName: { contains: search, mode: "insensitive" } },
+          { studentId: { contains: search, mode: "insensitive" } },
+          {
+            parent: {
+              user: { name: { contains: search, mode: "insensitive" } },
+            },
           },
-        },
-        {
-          parent: {
-            user: { email: { contains: search, mode: "insensitive" } },
+          {
+            parent: {
+              user: { email: { contains: search, mode: "insensitive" } },
+            },
           },
-        },
-      ];
+        ],
+      });
     }
 
     if (program && program !== "All Programs" && PROGRAM_FILTER[program]) {
-      whereClause.programType = PROGRAM_FILTER[program];
+      andConditions.push({ programType: PROGRAM_FILTER[program] });
     }
 
     if (className && className !== "All Classes") {
-      whereClause.enrollments = {
-        some: {
-          isActive: true,
-          class: { name: className },
+      andConditions.push({
+        enrollments: {
+          some: {
+            isActive: true,
+            class: { name: className },
+          },
         },
-      };
+      });
     }
 
     if (status && status !== "ALL") {
-      if (status === "On Track" || status === "Excellent") whereClause.isActive = true;
-      if (status === "Needs Attention" || status === "At Risk") whereClause.isActive = false;
+      if (status === "On Track" || status === "Excellent") andConditions.push({ isActive: true });
+      if (status === "Needs Attention" || status === "At Risk") andConditions.push({ isActive: false });
     }
+
+    const whereClause: Prisma.StudentWhereInput = andConditions.length > 0 ? { AND: andConditions } : {};
 
     const select = {
       id: true,

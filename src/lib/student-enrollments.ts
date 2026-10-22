@@ -9,9 +9,9 @@ export async function resolveInstituteClassIds(
   classIds: unknown
 ): Promise<string[]> {
   if (!Array.isArray(classIds) || classIds.length === 0) return [];
-  const ids = [
-    ...new Set(classIds.filter((id): id is string => typeof id === "string" && id.length > 0)),
-  ];
+  const ids = Array.from(
+    new Set(classIds.filter((id): id is string => typeof id === "string" && id.length > 0))
+  );
   if (!ids.length) return [];
 
   const rows = await tx.class.findMany({

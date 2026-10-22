@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+import { isStudentAssignedToTeacher } from "@/lib/teacher-scope";
+
 const VALID_STATUSES = ["PENDING", "TAUGHT", "COMPLETED"];
 
 export async function POST(req: Request) {
@@ -13,7 +15,6 @@ export async function POST(req: Request) {
 
     const teacher = await prisma.teacher.findUnique({
       where: { userId: session.user.id },
-      include: { students: { select: { id: true } } },
     });
     if (!teacher) return new NextResponse("Teacher Not Found", { status: 404 });
 
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
       return new NextResponse("Invalid status", { status: 400 });
     }
 
-    const ownsStudent = teacher.students.some((s) => s.id === studentId);
+    const ownsStudent = await isStudentAssignedToTeacher(studentId, teacher.id, teacher.instituteId);
     if (!ownsStudent) {
       return new NextResponse("Student not assigned to you", { status: 403 });
     }

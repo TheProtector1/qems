@@ -11,34 +11,40 @@ import {
   sendMessages,
 } from "@/lib/messages-service";
 import { Role } from "@prisma/client";
+import { getTeacherScope, isStudentAssignedToTeacher } from "@/lib/teacher-scope";
 
 export const dynamic = "force-dynamic";
 
 async function getTeacherPartners(teacherUserId: string, instituteId: string | null | undefined) {
   const map = new Map<string, { id: string; name: string; role: string }>();
 
-  const teacher = await prisma.teacher.findFirst({
-    where: { userId: teacherUserId },
-    select: {
-      students: {
-        where: { isActive: true },
+  if (instituteId) {
+    const teacherScope = await getTeacherScope(teacherUserId, instituteId);
+    if (teacherScope.teacher) {
+      const assignedStudents = await prisma.student.findMany({
+        where: {
+          AND: [
+            { instituteId, isActive: true },
+            teacherScope.studentWhere,
+          ],
+        },
         select: {
           parent: {
             select: { user: { select: { id: true, name: true } } },
           },
         },
-      },
-    },
-  });
-
-  for (const student of teacher?.students || []) {
-    const parentUser = student.parent?.user;
-    if (parentUser) {
-      map.set(parentUser.id, {
-        id: parentUser.id,
-        name: parentUser.name,
-        role: "Parent",
       });
+
+      for (const student of assignedStudents) {
+        const parentUser = student.parent?.user;
+        if (parentUser) {
+          map.set(parentUser.id, {
+            id: parentUser.id,
+            name: parentUser.name,
+            role: "Parent",
+          });
+        }
+      }
     }
   }
 
@@ -92,14 +98,17 @@ export async function GET(req: Request) {
       }
 
       let parent: { id: string; name: string; role: string; avatar: string } | null = null;
-      if (forStudent) {
+      if (forStudent && instituteId) {
         const teacher = await prisma.teacher.findFirst({
-          where: { userId },
+          where: { userId, instituteId },
           select: { id: true },
         });
-        const student = teacher
+        const isAssigned = teacher
+          ? await isStudentAssignedToTeacher(forStudent, teacher.id, instituteId)
+          : false;
+        const student = isAssigned
           ? await prisma.student.findFirst({
-              where: { id: forStudent, teacherId: teacher.id, isActive: true },
+              where: { id: forStudent, instituteId },
               select: {
                 parent: { select: { user: { select: { id: true, name: true } } } },
               },

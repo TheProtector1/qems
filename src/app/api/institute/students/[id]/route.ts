@@ -6,6 +6,7 @@ import { createAuditLog, diffFields } from "@/lib/audit";
 import { resolveInstituteClassIds, syncStudentClassEnrollments } from "@/lib/student-enrollments";
 import { parseHifzDirection } from "@/lib/hifz-progress";
 import { isActiveForStatus, requiresRetentionDetails, STUDENT_STATUS_OPTIONS } from "@/lib/student-status";
+import { isStudentAssignedToTeacher } from "@/lib/teacher-scope";
 
 const VALID_STATUSES = new Set(STUDENT_STATUS_OPTIONS.map((o) => o.value));
 
@@ -95,6 +96,19 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
     if (!student) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+
+    if (session.user.role === "TEACHER") {
+      const teacher = await prisma.teacher.findFirst({
+        where: { userId: session.user.id, instituteId: session.user.instituteId },
+      });
+      if (!teacher) {
+        return NextResponse.json({ error: "Unauthorized teacher" }, { status: 403 });
+      }
+      const isAssigned = await isStudentAssignedToTeacher(id, teacher.id, session.user.instituteId);
+      if (!isAssigned) {
+        return NextResponse.json({ error: "You are not assigned to this student" }, { status: 403 });
+      }
     }
 
     const beforeSnapshot = {
@@ -194,7 +208,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if (classIds !== undefined) {
         const validClassIds = await resolveInstituteClassIds(
           tx,
-          session.user.instituteId,
+          session.user.instituteId!,
           classIds
         );
         await syncStudentClassEnrollments(tx, id, validClassIds);
@@ -250,6 +264,10 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     const session = await getAuthSession();
     if (!session || !session.user.instituteId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (session.user.role === "TEACHER") {
+      return NextResponse.json({ error: "Teachers cannot delete students" }, { status: 403 });
     }
 
     const { id } = params;

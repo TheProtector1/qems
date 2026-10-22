@@ -23,6 +23,7 @@ type StudentRow = {
   photo?: string | null;
   gender: string;
   programType: string;
+  className?: string | null;
 };
 
 const STATUS_CONFIG = ATTENDANCE_STATUS;
@@ -45,6 +46,8 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
   const today = todayDateKey();
   const [selectedDate, setSelectedDate] = useState(today);
   const [programFilter, setProgramFilter] = useState("ALL");
+  const [classFilter, setClassFilter] = useState("ALL");
+  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([]);
   const [attendance, setAttendance] = useState<Record<string, AttStatus | null>>({});
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [historyDates, setHistoryDates] = useState<string[]>([]);
@@ -79,12 +82,29 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
   const [isHoliday, setIsHoliday] = useState(false);
   const [holidayInfo, setHolidayInfo] = useState<{ name: string; type: string } | null>(null);
 
+  // Fetch available classes for filtering (teachers only see their own classes via /api/institute/classes)
+  useEffect(() => {
+    async function loadClasses() {
+      try {
+        const res = await fetch("/api/institute/classes");
+        if (res.ok) {
+          const data = await res.json();
+          setClasses(data.classes || []);
+        }
+      } catch (err) {
+        console.error("Failed to load classes for filter:", err);
+      }
+    }
+    loadClasses();
+  }, []);
+
   const loadAttendance = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ date: selectedDate });
       if (programFilter !== "ALL") params.set("program", programFilter);
+      if (classFilter !== "ALL") params.set("classId", classFilter);
 
       const res = await fetch(`/api/institute/attendance?${params}`);
       if (!res.ok) throw new Error("Failed to load attendance data.");
@@ -109,7 +129,7 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, programFilter]);
+  }, [selectedDate, programFilter, classFilter]);
 
   useEffect(() => {
     loadAttendance();
@@ -483,13 +503,26 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
             <select
               value={programFilter}
               onChange={(e) => setProgramFilter(e.target.value)}
-              className="form-input w-48"
+              className="form-input w-44"
               id="select-program"
             >
               {PROGRAM_FILTERS.map((c) => (
                 <option key={c.value} value={c.value}>{c.label}</option>
               ))}
             </select>
+            {classes.length > 0 && (
+              <select
+                value={classFilter}
+                onChange={(e) => setClassFilter(e.target.value)}
+                className="form-input w-44"
+                id="select-class"
+              >
+                <option value="ALL">All Classes</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            )}
             <div className="flex gap-2 ml-auto flex-wrap">
               {!isHoliday && (
                 <>
@@ -545,7 +578,10 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900">{student.fullName}</p>
-                    <p className="text-xs text-gray-400 font-mono">{student.studentId} · {programLabel(student.programType)}</p>
+                    <p className="text-xs text-gray-400 font-mono">
+                      {student.studentId} · {programLabel(student.programType)}
+                      {student.className ? ` · ${student.className}` : ""}
+                    </p>
                   </div>
                   <div className="flex gap-2">
                     {isHoliday ? (
@@ -613,7 +649,10 @@ export function AttendanceContent({ readOnly = false }: { readOnly?: boolean }) 
                       <td>
                         <div className="flex items-center gap-2">
                           <StudentAvatar name={s.fullName} gender={s.gender} photo={s.photo} size="sm" rounded="full" />
-                          <span className="font-medium text-gray-900 whitespace-nowrap text-sm">{s.fullName}</span>
+                          <div>
+                            <span className="font-medium text-gray-900 whitespace-nowrap text-sm">{s.fullName}</span>
+                            {s.className && <span className="block text-[11px] text-gray-400">{s.className}</span>}
+                          </div>
                         </div>
                       </td>
                       {dates.map((status, di) => (

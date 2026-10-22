@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ProgramType } from "@prisma/client";
+import { ProgramType, type Prisma } from "@prisma/client";
 import { getSurahName } from "@/lib/utils";
+import { getTeacherScope, isStudentAssignedToTeacher } from "@/lib/teacher-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +19,20 @@ export async function GET(req: Request) {
     const studentId = searchParams.get("studentId");
     const limit = Math.min(parseInt(searchParams.get("limit") || "30", 10), 100);
 
+    const studentConditions: Prisma.StudentWhereInput[] = [
+      { instituteId, isActive: true, programType: ProgramType.NAZRA },
+    ];
+
+    if (session.user.role === "TEACHER") {
+      const teacherScope = await getTeacherScope(session.user.id, instituteId);
+      if (!teacherScope.teacher) {
+        return NextResponse.json({ students: [], records: [] });
+      }
+      studentConditions.push(teacherScope.studentWhere);
+    }
+
     const students = await prisma.student.findMany({
-      where: { instituteId, isActive: true, programType: ProgramType.NAZRA },
+      where: { AND: studentConditions },
       select: {
         id: true,
         fullName: true,
@@ -30,15 +43,23 @@ export async function GET(req: Request) {
       orderBy: { fullName: "asc" },
     });
 
-    const records = await prisma.nazraRecord.findMany({
-      where: {
-        student: { instituteId },
-        ...(studentId ? { studentId } : {}),
-      },
-      include: { student: { select: { fullName: true } } },
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      take: limit,
-    });
+    const visibleStudentIds = students.map((s) => s.id);
+    if (studentId && session.user.role === "TEACHER" && !visibleStudentIds.includes(studentId)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    const targetStudentIds = studentId ? [studentId] : visibleStudentIds;
+
+    const records = targetStudentIds.length
+      ? await prisma.nazraRecord.findMany({
+          where: {
+            studentId: { in: targetStudentIds },
+          },
+          include: { student: { select: { fullName: true } } },
+          orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+          take: limit,
+        })
+      : [];
 
     const studentSummaries = students.map((s) => {
       const studentRecords = records.filter((r) => r.studentId === s.id);
@@ -115,6 +136,16 @@ export async function POST(req: Request) {
     const teacher = await prisma.teacher.findFirst({
       where: { userId: session.user.id, instituteId },
     });
+
+    if (session.user.role === "TEACHER") {
+      if (!teacher) {
+        return NextResponse.json({ error: "Teacher profile not found" }, { status: 403 });
+      }
+      const assigned = await isStudentAssignedToTeacher(studentId, teacher.id, instituteId);
+      if (!assigned) {
+        return NextResponse.json({ error: "You are not assigned to this student" }, { status: 403 });
+      }
+    }
 
     const surahNum = parseInt(String(surahNumber), 10);
     const record = await prisma.nazraRecord.create({

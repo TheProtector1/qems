@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+import { isStudentAssignedToTeacher } from "@/lib/teacher-scope";
+
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
@@ -59,10 +61,12 @@ export async function GET(req: Request) {
     } else if (session.user.role === "TEACHER") {
       const teacher = await prisma.teacher.findUnique({
         where: { userId: session.user.id },
-        include: { students: { select: { id: true } } }
       });
-      const studentIds = teacher?.students.map((s: { id: string }) => s.id) || [];
-      if (!studentIds.includes(studentId)) {
+      if (!teacher) {
+        return new NextResponse("Forbidden", { status: 403 });
+      }
+      const assigned = await isStudentAssignedToTeacher(studentId, teacher.id, student.instituteId);
+      if (!assigned) {
         return new NextResponse("Forbidden", { status: 403 });
       }
     } else if (session.user.role === "INSTITUTE_OWNER") {

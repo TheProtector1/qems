@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { HifzType, ProgramType } from "@prisma/client";
+import { HifzType, ProgramType, type Prisma } from "@prisma/client";
 import { getSurahName } from "@/lib/utils";
+import { getTeacherScope, isStudentAssignedToTeacher } from "@/lib/teacher-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -18,35 +19,28 @@ export async function GET(req: Request) {
     const studentId = searchParams.get("studentId");
     const limit = Math.min(parseInt(searchParams.get("limit") || "30", 10), 100);
 
-    const studentsWhere: {
-      instituteId: string;
-      isActive: boolean;
-      programType: ProgramType;
-      teacherId?: string;
-      branchId?: string;
-    } = {
-      instituteId,
-      isActive: true,
-      programType: ProgramType.HIFZ,
-    };
+    const studentConditions: Prisma.StudentWhereInput[] = [
+      { instituteId, isActive: true, programType: ProgramType.HIFZ },
+    ];
 
     if (session.user.role === "STUDENT") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     if (session.user.role === "TEACHER") {
-      const teacher = await prisma.teacher.findFirst({
-        where: { userId: session.user.id, instituteId },
-      });
-      if (teacher) studentsWhere.teacherId = teacher.id;
+      const teacherScope = await getTeacherScope(session.user.id, instituteId);
+      if (!teacherScope.teacher) {
+        return NextResponse.json({ students: [], records: [] });
+      }
+      studentConditions.push(teacherScope.studentWhere);
     }
 
     if (session.user.role === "BRANCH_MANAGER" && session.user.branchId) {
-      studentsWhere.branchId = session.user.branchId;
+      studentConditions.push({ branchId: session.user.branchId });
     }
 
     const students = await prisma.student.findMany({
-      where: studentsWhere,
+      where: { AND: studentConditions },
       select: {
         id: true,
         fullName: true,
@@ -62,13 +56,20 @@ export async function GET(req: Request) {
       orderBy: { fullName: "asc" },
     });
 
-    const studentIds = studentId ? [studentId] : students.map((s) => s.id);
+    const visibleStudentIds = students.map((s) => s.id);
+    if (studentId && session.user.role === "TEACHER" && !visibleStudentIds.includes(studentId)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
 
-    const paraCompletions = await prisma.hifzParaCompletion.findMany({
-      where: { studentId: { in: studentIds } },
-      include: { markedBy: { include: { user: { select: { name: true } } } } },
-      orderBy: [{ studentId: "asc" }, { paraNumber: "asc" }],
-    });
+    const targetStudentIds = studentId ? [studentId] : visibleStudentIds;
+
+    const paraCompletions = targetStudentIds.length
+      ? await prisma.hifzParaCompletion.findMany({
+          where: { studentId: { in: targetStudentIds } },
+          include: { markedBy: { include: { user: { select: { name: true } } } } },
+          orderBy: [{ studentId: "asc" }, { paraNumber: "asc" }],
+        })
+      : [];
 
     const completionsByStudent: Record<
       string,
@@ -94,19 +95,16 @@ export async function GET(req: Request) {
       });
     }
 
-    const recordsWhere = {
-      student: { instituteId },
-      ...(studentId ? { studentId } : {}),
-    };
-
-    const records = await prisma.hifzRecord.findMany({
-      where: recordsWhere,
-      include: {
-        student: { select: { id: true, fullName: true } },
-      },
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      take: limit,
-    });
+    const records = targetStudentIds.length
+      ? await prisma.hifzRecord.findMany({
+          where: { studentId: { in: targetStudentIds } },
+          include: {
+            student: { select: { id: true, fullName: true } },
+          },
+          orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+          take: limit,
+        })
+      : [];
 
     const qualityAgg = studentId
       ? await prisma.hifzRecord.aggregate({
@@ -216,6 +214,16 @@ export async function POST(req: Request) {
     const teacher = await prisma.teacher.findFirst({
       where: { userId: session.user.id, instituteId },
     });
+
+    if (session.user.role === "TEACHER") {
+      if (!teacher) {
+        return NextResponse.json({ error: "Teacher profile not found" }, { status: 403 });
+      }
+      const assigned = await isStudentAssignedToTeacher(studentId, teacher.id, instituteId);
+      if (!assigned) {
+        return NextResponse.json({ error: "You are not assigned to this student" }, { status: 403 });
+      }
+    }
 
     const para = student.currentPara ?? student.currentJuz ?? null;
     let surahNum: number;

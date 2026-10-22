@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+import { getTeacherScope, isStudentAssignedToTeacher } from "@/lib/teacher-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -12,14 +14,40 @@ export async function GET(req: Request) {
     }
 
     const instituteId = session.user.instituteId;
-    const teacher = await prisma.teacher.findFirst({
-      where: { userId: session.user.id, instituteId },
-    });
 
-    const assessmentWhere =
-      session.user.role === "TEACHER" && teacher
-        ? { instituteId, OR: [{ teacherId: teacher.id }, { teacherId: null }] }
-        : { instituteId };
+    let assessmentWhere: Prisma.AssessmentWhereInput = { instituteId };
+    let studentWhere: Prisma.StudentWhereInput = { instituteId, isActive: true };
+    let resultWhere: Prisma.AssessmentResultWhereInput = { assessment: { instituteId } };
+
+    if (session.user.role === "TEACHER") {
+      const teacherScope = await getTeacherScope(session.user.id, instituteId);
+      if (!teacherScope.teacher) {
+        return NextResponse.json({ exams: [], grades: [], chartData: [], students: [] });
+      }
+
+      assessmentWhere = {
+        instituteId,
+        OR: [
+          { teacherId: teacherScope.teacher.id },
+          ...(teacherScope.teacherClassIds.length
+            ? [{ classId: { in: teacherScope.teacherClassIds } }]
+            : []),
+          { teacherId: null, classId: null },
+        ],
+      };
+
+      studentWhere = {
+        AND: [
+          { instituteId, isActive: true },
+          teacherScope.studentWhere,
+        ],
+      };
+
+      resultWhere = {
+        studentId: { in: teacherScope.studentIds },
+        assessment: { instituteId },
+      };
+    }
 
     const [assessments, results, students] = await Promise.all([
       prisma.assessment.findMany({
@@ -31,7 +59,7 @@ export async function GET(req: Request) {
         orderBy: { startDate: "desc" },
       }),
       prisma.assessmentResult.findMany({
-        where: { assessment: { instituteId } },
+        where: resultWhere,
         include: {
           student: { select: { id: true, fullName: true } },
           assessment: { select: { id: true, title: true, type: true, startDate: true } },
@@ -40,7 +68,7 @@ export async function GET(req: Request) {
         take: 50,
       }),
       prisma.student.findMany({
-        where: { instituteId, isActive: true },
+        where: studentWhere,
         select: {
           id: true,
           fullName: true,
@@ -104,6 +132,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const instituteId = session.user.instituteId;
     const body = await req.json();
     const { studentId, assessmentId, mistakeCount, fluency, tajweed, remarks } = body;
 
@@ -112,11 +141,24 @@ export async function POST(req: Request) {
     }
 
     const assessment = await prisma.assessment.findFirst({
-      where: { id: assessmentId, instituteId: session.user.instituteId },
+      where: { id: assessmentId, instituteId },
     });
 
     if (!assessment) {
       return NextResponse.json({ error: "Assessment not found" }, { status: 404 });
+    }
+
+    if (session.user.role === "TEACHER") {
+      const teacher = await prisma.teacher.findFirst({
+        where: { userId: session.user.id, instituteId },
+      });
+      if (!teacher) {
+        return NextResponse.json({ error: "Teacher profile not found" }, { status: 403 });
+      }
+      const assigned = await isStudentAssignedToTeacher(studentId, teacher.id, instituteId);
+      if (!assigned) {
+        return NextResponse.json({ error: "You are not assigned to this student" }, { status: 403 });
+      }
     }
 
     const totalDeductions = Number(mistakeCount || 0) * 2;
