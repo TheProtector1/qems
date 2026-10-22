@@ -6,7 +6,8 @@ import {
   Search, Plus, Download, Eye, Edit, Trash2,
   GraduationCap, BookOpen, CalendarCheck, Star,
   Filter, LayoutGrid, LayoutList, ChevronLeft, ChevronRight,
-  TrendingUp, AlertTriangle, CheckCircle, User, Loader2, RefreshCw, XCircle
+  TrendingUp, AlertTriangle, CheckCircle, User, Loader2, RefreshCw, XCircle,
+  FileSpreadsheet,
 } from "lucide-react";
 import Link from "next/link";
 import { cn, formatDate } from "@/lib/utils";
@@ -15,6 +16,7 @@ import { StudentPhotoUpload } from "@/components/common/student-photo-upload";
 import { StudentAuditPanel } from "@/components/institute/student-audit-panel";
 import { ClassAssignmentField, type InstituteClassOption } from "@/components/institute/class-assignment-field";
 import { StudentDocumentsManager } from "@/components/institute/student-documents-manager";
+import { BulkUploadModal } from "@/components/institute/bulk-upload-modal";
 import { HIFZ_DIRECTION_OPTIONS } from "@/lib/hifz-progress";
 import { getHifzCompletionPercent } from "@/lib/hifz-progress";
 import { STUDENT_STATUS_OPTIONS, STUDENT_STATUS_META, requiresRetentionDetails } from "@/lib/student-status";
@@ -624,6 +626,7 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
   const [classOptions, setClassOptions] = useState<string[]>(["All Classes"]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -838,6 +841,15 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
         />
       )}
 
+      {showBulkUpload && (
+        <BulkUploadModal
+          classes={instituteClasses.map((c) => ({ id: c.id, name: c.name, programType: c.programType ?? "" }))}
+          teachers={teachers}
+          onClose={() => setShowBulkUpload(false)}
+          onDone={() => { fetchStudentsAndTeachers(); }}
+        />
+      )}
+
       <div className="space-y-6">
         {/* Header */}
         <div className="page-header-row">
@@ -850,9 +862,18 @@ export function StudentsContent({ backHref, addHref = "/institute/students/new",
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /> Refresh
             </button>
             {role !== "teacher" && (
-              <Link href={addHref} className="btn-primary text-sm py-2" id="btn-add-student">
-                <Plus className="h-4 w-4" /> Add Student
-              </Link>
+              <>
+                <button
+                  onClick={() => setShowBulkUpload(true)}
+                  className="btn-ghost text-sm py-2"
+                  id="btn-bulk-upload-students"
+                >
+                  <FileSpreadsheet className="h-4 w-4" /> Import Excel
+                </button>
+                <Link href={addHref} className="btn-primary text-sm py-2" id="btn-add-student">
+                  <Plus className="h-4 w-4" /> Add Student
+                </Link>
+              </>
             )}
           </div>
         </div>

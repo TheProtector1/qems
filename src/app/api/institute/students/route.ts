@@ -63,9 +63,38 @@ export async function GET(req: Request) {
       const teacher = await withDbRetry("students.teacherScope", () =>
         prisma.teacher.findFirst({
           where: { userId: session.user.id, instituteId },
+          select: { id: true },
         })
       );
-      if (teacher) baseWhere.teacherId = teacher.id;
+      if (teacher) {
+        // Find all class IDs assigned to this teacher
+        const teacherClasses = await prisma.class.findMany({
+          where: { teacherId: teacher.id, instituteId },
+          select: { id: true },
+        });
+        const teacherClassIds = teacherClasses.map((c) => c.id);
+
+        if (teacherClassIds.length > 0) {
+          // Students directly assigned to teacher OR enrolled in any of teacher's classes
+          baseWhere.OR = [
+            { teacherId: teacher.id },
+            {
+              enrollments: {
+                some: {
+                  isActive: true,
+                  classId: { in: teacherClassIds },
+                },
+              },
+            },
+          ];
+        } else {
+          // No classes assigned — show only directly assigned students
+          baseWhere.teacherId = teacher.id;
+        }
+      } else {
+        // No teacher record found — return empty
+        baseWhere.id = "___no_match___";
+      }
     }
 
     if (session.user.role === "BRANCH_MANAGER" && session.user.branchId) {

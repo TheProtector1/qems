@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
+import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +13,22 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const instituteId = session.user.instituteId;
+
+    // Build where clause — teachers only see their own classes
+    const whereClause: Prisma.ClassWhereInput = { instituteId };
+
+    if (session.user.role === "TEACHER") {
+      const teacher = await prisma.teacher.findFirst({
+        where: { userId: session.user.id, instituteId },
+        select: { id: true },
+      });
+      if (!teacher) return NextResponse.json({ classes: [] });
+      whereClause.teacherId = teacher.id;
+    }
+
     const classes = await withDbRetry("classes.list", () =>
       prisma.class.findMany({
-        where: { instituteId },
+        where: whereClause,
         include: {
           teacher: { include: { user: { select: { name: true } } } },
           _count: { select: { enrollments: true } },
